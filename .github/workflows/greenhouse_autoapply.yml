@@ -1,0 +1,101 @@
+name: Greenhouse Auto-Apply
+
+on:
+  schedule:
+    # All times EDT (UTC-4). Shifts 1 hr in winter (EST/UTC-5).
+    #
+    # Every 30 min — 7:25 AM to 10:25 PM EDT
+    - cron: '25,55 11-23 * * *'
+    - cron: '25 0-2 * * *'
+    - cron: '55 0-1 * * *'
+    #
+    # Every 3 hrs — 11 PM, 2 AM, 5 AM EDT
+    - cron: '0 3,6,9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  autoapply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15    # Fail fast if session expires and OTP is needed
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright browser (if not cached)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: playwright install chromium
+
+      - name: Install Playwright system deps
+        run: playwright install-deps chromium
+
+      - name: Restore Greenhouse session
+        env:
+          GREENHOUSE_SESSION_B64: ${{ secrets.GREENHOUSE_SESSION_B64 }}
+        run: |
+          if [ -n "$GREENHOUSE_SESSION_B64" ]; then
+            echo "$GREENHOUSE_SESSION_B64" | base64 -d > greenhouse_session.json
+            echo "Session restored."
+          else
+            echo "No session secret found — run will fail if login is required."
+          fi
+
+      - name: Decode resume files
+        env:
+          RESUME_MAIN_B64: ${{ secrets.RESUME_MAIN_B64 }}
+          DE_RESUME_B64: ${{ secrets.DE_RESUME_B64 }}
+          DS_RESUME_B64: ${{ secrets.DS_RESUME_B64 }}
+        run: |
+          echo "$RESUME_MAIN_B64" | base64 -d > /tmp/resume_main.pdf
+          echo "$DE_RESUME_B64"   | base64 -d > /tmp/resume_de.pdf
+          echo "$DS_RESUME_B64"   | base64 -d > /tmp/resume_ds.pdf
+
+      - name: Run Greenhouse Auto-Apply
+        env:
+          APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
+          RESUME_PATH:          /tmp/resume_main.pdf
+          DE_RESUME_PATH:       /tmp/resume_de.pdf
+          DS_RESUME_PATH:       /tmp/resume_ds.pdf
+          EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:             ${{ secrets.EMAIL_TO }}
+        run: python greenhouse_autoapply.py
+
+      - name: Update session secret
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -f greenhouse_session.json ] && [ -n "$GH_TOKEN" ]; then
+            gh secret set GREENHOUSE_SESSION_B64 \
+              --body "$(base64 -w 0 greenhouse_session.json)" \
+              --repo OzSpidey/Job_Automation
+            echo "Session secret updated."
+          fi
+
+      - name: Persist applied-jobs state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add greenhouse_applied_ids.json greenhouse_last_run_jobs.json greenhouse_applied.csv 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update greenhouse applied jobs [skip ci]"
+          git push
