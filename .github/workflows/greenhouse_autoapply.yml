@@ -61,9 +61,9 @@ jobs:
 
       - name: Download resumes from private repo
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          gh repo clone OzSpidey/job-assets /tmp/job-assets
+          git clone https://x-access-token:${GH_PAT}@github.com/OzSpidey/job-assets.git /tmp/job-assets
           cp /tmp/job-assets/resume_main.pdf /tmp/resume_main.pdf
           cp /tmp/job-assets/resume_de.pdf   /tmp/resume_de.pdf
           cp /tmp/job-assets/resume_ds.pdf   /tmp/resume_ds.pdf
