@@ -1,0 +1,92 @@
+name: Indeed Auto-Apply
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  autoapply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright browser (if not cached)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: playwright install chromium
+
+      - name: Install Playwright system deps
+        run: playwright install-deps chromium
+
+      - name: Restore Indeed session
+        env:
+          INDEED_SESSION_B64: ${{ secrets.INDEED_SESSION_B64 }}
+        run: |
+          if [ -n "$INDEED_SESSION_B64" ]; then
+            echo "$INDEED_SESSION_B64" | base64 -d > indeed_session.json
+            echo "Session restored."
+          else
+            echo "No session secret found — run will fail if login is required."
+          fi
+
+      - name: Download resumes
+        run: |
+          git clone https://github.com/OzSpidey/job-assets.git /tmp/job-assets
+          cp /tmp/job-assets/resume_main.pdf /tmp/resume_main.pdf
+          cp /tmp/job-assets/resume_de.pdf   /tmp/resume_de.pdf
+          cp /tmp/job-assets/resume_ds.pdf   /tmp/resume_ds.pdf
+
+      - name: Run Indeed Auto-Apply
+        env:
+          APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
+          INDEED_EMAIL:         ${{ secrets.INDEED_EMAIL }}
+          INDEED_PASSWORD:      ${{ secrets.INDEED_PASSWORD }}
+          RESUME_PATH:          /tmp/resume_main.pdf
+          DE_RESUME_PATH:       /tmp/resume_de.pdf
+          DS_RESUME_PATH:       /tmp/resume_ds.pdf
+          EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:             ${{ secrets.EMAIL_TO }}
+
+        run: python indeed_autoapply.py
+
+      - name: Update Indeed session secret
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -f indeed_session.json ] && [ -n "$GH_TOKEN" ]; then
+            gh secret set INDEED_SESSION_B64 \
+              --body "$(base64 -w 0 indeed_session.json)" \
+              --repo OzSpidey/Job_Automation
+            echo "Session secret updated."
+          fi
+
+      - name: Persist applied-jobs state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add indeed_applied_ids.json indeed_applied.csv 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update indeed applied jobs [skip ci]"
+          git pull --rebase origin main
+          git push
