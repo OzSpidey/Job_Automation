@@ -1,15 +1,6 @@
 name: Microsoft Jobs Scanner
 
 on:
-  schedule:
-    # All times EDT (UTC-4). Shifts 1 hr in winter (EST/UTC-5).
-    #
-    # Every 30 min — 7:30 AM to 10:30 PM EDT
-    # :30 runs  → 11:30–23:30 UTC and 00:30–02:30 UTC
-    - cron: '30 11-23 * * *'
-    - cron: '30 0-2 * * *'
-    # :00 runs (daytime 8 AM–10 PM) + hourly overnight (11 PM–7 AM) = every UTC hour
-    - cron: '0 * * * *'
   workflow_dispatch:
 
 permissions:
