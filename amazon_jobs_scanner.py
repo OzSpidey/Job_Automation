@@ -8,7 +8,7 @@ Flow (exactly as specified):
   4. Click the Search submit button (button._search_gi3vf_131)
   5. Click Sort by → Most recent
   6. Scrape 40 pages for matching roles
-  7. Email results to lopes.o@northeastern.edu
+  7. Email results to configured recipients
 
 Target roles: Data Engineer, Business Intelligence Engineer, Business Analyst, BI Engineer
 

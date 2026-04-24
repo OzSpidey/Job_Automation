@@ -6,7 +6,7 @@ Flow (exactly as specified):
   2. Click "Find jobs" button
   3. Sort by Latest
   4. Scrape first 5 pages for matching roles
-  5. Email results to lopes.o@northeastern.edu and srishti77@gmail.com
+  5. Email results to configured recipients
 
 Target roles: Software Engineer, Data Engineer, Data Analyst, Business Intelligence Analyst
 
