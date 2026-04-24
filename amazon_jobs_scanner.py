@@ -47,9 +47,9 @@ TARGET_ROLES = [
     "bi engineer",
     "data analyst",
     "early grad",
-    "Software engineer",
-    "AI Engineer",
-    "Software Developer",
+    "software engineer",
+    "ai engineer",
+    "software developer",
 
 ]
 # ──────────────────────────────────────────────────────────────────────────────
