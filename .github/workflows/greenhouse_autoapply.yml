@@ -4,13 +4,15 @@ on:
   schedule:
     # All times EDT (UTC-4). Shifts 1 hr in winter (EST/UTC-5).
     #
-    # Every 30 min — 7:25 AM to 10:25 PM EDT
-    - cron: '25,55 11-23 * * *'
-    - cron: '25 0-2 * * *'
-    - cron: '55 0-1 * * *'
+    # Every 30 min — 7:15 AM to 10:45 PM EDT (11:15–02:45 UTC)
+    - cron: '15,45 11-23 * * *'
+    - cron: '15,45 0-2 * * *'
     #
-    # Every 3 hrs — 11 PM, 2 AM, 5 AM EDT
-    - cron: '0 3,6,9 * * *'
+    # Every 140 min — 11:30 PM to 6:30 AM EDT
+    - cron: '30 3 * * *'    # 11:30 PM EDT
+    - cron: '50 5 * * *'    #  1:50 AM EDT
+    - cron: '10 8 * * *'    #  4:10 AM EDT
+    - cron: '30 10 * * *'   #  6:30 AM EDT
   workflow_dispatch:
 
 permissions:
