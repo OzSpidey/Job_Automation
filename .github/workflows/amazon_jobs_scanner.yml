@@ -1,0 +1,43 @@
+name: Amazon Jobs Scanner
+
+on:
+  schedule:
+    - cron: '0 13 * * *'   # Daily at 13:00 UTC = 9:00 AM EST
+  workflow_dispatch:         # Allow manual runs from the Actions tab
+
+permissions:
+  contents: write            # Needed to commit amazon_seen_jobs.json back
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright browsers + system deps
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Run Amazon Jobs Scanner
+        env:
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: python amazon_jobs_scanner.py
+
+      - name: Persist seen-jobs list
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add amazon_seen_jobs.json
+          git diff --staged --quiet || git commit -m "chore: update seen jobs [skip ci]"
+          git push

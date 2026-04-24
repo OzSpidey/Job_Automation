@@ -1,0 +1,24 @@
+# Credentials / secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Node
+node_modules/
+package-lock.json
+
+# Debug artifacts
+*.png
+*.html
+*.log
+
+# Session / output files
+*_session.json
+emails_output.*
+linkedin_urls.txt
+
+# Claude internal
+.claude/
