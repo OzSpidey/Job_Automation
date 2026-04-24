@@ -10,7 +10,7 @@ Flow (exactly as specified):
   6. Scrape 40 pages for matching roles
   7. Email results to lopes.o@northeastern.edu
 
-Target roles: Software (all), Data Engineer, BI Engineer, Business Analyst, Data Analyst, AI Engineer, ML, Early Grad
+Target roles: Data Engineer, Business Intelligence Engineer, Business Analyst, BI Engineer
 
 Run: python amazon_jobs_scanner.py
 """
@@ -41,15 +41,15 @@ PAGES_TO_SCRAPE = 40
 SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "amazon_seen_jobs.json")
 
 TARGET_ROLES = [
-    "software",
     "data engineer",
     "business intelligence engineer",
     "business analyst",
     "bi engineer",
     "data analyst",
     "early grad",
-    "ai engineer",
-    "machine learning",
+    "Software engineer",
+    "AI Engineer",
+
 ]
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -99,8 +99,8 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         <html><body style="font-family:Arial,sans-serif;color:#333">
         <h2 style="color:#232F3E">Amazon Jobs — Matching Roles</h2>
         <p>Found <strong>{count}</strong> role(s) matching:
-           <em>Software &nbsp;|&nbsp; Data Engineer &nbsp;|&nbsp; BI Engineer &nbsp;|&nbsp;
-           Business Analyst &nbsp;|&nbsp; Data Analyst &nbsp;|&nbsp; AI Engineer &nbsp;|&nbsp; ML &nbsp;|&nbsp; Early Grad</em>
+           <em>Data Engineer &nbsp;|&nbsp; Business Intelligence Engineer &nbsp;|&nbsp;
+           Business Analyst &nbsp;|&nbsp; Data Analyst &nbsp;|&nbsp; Early Grad</em>
         </p>
         <table style="border-collapse:collapse;width:100%;max-width:1100px">
           <tr style="background:#232F3E;color:#FF9900">
