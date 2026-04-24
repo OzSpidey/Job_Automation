@@ -30,9 +30,9 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 # ──────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
-TARGET_EMAIL    = "lopes.o@northeastern.edu"
-SENDER_EMAIL    = "osborne.masterslopes@gmail.com"
-SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "lcln epuj mbpn jbag")
+TARGET_EMAIL    = os.environ.get("EMAIL_TO", "")
+SENDER_EMAIL    = os.environ.get("EMAIL_SENDER", "")
+SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 SMTP_SERVER     = "smtp.gmail.com"
 SMTP_PORT       = 465
 

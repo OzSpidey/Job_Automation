@@ -49,6 +49,8 @@ jobs:
 
       - name: Run Amazon Jobs Scanner
         env:
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: python amazon_jobs_scanner.py
 
