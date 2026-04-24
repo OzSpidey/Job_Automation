@@ -31,8 +31,8 @@ except ImportError:
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
-ADZUNA_APP_ID  = os.environ.get("ADZUNA_APP_ID",  "1e421cb5")
-ADZUNA_APP_KEY = os.environ.get("ADZUNA_APP_KEY", "9b3d4f5a031c8dad9be8c73c721546b4")
+ADZUNA_APP_ID  = os.environ.get("ADZUNA_APP_ID",  "")
+ADZUNA_APP_KEY = os.environ.get("ADZUNA_APP_KEY", "")
 
 SEARCH_QUERIES = [
     "data analyst",
