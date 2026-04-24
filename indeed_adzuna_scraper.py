@@ -38,8 +38,9 @@ SEARCH_QUERIES = [
     "data analyst",
     "data engineer",
     "business intelligence analyst",
-    "data scientist",
-    "business analyst",
+    "business intelligence engineer",
+    "analytics engineer",
+
 ]
 
 LOCATION     = "United States"
@@ -53,7 +54,7 @@ EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD",  "")
 EMAIL_TO       = os.environ.get("EMAIL_TO",            "")
 
 SENIOR_RE = re.compile(
-    r'\b(senior|sr\.?|lead|manager|director|principal|staff|head of|vp|vice president)\b',
+    r'\b(senior|sr\.?|lead|manager|director|principal|staff|head of|avp|vp|vice president)\b',
     re.I
 )
 
@@ -137,20 +138,11 @@ def send_email(new_jobs: list[dict]) -> None:
         return
 
     def job_row(j):
-        is_senior = bool(SENIOR_RE.search(j["title"]))
-        bg        = "#fff3cd" if is_senior else "#d4edda"
-        badge     = (
-            " <span style='background:#856404;color:#fff;font-size:10px;"
-            "padding:1px 5px;border-radius:3px'>SENIOR</span>"
-            if is_senior else
-            " <span style='background:#155724;color:#fff;font-size:10px;"
-            "padding:1px 5px;border-radius:3px'>NEW</span>"
-        )
         salary_cell = f"<td>{j['salary']}</td>" if j["salary"] else "<td>—</td>"
         return (
-            f"<tr style='background:{bg}'>"
+            f"<tr style='background:#d4edda'>"
             f"<td><a href='{j['url']}' style='font-weight:bold;color:#2557a7'>"
-            f"{j['title']}</a>{badge}</td>"
+            f"{j['title']}</a></td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
             f"{salary_cell}"
@@ -160,11 +152,12 @@ def send_email(new_jobs: list[dict]) -> None:
         )
 
     target  = [j for j in new_jobs if not SENIOR_RE.search(j["title"])]
-    senior  = [j for j in new_jobs if SENIOR_RE.search(j["title"])]
 
-    # Show target roles first, then senior
-    ordered = target + senior
-    rows    = "".join(job_row(j) for j in ordered)
+    if not target:
+        print("No new target roles to email (all were senior).")
+        return
+
+    rows    = "".join(job_row(j) for j in target)
 
     subject = (
         f"Indeed (Adzuna): {len(target)} new role(s) — "
@@ -174,9 +167,7 @@ def send_email(new_jobs: list[dict]) -> None:
     body = f"""
     <h2 style="color:#2557a7">Indeed Job Alert</h2>
     <p>
-      <b style="color:#155724">{len(target)} target role(s)</b> &nbsp;|&nbsp;
-      <b style="color:#856404">{len(senior)} senior role(s)</b> &nbsp;|&nbsp;
-      <b>{len(new_jobs)} total new</b> — posted in last 24 hrs
+      <b style="color:#155724">{len(target)} new role(s)</b> — posted in last 24 hrs
     </p>
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%">
@@ -200,7 +191,7 @@ def send_email(new_jobs: list[dict]) -> None:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as srv:
             srv.login(EMAIL_SENDER, EMAIL_PASSWORD)
             srv.sendmail(EMAIL_SENDER, EMAIL_TO, msg.as_string())
-        print(f"[+] Email sent → {len(new_jobs)} new job(s)")
+        print(f"[+] Email sent → {len(target)} target role(s)")
     except Exception as e:
         print(f"[!] Email failed: {e}")
 
