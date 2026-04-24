@@ -4,15 +4,11 @@ on:
   schedule:
     # All times EDT (UTC-4). Shifts 1 hr in winter (EST/UTC-5).
     #
-    # Every 30 min — 7:15 AM to 10:45 PM EDT (11:15–02:45 UTC)
-    - cron: '15,45 11-23 * * *'
-    - cron: '15,45 0-2 * * *'
-    #
-    # Every 140 min — 11:30 PM to 6:30 AM EDT
-    - cron: '30 3 * * *'    # 11:30 PM EDT
-    - cron: '50 5 * * *'    #  1:50 AM EDT
-    - cron: '10 8 * * *'    #  4:10 AM EDT
-    - cron: '30 10 * * *'   #  6:30 AM EDT
+    # Every 30 min — 7:30 AM to 10:30 PM EDT
+    - cron: '30 11-23 * * *'
+    - cron: '30 0-2 * * *'
+    # :00 every hour (keeps GitHub scheduler reliable overnight)
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 permissions:

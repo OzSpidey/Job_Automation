@@ -2,15 +2,13 @@ name: Amazon Jobs Scanner
 
 on:
   schedule:
-    # All times EDT (UTC-4). Note: shifts 1 hr in winter when EST (UTC-5) kicks in.
+    # All times EDT (UTC-4). Shifts 1 hr in winter (EST/UTC-5).
     #
-    # Every 30 min — 7:25 AM to 10:25 PM EDT (11:25–02:25 UTC, spans midnight)
-    - cron: '25,55 11-23 * * *'   # 7:25 AM – 7:55 PM EDT
-    - cron: '25 0-2 * * *'        # 8:25 PM – 10:25 PM EDT (:25 only for hour 2)
-    - cron: '55 0-1 * * *'        # 8:55 PM –  9:55 PM EDT (stop before 10:55 PM)
-    #
-    # Every 3 hrs — 11 PM, 2 AM, 5 AM EDT (03:00, 06:00, 09:00 UTC)
-    - cron: '0 3,6,9 * * *'
+    # Every 30 min — 7:30 AM to 10:30 PM EDT
+    - cron: '30 11-23 * * *'
+    - cron: '30 0-2 * * *'
+    # :00 every hour (keeps GitHub scheduler reliable overnight)
+    - cron: '0 * * * *'
   workflow_dispatch:               # Allow manual runs from the Actions tab
 
 permissions:
