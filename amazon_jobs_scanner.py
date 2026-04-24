@@ -496,8 +496,11 @@ async def main():
 
     save_seen_urls(previously_seen | {j["url"] for j in jobs})
 
-    print("\nSending email...")
-    send_email(jobs, previously_seen)
+    if not new_jobs:
+        print("No new roles — skipping email.")
+    else:
+        print(f"\nSending email ({len(new_jobs)} new role(s))...")
+        send_email(jobs, previously_seen)
     print("Done.")
 
 
