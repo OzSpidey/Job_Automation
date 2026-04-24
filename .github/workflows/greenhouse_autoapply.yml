@@ -59,15 +59,14 @@ jobs:
             echo "No session secret found — run will fail if login is required."
           fi
 
-      - name: Decode resume files
+      - name: Download resumes from private repo
         env:
-          RESUME_MAIN_B64: ${{ secrets.RESUME_MAIN_B64 }}
-          DE_RESUME_B64: ${{ secrets.DE_RESUME_B64 }}
-          DS_RESUME_B64: ${{ secrets.DS_RESUME_B64 }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          echo "$RESUME_MAIN_B64" | base64 -d > /tmp/resume_main.pdf
-          echo "$DE_RESUME_B64"   | base64 -d > /tmp/resume_de.pdf
-          echo "$DS_RESUME_B64"   | base64 -d > /tmp/resume_ds.pdf
+          gh repo clone OzSpidey/job-assets /tmp/job-assets
+          cp /tmp/job-assets/resume_main.pdf /tmp/resume_main.pdf
+          cp /tmp/job-assets/resume_de.pdf   /tmp/resume_de.pdf
+          cp /tmp/job-assets/resume_ds.pdf   /tmp/resume_ds.pdf
 
       - name: Run Greenhouse Auto-Apply
         env:
