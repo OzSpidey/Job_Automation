@@ -14,7 +14,7 @@ import os
 import re
 import smtplib
 import sys
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -108,11 +108,14 @@ def fetch_jobs(query: str) -> list[dict]:
         elif sal_min:
             salary = f"${int(sal_min):,}+"
 
-        # Parse date for display
+        # Parse date and enforce strict 24-hour window client-side
+        # (Adzuna's max_days_old uses calendar days, not hours)
         posted = ""
         if created:
             try:
                 dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                if datetime.now(timezone.utc) - dt > timedelta(hours=24):
+                    continue
                 posted = dt.strftime("%b %d %I:%M %p")
             except Exception:
                 posted = created[:10]
