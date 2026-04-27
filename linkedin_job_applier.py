@@ -67,7 +67,7 @@ ROLES = [
     "Data Analyst",
     "Business Intelligence Analyst",
 ]
-MAX_PAGES = 5    # pages per role (each page ≈ 25 jobs)
+MAX_PAGES = 2  # pages per role (each page ≈ 25 jobs)
 MAX_HOURS = 2    # only process jobs posted within this many hours
 GEO_URN   = "103644278"  # United States
 
