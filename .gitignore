@@ -20,5 +20,13 @@ package-lock.json
 emails_output.*
 linkedin_urls.txt
 
+# LinkedIn job applier (runs locally only)
+linkedin_job_applier.py
+linkedin_applied_ids.json
+linkedin_jobs_applied.csv
+linkedin_cookie.txt
+run_linkedin_jobs.bat
+.github/workflows/linkedin_job_applier.yml
+
 # Claude internal
 .claude/
