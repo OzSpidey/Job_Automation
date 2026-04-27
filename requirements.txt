@@ -1,2 +1,5 @@
 playwright
 python-dotenv
+selenium
+webdriver-manager
+duckduckgo_search
