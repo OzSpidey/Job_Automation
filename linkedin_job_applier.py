@@ -71,6 +71,12 @@ MAX_PAGES = 5    # pages per role (each page ≈ 25 jobs)
 MAX_HOURS = 2    # only process jobs posted within this many hours
 GEO_URN   = "103644278"  # United States
 
+# Companies to skip — add any staffing agencies or companies you don't want
+SKIP_COMPANIES = {
+    "aaratech",
+    "robert half",
+}
+
 # Run headless on CI (GitHub Actions sets CI=true), visible locally
 HEADLESS = os.environ.get("CI", "").lower() == "true"
 
@@ -860,6 +866,11 @@ def main():
                     # Skip reposted jobs
                     if job["posted_text"].lower().startswith("reposted"):
                         print(f"    -> SKIP: reposted ({job['posted_text']})")
+                        continue
+
+                    # Skip blacklisted companies
+                    if job["company"].lower() in SKIP_COMPANIES:
+                        print(f"    -> SKIP: company on ignore list ({job['company']})")
                         continue
 
                     # Time filter — skip if posted more than MAX_HOURS ago
