@@ -16,6 +16,7 @@ Run: python microsoft_jobs_scanner.py
 import asyncio
 import json
 import os
+import re
 import smtplib
 import sys
 import urllib.parse
@@ -158,6 +159,10 @@ async def collect_page_jobs(page) -> list[dict]:
                 continue
             if not href.startswith("http"):
                 href = "https://careers.microsoft.com" + href
+            # Normalize to the working URL format: /v2/global/en/job/{id}/
+            job_id_match = re.search(r'/job/(\d+)', href)
+            if job_id_match:
+                href = f"https://careers.microsoft.com/v2/global/en/job/{job_id_match.group(1)}/"
             if href in seen:
                 continue
             seen.add(href)
