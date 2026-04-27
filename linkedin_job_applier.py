@@ -647,14 +647,17 @@ def send_summary_email(all_jobs: list[dict]) -> None:
     if not EMAIL_PASSWORD:
         print("[!] GMAIL_APP_PASSWORD not set — skipping email.")
         return
-    if not all_jobs:
-        print("[!] No jobs to report.")
+
+    # Only email jobs seen for the first time this run — skip duplicates from previous runs
+    new_jobs = [r for r in all_jobs if r.get("is_new")]
+    if not new_jobs:
+        print("[!] No new jobs this run — skipping email.")
         return
 
-    n_easy     = sum(1 for r in all_jobs if r["status"] == "easy apply")
-    n_external = sum(1 for r in all_jobs if r["status"] == "external link")
-    n_skipped  = sum(1 for r in all_jobs if r["status"].startswith("skipped"))
-    n_new      = sum(1 for r in all_jobs if r.get("is_new"))
+    n_easy     = sum(1 for r in new_jobs if r["status"] == "easy apply")
+    n_external = sum(1 for r in new_jobs if r["status"] == "external link")
+    n_skipped  = sum(1 for r in new_jobs if r["status"].startswith("skipped"))
+    n_new      = len(new_jobs)
 
     STATUS_COLOR = {
         "easy apply":     "#d4edda",
@@ -696,16 +699,11 @@ def send_summary_email(all_jobs: list[dict]) -> None:
             f"</tr>"
         )
 
-    rows    = "".join(_row(r) for r in all_jobs)
+    rows    = "".join(_row(r) for r in new_jobs)
     subject = (
         f"LinkedIn Jobs: {n_easy} easy apply | "
         f"{n_external} external | "
-        f"{n_skipped} skipped — {len(all_jobs)} total"
-    )
-    new_note = (
-        f'<p style="color:#0c5460;font-size:13px">&#9733; {n_new} job(s) not seen '
-        f'in the previous run are marked <b>NEW</b>.</p>'
-        if n_new else ""
+        f"{n_skipped} skipped — {n_new} new jobs"
     )
     body_html = f"""
     <h2>LinkedIn Jobs Summary</h2>
@@ -713,10 +711,8 @@ def send_summary_email(all_jobs: list[dict]) -> None:
       <b style="color:#155724">Easy Apply: {n_easy}</b> &nbsp;|&nbsp;
       <b style="color:#004085">External Link: {n_external}</b> &nbsp;|&nbsp;
       <b>Skipped: {n_skipped}</b> &nbsp;|&nbsp;
-      <b>Total scanned: {len(all_jobs)}</b> &nbsp;|&nbsp;
       <b style="color:#0c5460">New this run: {n_new}</b>
     </p>
-    {new_note}
     <p style="font-size:12px;color:#555">
       Only jobs posted within the last {MAX_HOURS} hour(s) were processed.
       Roles searched: {", ".join(ROLES)}.
