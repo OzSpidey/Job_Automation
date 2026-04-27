@@ -59,10 +59,7 @@ EMAIL_TO       = os.environ.get("EMAIL_TO", YOUR_INFO.get("email", ""))
 # ── LinkedIn session cookie ────────────────────────────────────────────────────
 # Refresh: F12 → Application → Cookies → linkedin.com → copy li_at value
 # On CI this is read from the LINKEDIN_COOKIE GitHub secret automatically.
-LINKEDIN_COOKIE = os.environ.get(
-    "LINKEDIN_COOKIE",
-    "AQEDATPkzZwBHTaMAAABnc9Xd48AAAGd82P7j04AdG49srU7XlXr8nFh3XVzO8uyV3OC54n4r67Vem7roBD3IzQfX2D121QA04zBmXOxLom142DfPmFMp5VjK13M5RmDntoq9-05l9vubVYlPAnYoUcK",
-)
+LINKEDIN_COOKIE = os.environ.get("LINKEDIN_COOKIE", "")
 
 # ── Search config ──────────────────────────────────────────────────────────────
 ROLES = [

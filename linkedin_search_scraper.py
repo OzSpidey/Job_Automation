@@ -5,6 +5,7 @@ LinkedIn People Search Scraper
 - Collects all profile URLs across MAX_PAGES pages, saves to a .txt file
 """
 
+import os
 import time
 import re
 import sys
@@ -36,7 +37,7 @@ GEO_URN = "103644278"  # United States
 #   1. Open Chrome, go to linkedin.com, log in
 #   2. Press F12 → Application → Cookies → https://www.linkedin.com
 #   3. Find "li_at" → copy its Value → paste below
-LINKEDIN_COOKIE = "AQEFAQ4BAAAAABPgpp8AAAGdpzvQwAAAAZ3LSFTATgAAsXVybjpsaTplbnRlcnByaXNlQXV0aFRva2VuOmVKeGpaQUFCaFZKQkVNWGZkS1FUekZmYzRzVUlvc3YxSEYrQUdTWXhNMjh4TUFNQWlXc0hldz09XnVybjpsaTplbnRlcnByaXNlUHJvZmlsZToodXJuOmxpOmVudGVycHJpc2VBY2NvdW50OjIxMjcxMjEsMjYwMjI4MjMzKV51cm46bGk6bWVtYmVyOjg0NjExNzk5MY2xNnQZY_sPSzvCxL9csthf0ktIybCeqNS3Y9xokGzqRuMD2Plv3qgMlorf2qvbfHI7Rpv1A84wnk5VoSc65FBd0mwghbEvIzKNSKXuIhMXgtbv4dlTGmuDAHai23IB5Lp6CNIOWyeFxZt5z8ZqU6EUo9U4NXM78NTi36p6t0AHDQUkH2tWfto5bNgJy07Se9Y4I_U"
+LINKEDIN_COOKIE = os.environ.get("LINKEDIN_COOKIE", "PASTE_li_at_HERE")
 # ─────────────────────────────────────────────────────────────────────────────
 
 
