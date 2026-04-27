@@ -203,24 +203,63 @@ def build_search_url(role: str, page: int = 1) -> str:
 # Job list helpers
 # ══════════════════════════════════════════════════════════════════════════════
 
-def wait_for_job_list(driver: webdriver.Chrome, timeout: int = 15):
+CARD_SELECTORS = [
+    "li[data-occludable-job-id]",
+    "li[data-occludable-entity-urn]",
+    ".jobs-search-results__list-item",
+    ".jobs-search-results-list__list-item",
+    "div.job-search-card",
+    "li.scaffold-layout__list-item",
+]
+
+
+def wait_for_job_list(driver: webdriver.Chrome, timeout: int = 20):
+    # Scroll to trigger lazy-loaded cards
+    for _ in range(3):
+        driver.execute_script("window.scrollBy(0, 600)")
+        time.sleep(0.6)
+    driver.execute_script("window.scrollTo(0, 0)")
+    time.sleep(0.5)
+
+    combined = ", ".join(CARD_SELECTORS)
     WebDriverWait(driver, timeout).until(
-        EC.presence_of_element_located((
-            By.CSS_SELECTOR,
-            "li[data-occludable-job-id], .jobs-search-results__list-item",
-        ))
+        EC.presence_of_element_located((By.CSS_SELECTOR, combined))
     )
 
 
 def get_job_ids_on_page(driver: webdriver.Chrome) -> list[str]:
-    cards = driver.find_elements(By.CSS_SELECTOR, "li[data-occludable-job-id]")
     seen, ids = set(), []
-    for c in cards:
-        jid = c.get_attribute("data-occludable-job-id") or c.get_attribute("data-job-id") or ""
-        jid = jid.strip()
-        if jid and jid not in seen:
-            seen.add(jid)
-            ids.append(jid)
+
+    # Try each card selector
+    for sel in CARD_SELECTORS:
+        cards = driver.find_elements(By.CSS_SELECTOR, sel)
+        if not cards:
+            continue
+        for c in cards:
+            jid = (c.get_attribute("data-occludable-job-id")
+                   or c.get_attribute("data-job-id") or "")
+            if not jid:
+                urn = c.get_attribute("data-occludable-entity-urn") or ""
+                m = re.search(r"jobPosting[,:](\d+)", urn)
+                if m:
+                    jid = m.group(1)
+            jid = jid.strip()
+            if jid and jid not in seen:
+                seen.add(jid)
+                ids.append(jid)
+        if ids:
+            return ids
+
+    # Last-resort fallback: extract job IDs from /jobs/view/ links
+    for a in driver.find_elements(By.CSS_SELECTOR, "a[href*='/jobs/view/']"):
+        href = a.get_attribute("href") or ""
+        m = re.search(r"/jobs/view/(\d+)", href)
+        if m:
+            jid = m.group(1)
+            if jid not in seen:
+                seen.add(jid)
+                ids.append(jid)
+
     return ids
 
 
@@ -788,17 +827,20 @@ def main():
                 url = build_search_url(role, page)
                 print(f"\n  [Page {page}] {url}")
                 driver.get(url)
-                time.sleep(4)
+                time.sleep(5)
+
+                print(f"  Title: {driver.title!r}")
+                print(f"  URL  : {driver.current_url}")
 
                 if "authwall" in driver.current_url or "login" in driver.current_url:
                     print("[ERROR] Cookie expired — session ended.")
                     break
 
-
                 try:
                     wait_for_job_list(driver)
                 except TimeoutException:
-                    print("  No job cards found — end of results for this role.")
+                    src_snippet = driver.page_source[:400].replace("\n", " ")
+                    print(f"  No job cards found — page snippet: {src_snippet}")
                     break
 
                 job_ids = get_job_ids_on_page(driver)
