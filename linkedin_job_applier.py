@@ -857,6 +857,11 @@ def main():
                     print(f"    Posted : {job['posted_text']!r}  →  {job['hours_ago']:.1f}h ago")
                     print(f"    Type   : {'Easy Apply' if job['is_easy_apply'] else 'External'}")
 
+                    # Skip reposted jobs
+                    if job["posted_text"].lower().startswith("reposted"):
+                        print(f"    -> SKIP: reposted ({job['posted_text']})")
+                        continue
+
                     # Time filter — skip if posted more than MAX_HOURS ago
                     if job["hours_ago"] > MAX_HOURS:
                         print(f"    -> SKIP: {job['hours_ago']:.1f}h ago exceeds {MAX_HOURS}h limit")
