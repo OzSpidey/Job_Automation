@@ -472,7 +472,7 @@ async def main():
         print("No new roles — skipping email.")
     else:
         print(f"\nSending email ({len(new_jobs)} new role(s))...")
-        send_email(jobs, previously_seen)
+        send_email(new_jobs, previously_seen)
         save_seen_urls(previously_seen | {j["url"] for j in jobs})
         print("Seen jobs updated.")
     print("Done.")
