@@ -468,13 +468,13 @@ async def main():
     new_jobs = [j for j in jobs if j["url"] not in previously_seen]
     print(f"New roles (not seen before): {len(new_jobs)}")
 
-    save_seen_urls(previously_seen | {j["url"] for j in jobs})
-
     if not new_jobs:
         print("No new roles — skipping email.")
     else:
         print(f"\nSending email ({len(new_jobs)} new role(s))...")
         send_email(jobs, previously_seen)
+        save_seen_urls(previously_seen | {j["url"] for j in jobs})
+        print("Seen jobs updated.")
     print("Done.")
 
 
