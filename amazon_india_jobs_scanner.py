@@ -73,7 +73,7 @@ def is_target_role(title: str) -> bool:
 def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
     new_count = sum(1 for j in jobs if j["url"] not in previously_seen)
     count     = len(jobs)
-    subject   = f"Amazon India Jobs Scraper — {count} Matching Role(s) Found ({new_count} NEW)"
+    subject   = f" [Cron Job]Amazon India Jobs Scraper — {count} Matching Role(s) Found ({new_count} NEW)"
 
     if not jobs:
         plain = "No matching jobs found (Software Engineer / Software Developer, India)."
