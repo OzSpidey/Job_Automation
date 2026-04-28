@@ -69,8 +69,12 @@ def save_seen_urls(urls: set[str]) -> None:
         json.dump(sorted(urls), f, indent=2)
 
 
+EXCLUDE_LEVELS = ["senior", "principal"]
+
 def is_target_role(title: str) -> bool:
     t = title.lower()
+    if any(level in t for level in EXCLUDE_LEVELS):
+        return False
     return any(role in t for role in TARGET_ROLES)
 
 

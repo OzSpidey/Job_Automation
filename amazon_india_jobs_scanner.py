@@ -1,18 +1,18 @@
 """
-Amazon Jobs Scanner — University Programs
-------------------------------------------
-Flow (exactly as specified):
-  1. Go to https://www.amazon.jobs/content/en/career-programs/university?country[]=US
+Amazon India Jobs Scanner — University Programs
+------------------------------------------------
+Flow:
+  1. Go to https://www.amazon.jobs/content/en/career-programs/university?country[]=IN
   2. Click the magnifying-glass search icon
-  3. Type "United States" in the Location input
-  4. Click the Search submit button (button._search_gi3vf_131)
+  3. Type "India" in the Location input and select country-level match
+  4. Click the Search submit button
   5. Click Sort by → Most recent
-  6. Scrape 40 pages for matching roles
-  7. Email results to configured recipients
+  6. Scrape 20 pages for matching roles
+  7. Email results to INDIA_EMAIL
 
-Target roles: Data Engineer, Business Intelligence Engineer, Business Analyst, BI Engineer
+Target roles: Software Engineer, Software Developer
 
-Run: python amazon_jobs_scanner.py
+Run: python amazon_india_jobs_scanner.py
 """
 
 import asyncio
@@ -32,28 +32,23 @@ load_dotenv()
 # ──────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
-TARGET_EMAIL    = os.environ.get("EMAIL_TO", "")
+INDIA_EMAILS    = [e.strip() for e in os.environ.get("EMAIL_TO_INDIA", "").split(",") if e.strip()]
 SENDER_EMAIL    = os.environ.get("EMAIL_SENDER", "")
 SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 SMTP_SERVER     = "smtp.gmail.com"
 SMTP_PORT       = 465
 
-UNIVERSITY_URL  = "https://www.amazon.jobs/content/en/career-programs/university?country%5B%5D=US"
-PAGES_TO_SCRAPE = 40
-SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "amazon_seen_jobs.json")
+UNIVERSITY_URL  = "https://www.amazon.jobs/content/en/career-programs/university?country%5B%5D=IN"
+PAGES_TO_SCRAPE = 20
+SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "amazon_seen_jobs_india.json")
 
 TARGET_ROLES = [
-    "data engineer",
-    "business intelligence engineer",
-    "business analyst",
-    "bi engineer",
-    "data analyst",
-    "early grad",
     "software engineer",
-    "ai engineer",
     "software developer",
-
+    "software development engineer",
+    "sde",
 ]
+
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ──────────────────────────────────────────────────────────────────────────────
@@ -78,10 +73,10 @@ def is_target_role(title: str) -> bool:
 def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
     new_count = sum(1 for j in jobs if j["url"] not in previously_seen)
     count     = len(jobs)
-    subject   = f"Amazon Jobs Scraper — {count} Matching Role(s) Found ({new_count} NEW)"
+    subject   = f"Amazon India Jobs Scraper — {count} Matching Role(s) Found ({new_count} NEW)"
 
     if not jobs:
-        plain = "No matching jobs found (Data Engineer / BI Engineer / Business Analyst / Data Analyst, US)."
+        plain = "No matching jobs found (Software Engineer / Software Developer, India)."
         html  = "<p>No matching jobs found.</p>"
     else:
         NEW_BADGE = '<span style="background:#e47911;color:#fff;font-size:11px;font-weight:bold;padding:2px 6px;border-radius:3px;margin-right:6px;">NEW</span>'
@@ -100,10 +95,9 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         rows = "\n".join(rows_list)
         html = f"""
         <html><body style="font-family:Arial,sans-serif;color:#333">
-        <h2 style="color:#232F3E">Amazon Jobs — Matching Roles</h2>
+        <h2 style="color:#232F3E">Amazon Jobs — Matching Roles (India)</h2>
         <p>Found <strong>{count}</strong> role(s) matching:
-           <em>Data Engineer &nbsp;|&nbsp; Business Intelligence Engineer &nbsp;|&nbsp;
-           Business Analyst &nbsp;|&nbsp; Data Analyst &nbsp;|&nbsp; Early Grad</em>
+           <em>Software Engineer &nbsp;|&nbsp; Software Developer &nbsp;|&nbsp; Software Development Engineer &nbsp;|&nbsp; SDE</em>
         </p>
         <table style="border-collapse:collapse;width:100%;max-width:1100px">
           <tr style="background:#232F3E;color:#FF9900">
@@ -114,7 +108,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
           {rows}
         </table>
         <p style="font-size:12px;color:#888;margin-top:20px">
-          Source: amazon.jobs · University Programs · United States · Most Recent
+          Source: amazon.jobs · University Programs · India · Most Recent
         </p>
         </body></html>
         """
@@ -125,15 +119,15 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = SENDER_EMAIL
-    msg["To"]      = TARGET_EMAIL
+    msg["To"]      = ", ".join(INDIA_EMAILS)
     msg.attach(MIMEText(plain, "plain"))
     msg.attach(MIMEText(html,  "html"))
 
     with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as srv:
         srv.login(SENDER_EMAIL, SENDER_PASSWORD)
-        srv.sendmail(SENDER_EMAIL, TARGET_EMAIL, msg.as_string())
+        srv.sendmail(SENDER_EMAIL, INDIA_EMAILS, msg.as_string())
 
-    print(f"[email] Sent to {TARGET_EMAIL} — {count} job(s).")
+    print(f"[email] Sent to {', '.join(INDIA_EMAILS)} — {count} job(s).")
 
 
 async def collect_page_jobs(page) -> list[dict]:
@@ -190,7 +184,6 @@ async def collect_page_jobs(page) -> list[dict]:
                     continue
                 seen.add(href)
 
-                # Walk up the DOM to find the nearest .posting-date sibling
                 date = await page.evaluate("""
                     (href) => {
                         const a = document.querySelector(`a[href="${href}"]`);
@@ -227,7 +220,7 @@ async def scrape_jobs() -> list[dict]:
         page    = await ctx.new_page()
 
         # ── 1. Load the university page ───────────────────────────────────────
-        print(f"[1] Loading university page...")
+        print(f"[1] Loading university page (India)...")
         await page.goto(UNIVERSITY_URL, wait_until="domcontentloaded", timeout=30_000)
         await page.wait_for_timeout(3_500)
 
@@ -242,8 +235,6 @@ async def scrape_jobs() -> list[dict]:
             pass
 
         # ── 2. Click the magnifying-glass search icon ─────────────────────────
-        # Selector: button containing <path clip-rule="evenodd" fill-rule="evenodd">
-        # The submit button also has this path, so pick the FIRST one (the icon)
         print("[2] Clicking search icon...")
         await page.evaluate("""
             () => {
@@ -252,33 +243,26 @@ async def scrape_jobs() -> list[dict]:
                 );
                 for (const p of paths) {
                     const btn = p.closest('button');
-                    // The icon button does NOT have a visible <span>Search</span>
-                    // The submit button does — skip it
                     if (btn && !btn.querySelector('span')) {
                         btn.click();
                         return;
                     }
                 }
-                // Fallback: click first button with that path regardless
                 const first = document.querySelector(
                     'path[clip-rule="evenodd"][fill-rule="evenodd"]'
                 )?.closest('button');
                 if (first) first.click();
             }
         """)
-        # Give Qwik time to lazy-load the search panel JS and show the form
         await page.wait_for_timeout(4_000)
 
-        # ── 3. Fill Location = "United States" ───────────────────────────────
-        print("[3] Filling Location: United States...")
+        # ── 3. Fill Location = "India" ────────────────────────────────────────
+        print("[3] Filling Location: India...")
         loc = page.locator('input[placeholder="Location"]').first
 
-        # The input starts hidden; Qwik shows it after the icon click.
-        # Wait up to 10 s for it to become visible.
         try:
             await loc.wait_for(state="visible", timeout=10_000)
         except PlaywrightTimeout:
-            # If still hidden, force it visible via JS before interacting
             print("  Location still hidden — forcing visibility via JS...")
             await page.evaluate("""
                 () => {
@@ -300,29 +284,27 @@ async def scrape_jobs() -> list[dict]:
         await loc.click(force=True)
         await page.wait_for_timeout(300)
         await loc.fill("", force=True)
-        await loc.type("United States", delay=90)
+        await loc.type("India", delay=90)
         await page.wait_for_timeout(2_500)
 
-        # Pick the COUNTRY-level "United States" from autocomplete.
-        # Iterate all options and choose the one whose text is exactly "United States"
-        # (not a city like "Dallas/Fort Worth Metroplex, TX, United States").
+        # Pick the COUNTRY-level "India" from autocomplete (not a city like "Indiana, US")
         try:
             options = await page.locator('[role="option"], li[id*="option"]').all()
             selected = False
             for opt in options:
                 text = (await opt.inner_text()).strip()
-                if text.lower() == "united states":
+                if text.lower() == "india":
                     await opt.click(timeout=4_000)
                     print(f"  [location] Selected exact match: '{text}'.")
                     selected = True
                     break
             if not selected and options:
-                # Fallback: pick the option that STARTS with "United States" and is shortest
+                # Fallback: pick the option that STARTS with "India" and is shortest
                 best = None
                 best_len = 9999
                 for opt in options:
                     text = (await opt.inner_text()).strip()
-                    if text.lower().startswith("united states") and len(text) < best_len:
+                    if text.lower().startswith("india") and len(text) < best_len:
                         best = opt
                         best_len = len(text)
                 if best:
@@ -337,8 +319,6 @@ async def scrape_jobs() -> list[dict]:
         await page.wait_for_timeout(800)
 
         # ── 4. Click the Search submit button ────────────────────────────────
-        # HTML: <button class="_search_gi3vf_131" q:id="3s">…<span>Search</span></button>
-        # Most stable selector: button with class containing "_search_" that has a span
         print("[4] Clicking Search submit button...")
         clicked_submit = False
         try:
@@ -351,7 +331,6 @@ async def scrape_jobs() -> list[dict]:
             pass
 
         if not clicked_submit:
-            # Fallback: button containing an SVG title="Search" AND a span
             try:
                 submit = page.locator(
                     'button:has(svg):has(span:has-text("Search"))'
@@ -366,13 +345,11 @@ async def scrape_jobs() -> list[dict]:
             print("  [submit] All selectors failed — pressing Enter.")
             await page.keyboard.press("Enter")
 
-        # Wait for the results page to load
         await page.wait_for_timeout(5_000)
         raw_url = page.url
         print(f"  URL after search: {raw_url}")
 
-        # Strip radius/lat/lng — Amazon sets a 24 km radius around a DC centroid
-        # for "United States" which is far too restrictive for a country-wide search.
+        # Strip radius/lat/lng if Amazon added them
         if "radius=" in raw_url or "latitude=" in raw_url:
             parsed = urllib.parse.urlparse(raw_url)
             params = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
@@ -389,18 +366,16 @@ async def scrape_jobs() -> list[dict]:
         try:
             await page.wait_for_selector('a[href*="/jobs/"]', timeout=15_000)
         except PlaywrightTimeout:
-            await page.screenshot(path="amazon_debug_after_search.png")
-            print("  No job links found. Saved amazon_debug_after_search.png")
+            await page.screenshot(path="amazon_india_debug_after_search.png")
+            print("  No job links found. Saved amazon_india_debug_after_search.png")
             await browser.close()
             return matched
 
         # ── 5. Sort by Most Recent ────────────────────────────────────────────
-        # HTML: <button class="btn" data-toggle="dropdown">Sort by: Most relevant</button>
         print("[5] Clicking Sort by dropdown...")
         try:
             sort_btn = page.locator('button.btn[data-toggle="dropdown"]:has-text("Sort by")').first
             if await sort_btn.count() == 0:
-                # JS fallback
                 await page.evaluate(
                     "document.querySelector('button[data-toggle=\"dropdown\"]')?.click()"
                 )
@@ -408,7 +383,6 @@ async def scrape_jobs() -> list[dict]:
                 await sort_btn.click(timeout=6_000)
             await page.wait_for_timeout(800)
 
-            # <a id="listbox-sort-by--relevant-recent" ...>Most recent</a>
             recent = page.locator('#listbox-sort-by--relevant-recent').first
             if await recent.count() == 0:
                 recent = page.locator('a[data-label="Most recent"]').first
@@ -418,14 +392,12 @@ async def scrape_jobs() -> list[dict]:
         except Exception as e:
             print(f"  [sort] Skipped: {e}")
 
-        # ── 6. Scrape 5 pages via URL pagination ─────────────────────────────
-        # Capture the base results URL (after radius strip + sort) for page navigation.
+        # ── 6. Scrape pages via URL pagination ────────────────────────────────
         base_results_url = page.url
 
         for page_num in range(1, PAGES_TO_SCRAPE + 1):
             print(f"\n[page {page_num} of {PAGES_TO_SCRAPE}]")
 
-            # Navigate using offset-based pagination (Amazon uses offset= not page=)
             if page_num > 1:
                 offset = (page_num - 1) * 10
                 parsed  = urllib.parse.urlparse(base_results_url)
@@ -480,7 +452,7 @@ async def scrape_jobs() -> list[dict]:
 
 async def main():
     print("=" * 60)
-    print("Amazon Jobs Scanner — University Programs · US · Most Recent")
+    print("Amazon India Jobs Scanner — University Programs · India · Most Recent")
     print("=" * 60)
 
     jobs = await scrape_jobs()
