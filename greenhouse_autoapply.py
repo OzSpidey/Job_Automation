@@ -70,6 +70,10 @@ SEARCH_QUERIES = [
     {"url": _GH.format(query="query=business%20intelligence"),  "type": "business_intelligence"},
     {"url": _GH.format(query="query=data%20scientist"),         "type": "data_scientist"},
     {"url": _GH.format(query="query=business%20analyst"),       "type": "business_analyst"},
+    {"url": _GH.format(query="query=bi%20analyst"),             "type": "business_intelligence"},
+    {"url": _GH.format(query="query=software%20engineer"),      "type": "software_engineer"},
+    {"url": _GH.format(query="query=software%20developer"),     "type": "software_developer"},
+    {"url": _GH.format(query="query=devops"),                   "type": "devops"},
 ]
 SESSION_FILE  = Path(__file__).parent / "greenhouse_session.json"
 OUTPUT_CSV    = Path(__file__).parent / "greenhouse_applied.csv"
