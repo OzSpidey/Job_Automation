@@ -87,7 +87,7 @@ def make_paged_url(base_url: str, page_num: int) -> str:
 def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
     new_count = sum(1 for j in jobs if j["url"] not in previously_seen)
     count     = len(jobs)
-    subject   = f"Naukri Jobs Scraper — {count} Matching Role(s) Found ({new_count} NEW)"
+    subject   = f"[CRON JOB] Naukri Jobs Scraper — {count} Matching Role(s) Found ({new_count} NEW)"
 
     NEW_BADGE = '<span style="background:#4a90d9;color:#fff;font-size:11px;font-weight:bold;padding:2px 6px;border-radius:3px;margin-right:6px;">NEW</span>'
     rows_list = []
