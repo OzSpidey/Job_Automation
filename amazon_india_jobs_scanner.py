@@ -49,6 +49,12 @@ TARGET_ROLES = [
     "sde",
 ]
 
+INDIA_LOCATIONS = [
+    "india", "bengaluru", "bangalore", "hyderabad", "chennai",
+    "mumbai", "pune", "delhi", "gurugram", "gurgaon", "noida",
+    "kolkata", "ahmedabad", "in,", "ind,",
+]
+
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ──────────────────────────────────────────────────────────────────────────────
@@ -70,6 +76,11 @@ def is_target_role(title: str) -> bool:
     return any(role in t for role in TARGET_ROLES)
 
 
+def is_india_location(location: str) -> bool:
+    loc = location.lower()
+    return any(kw in loc for kw in INDIA_LOCATIONS)
+
+
 def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
     new_count = sum(1 for j in jobs if j["url"] not in previously_seen)
     count     = len(jobs)
@@ -88,6 +99,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
             rows_list.append(
                 f'<tr style="{row_bg}">'
                 f'<td style="padding:8px;border:1px solid #ddd;">{badge}{j["title"]}</td>'
+                f'<td style="padding:8px;border:1px solid #ddd;">{j.get("location", "")}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;"><a href="{j["url"]}">{j["url"]}</a></td>'
                 f'<td style="padding:8px;border:1px solid #ddd;white-space:nowrap;">{j.get("date", "")}</td>'
                 f'</tr>'
@@ -101,7 +113,8 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         </p>
         <table style="border-collapse:collapse;width:100%;max-width:1100px">
           <tr style="background:#232F3E;color:#FF9900">
-            <th style="padding:10px;border:1px solid #555;text-align:left;width:35%">Role</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:30%">Role</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:15%">Location</th>
             <th style="padding:10px;border:1px solid #555;text-align:left">Link</th>
             <th style="padding:10px;border:1px solid #555;text-align:left;width:15%">Date Posted</th>
           </tr>
@@ -131,11 +144,11 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
 
 
 async def collect_page_jobs(page) -> list[dict]:
-    """Collect job title, URL, and posting date from the current results page."""
+    """Collect job title, URL, location, and posting date from the current results page."""
     seen: set[str] = set()
     results = []
 
-    # Strategy 1: find each job card container that has both a link and a posting date
+    # Strategy 1: find each job card container
     cards = await page.locator(
         '[class*="job-tile"], [class*="result-card"], '
         'li:has(a[href*="/jobs/"]), div:has(> a[href*="/jobs/"])'
@@ -163,11 +176,22 @@ async def collect_page_jobs(page) -> list[dict]:
             except Exception:
                 pass
 
-            results.append({"title": title, "url": href, "date": date})
+            location = ""
+            try:
+                loc_el = card.locator(
+                    '[class*="location"], [class*="city"], [class*="country"], '
+                    '[data-test*="location"], span:has-text("India")'
+                ).first
+                if await loc_el.count() > 0:
+                    location = (await loc_el.inner_text()).strip()
+            except Exception:
+                pass
+
+            results.append({"title": title, "url": href, "date": date, "location": location})
         except Exception:
             continue
 
-    # Strategy 2: fallback — grab all /jobs/ links, look for .posting-date nearby
+    # Strategy 2: fallback — grab all /jobs/ links
     if not results:
         candidates = await page.locator(
             'h3 a[href*="/jobs/"], h2 a[href*="/jobs/"], a[href*="/jobs/"]'
@@ -184,22 +208,31 @@ async def collect_page_jobs(page) -> list[dict]:
                     continue
                 seen.add(href)
 
-                date = await page.evaluate("""
+                date, location = await page.evaluate("""
                     (href) => {
                         const a = document.querySelector(`a[href="${href}"]`);
-                        if (!a) return "";
+                        if (!a) return ["", ""];
                         let el = a.parentElement;
+                        let date = "", loc = "";
                         for (let i = 0; i < 6; i++) {
                             if (!el) break;
-                            const d = el.querySelector(".posting-date");
-                            if (d) return d.innerText.trim();
+                            if (!date) {
+                                const d = el.querySelector(".posting-date");
+                                if (d) date = d.innerText.trim();
+                            }
+                            if (!loc) {
+                                const l = el.querySelector(
+                                    '[class*="location"],[class*="city"],[class*="country"],[data-test*="location"]'
+                                );
+                                if (l) loc = l.innerText.trim();
+                            }
                             el = el.parentElement;
                         }
-                        return "";
+                        return [date, loc];
                     }
                 """, href)
 
-                results.append({"title": title, "url": href, "date": date or ""})
+                results.append({"title": title, "url": href, "date": date or "", "location": location or ""})
             except Exception:
                 continue
 
@@ -435,9 +468,13 @@ async def scrape_jobs() -> list[dict]:
                     continue
                 seen_urls.add(job["url"])
                 if is_target_role(job["title"]):
+                    loc = job.get("location", "")
+                    if loc and not is_india_location(loc):
+                        print(f"  SKIP (non-India location '{loc}'): {job['title']}")
+                        continue
                     matched.append(job)
                     page_matches += 1
-                    print(f"  MATCH: {job['title']}")
+                    print(f"  MATCH: {job['title']} | {loc or 'location unknown'}")
 
             print(f"  Matches this page: {page_matches}")
 
