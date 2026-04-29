@@ -123,7 +123,7 @@ def send_summary_email(all_jobs: list[dict]) -> None:
         print("[!] EMAIL_PASSWORD not set — skipping email notification.")
         return
 
-    n_applied  = sum(1 for r in all_jobs if r["status"] == "applied")
+    n_applied  = sum(1 for r in all_jobs if r["status"] in ("applied", "found"))
     n_failed   = sum(1 for r in all_jobs if r["status"] in ("failed", "error"))
     n_skipped  = sum(1 for r in all_jobs if r["status"].startswith("skipped"))
     n_new      = sum(1 for r in all_jobs if r.get("is_new"))
@@ -134,10 +134,12 @@ def send_summary_email(all_jobs: list[dict]) -> None:
 
     status_color = {
         "applied":               "#d4edda",
+        "found":                 "#d4edda",
         "failed":                "#f8d7da",
         "error":                 "#f8d7da",
         "skipped":               "#f5f5f5",
         "skipped (already applied)": "#f5f5f5",
+        "skipped (already seen)":    "#f5f5f5",
         "skipped (Senior Role)": "#fff3cd",
     }
 
@@ -170,13 +172,12 @@ def send_summary_email(all_jobs: list[dict]) -> None:
 
     rows = "".join(_row(r) for r in all_jobs)
 
-    subject = f"Greenhouse Auto-Apply: {n_applied} applied | {n_failed} failed | {n_skipped} skipped — {len(all_jobs)} total"
+    subject = f"[Greenhouse] {n_applied} new jobs found | {n_skipped} skipped — {len(all_jobs)} total"
     new_note = f" ({n_new} new this run)" if n_new else ""
     body_html = f"""
-    <h2>Greenhouse Auto-Apply Summary</h2>
+    <h2>Greenhouse Job Scraper Summary</h2>
     <p>
-      <b style="color:#155724">Applied: {n_applied}</b> &nbsp;|&nbsp;
-      <b style="color:#721c24">Failed/Error: {n_failed}</b> &nbsp;|&nbsp;
+      <b style="color:#155724">New Jobs Found: {n_applied}</b> &nbsp;|&nbsp;
       <b>Skipped: {n_skipped}</b> &nbsp;|&nbsp;
       <b>Total scanned: {len(all_jobs)}</b> &nbsp;|&nbsp;
       <b style="color:#0c5460">New this run: {n_new}</b>
@@ -950,6 +951,71 @@ async def fill_greenhouse_selects(page: Page) -> list:
         (r"level.*sql.*experience|sql.*experience.*level|what.*level.*sql", "advanced"),
         # Seattle area — No (Truveta)
         (r"located.*greater.*seattle|greater.*seattle.*area", "no"),
+
+        # ── New rules ──────────────────────────────────────────────────────────
+        # U.S. Citizenship
+        (r"are you a u\.?s\.?\s*citizen|u\.?s\.?\s*citizen.*naturalized|naturalized.*u\.?s\.?\s*born", "yes"),
+        # Convicted of a felony
+        (r"convicted of a felony|convicted.*felony|been convicted.*felony|ever.*convicted.*felony", "no"),
+        # Currently live in United States
+        (r"presently live.*united states|do you presently live|currently live.*united states.*america|live.*united states of america", "yes"),
+        # State of current residence (additional patterns)
+        (r"what state.*currently live|what state.*do you live in|state.*do you currently live", "Massachusetts"),
+        # Presently employed → Yes (user is at Atlas SP)
+        (r"are you presently employed\b|presently employed\b", "yes"),
+        # Clearance currently active
+        (r"is your clearance.*currently active|clearance.*currently active", "no"),
+        # TS/SCI / polygraph
+        (r"ts.?sci|polygraph.*clearance|clearance.*polygraph|possess.*clearance.*poly", "no"),
+        # Driver's license
+        (r"valid.*state.*driver.s license|state driver.s license|valid.*driver.s license|have.*driver.s license", "yes"),
+        # Drug screen consent
+        (r"10 panel.*drug screen|drug.*screen.*consent|willing.*drug screen|pre.employment drug screen|consent.*drug.*screen", "yes"),
+        # PhD enrollment
+        (r"currently enrolled.*phd|phd.*candidate.*enrolled|enrolled.*phd program", "no"),
+        # SF Bay Area
+        (r"located.*sf bay area|sf bay.*area.*hybrid|bay area.*requirement", "no"),
+        # Python proficiency level
+        (r"proficiency.*level.*python|proficiency.*python\b|python.*proficiency", "advanced"),
+        # AI familiarity rating
+        (r"familiarity.*artificial intelligence|ai.*concepts.*tools.*rate|ai.driven.*advancement.*rate|overall familiarity.*ai", "advanced"),
+        # In-office policy compliance (Alarm.com)
+        (r"able.*comply.*in.office.*policy|comply.*in.office.*policy|agree.*comply.*in.office", "yes"),
+        # Washington DC onsite
+        (r"willing.*on.?site.*washington|on.?site.*washington.*dc|work.*on.?site.*washington.*dc", "no"),
+        # Previously been an employee of specific company
+        (r"previously been.*employee.*of\b|have you previously.*been.*employee|previously.*employee.*of [a-z]", "no"),
+        # Can we text you about your application
+        (r"can we text you.*application|text you.*your application", "no"),
+        # Work status (OPT)
+        (r"\bwork status\b", "opt"),
+        # Employment eligibility / visa requirement (Grvty-style)
+        (r"employment eligibility information", "opt"),
+        (r"visa requirement status", "no requirement"),
+        # Mortgage company experience (Sagent)
+        (r"mortgage servicing company|mortgage technology company", "no"),
+        # Video interview acknowledgement (Sagent)
+        (r"sagent.*interviews.*video|microsoft teams.*video.*meetings|interviews.*conducted.*microsoft teams", "yes"),
+        # Travel for in-person interview (Sagent)
+        (r"able.*travel.*in.person.*interview|travel.*sagent.*location", "yes"),
+        # Security clearance with polygraph
+        (r"possess.*security clearance.*poly|security clearance.*with poly|clearance.*with poly\b", "no"),
+        # Eligible to work in the US
+        (r"are you eligible.*work.*us\b|eligible.*work.*united states\b|eligible to work in the u\.?s", "yes"),
+        # Visa type when eligible to work
+        (r"if yes.*please enter.*visa type|enter.*visa type|please enter.*visa type", "opt"),
+        # College/university dropdown
+        (r"dropdown.*college.*university|college.*university.*attending|university.*degree.*obtained|university.*most recent degree", "other"),
+        # Did anyone refer you (react-select)
+        (r"did anyone refer you\b|anyone.*refer.*you.*this job", "no"),
+        # Sagent / general compensation range dropdown
+        (r"compensation requirements.*base salary|base salary.*bonus.*other incentive", "70"),
+        # US legal status
+        (r"current.*u\.?s\.?\s*legal status|list.*u\.?s\.?\s*legal status|u\.?s\.?\s*legal status", "opt"),
+        # AI advancement interviews consent
+        (r"all sagent interviews|sagent.*interviews.*conducted", "yes"),
+        # Nonimmigrant visa (F-1/OPT)
+        (r"currently on a nonimmigrant visa|nonimmigrant visa.*f.1|f.1.*nonimmigrant visa", "yes"),
     ]
 
     # Step 1: JS discovery — return {inputId, label} for each unfilled react-select control
@@ -1481,6 +1547,12 @@ async def fill_application(page: Page, info: dict) -> tuple[bool, str]:
         await select_option_by_label(page, _ref_pat, "No")
         await fill_any_by_text(page, _ref_pat, "No")
 
+    # ── Relatives / acquaintances at company (text fields) ───────────────────
+    await fill_by_label(page, ["relatives", "close personal friends", "currently work"], "No")
+    await fill_by_label(page, ["family members", "relatives", "currently employed by"],  "No")
+    await fill_by_label(page, ["do you know anyone", "works at"],                        "No")
+    await fill_by_label(page, ["did anyone refer you"],                                  "No")
+
     # ── "If not referred, enter N/A" referral name text fields ───────────────
     await fill_by_label(page, ["if you were referred, by who"],    "N/A")
     await fill_by_label(page, ["if not referred, enter"],          "N/A")
@@ -1947,18 +2019,7 @@ async def fill_application(page: Page, info: dict) -> tuple[bool, str]:
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def main() -> None:
-    # Validate resume path early
-    if YOUR_INFO["resume_path"] and not Path(YOUR_INFO["resume_path"]).exists():
-        print(f"[!] Resume not found: {YOUR_INFO['resume_path']}")
-        print("    Update resume_path in YOUR_INFO and re-run.")
-        raise SystemExit(1)
-
-    if not YOUR_INFO["resume_path"]:
-        print("[!] WARNING: resume_path is empty — applications will be submitted without a resume.")
-        print("    Continuing in 5 seconds... (Ctrl+C to abort)")
-        await asyncio.sleep(5)
-
-    applied_ids = load_applied_ids()
+    seen_ids = load_applied_ids()
 
     async with async_playwright() as p:
         # ── Browser / session ────────────────────────────────────────────────
@@ -1978,208 +2039,78 @@ async def main() -> None:
         jobs = await collect_jobs(page)
         if not jobs:
             print("[!] No jobs found. The page structure may have changed.")
-            print("    A screenshot has been saved for debugging.")
             await page.screenshot(path=str(Path(__file__).parent / "debug_greenhouse.png"))
             await browser.close()
             return
 
-        # ── Apply to each job ────────────────────────────────────────────────
-        new_applied   = 0
-        skipped       = 0
-        session_jobs  = []  # every job scanned this run (for email)
-        prev_run_ids  = load_last_run_jobs()
+        prev_run_ids = load_last_run_jobs()
+        session_jobs = []
+        new_count    = 0
 
         for idx, job in enumerate(jobs, 1):
             job_id = job.get("job_id") or job["apply_url"]
-            title  = job.get("title", "Unknown")
+            title  = job.get("title", "")
             co     = job.get("company", "")
-            loc    = job.get("location", "")
 
-            # Derive company from URL slug when scraper couldn't find it
+            # Derive company name from URL slug when scraper missed it
             if not co:
                 m = re.search(r'greenhouse\.io/([^/]+)/jobs/', job["apply_url"])
                 if m:
                     co = m.group(1).replace("-", " ").title()
 
-            # Clear placeholder titles — real title will be scraped from the page
             if re.match(r'^view job$', title, re.I):
                 title = ""
 
-            label = f"[{idx}/{len(jobs)}] {title}" + (f" @ {co}" if co else "")
+            label = f"[{idx}/{len(jobs)}] {title or '(unknown)'}" + (f" @ {co}" if co else "")
 
-            if job_id in applied_ids:
-                meta = applied_ids[job_id]
-                display_title = meta.get("title") or title
-                display_co    = meta.get("company") or co
-                print(f"{label}  →  already applied, skipping")
-                skipped += 1
-                session_jobs.append({
-                    "title": display_title, "company": display_co,
-                    "apply_url": job["apply_url"], "status": "skipped (already applied)",
-                    "applied_at": meta.get("applied_at"),
-                    "is_new": job_id not in prev_run_ids,
-                })
+            # Already logged — skip silently to keep output clean
+            if job_id in seen_ids:
+                print(f"{label}  →  already seen, skipping")
                 continue
+
+            is_senior = bool(title and SENIOR_TITLE_RE.search(title))
+            is_new    = job_id not in prev_run_ids
 
             print(f"\n{label}")
             print(f"    URL: {job['apply_url']}")
 
-            try:
-                # Skip companies on the explicit skip list
-                if any(slug in job["apply_url"] for slug in SKIP_COMPANY_SLUGS):
-                    print(f"    -> SKIPPED: Company on skip list")
-                    append_csv({
-                        "job_id": job_id, "title": title, "company": co,
-                        "location": loc, "apply_url": job["apply_url"],
-                        "status": "skipped", "notes": "Company on SKIP_COMPANY_SLUGS list",
-                    })
-                    session_jobs.append({
-                        "title": title, "company": co,
-                        "apply_url": job["apply_url"], "status": "skipped",
-                        "is_new": job_id not in prev_run_ids,
-                    })
-                    continue
-
-                # Skip senior/lead/manager roles if title is already known before navigation
-                if title and SENIOR_TITLE_RE.search(title):
-                    print(f"    -> SKIPPED: Senior/Lead/Manager role")
-                    append_csv({
-                        "job_id": job_id, "title": title, "company": co,
-                        "location": loc, "apply_url": job["apply_url"],
-                        "status": "skipped", "notes": "Senior/Lead/Manager role",
-                    })
-                    session_jobs.append({
-                        "title": title, "company": co,
-                        "apply_url": job["apply_url"], "status": "skipped (Senior Role)",
-                        "is_new": job_id not in prev_run_ids,
-                    })
-                    continue
-
-                await navigate_to_application_form(page, job)
-                if page.url != job["apply_url"]:
-                    print(f"    Form URL: {page.url}")
-
-                # Scrape real title from page if we don't have one
-                if not title:
-                    scraped_title = await page.evaluate("""() => {
-                        const h = document.querySelector('h1, [class*="app-title"], [class*="job-title"]');
-                        if (h && h.innerText.trim()) return h.innerText.trim();
-                        return document.title.split('|')[0].split('-')[0].trim();
-                    }""")
-                    if scraped_title and not re.match(r'^view job$', scraped_title, re.I):
-                        title = scraped_title
-
-                # Skip senior/lead/manager roles identified from page title
-                if title and SENIOR_TITLE_RE.search(title):
-                    print(f"    -> SKIPPED: Senior/Lead/Manager role ({title})")
-                    append_csv({
-                        "job_id": job_id, "title": title, "company": co,
-                        "location": loc, "apply_url": page.url,
-                        "status": "skipped", "notes": "Senior/Lead/Manager role",
-                    })
-                    session_jobs.append({
-                        "title": title, "company": co,
-                        "apply_url": page.url, "status": "skipped (Senior Role)",
-                        "is_new": job_id not in prev_run_ids,
-                    })
-                    continue
-
-                # Skip jobs whose page prominently shows a non-US location
-                is_non_us = await page.evaluate("""() => {
-                    const top = document.body.innerText.substring(0, 8000).toLowerCase();
-                    return ['\\bindia\\b', 'bangalore', 'bengaluru', 'hyderabad',
-                            'mumbai', 'chennai', 'new delhi', '\\bpune\\b', 'kolkata'
-                    ].some(kw => top.includes(kw));
-                }""")
-                if is_non_us:
-                    print(f"    -> SKIPPED: Non-US location detected")
-                    append_csv({
-                        "job_id": job_id, "title": title, "company": co,
-                        "location": loc, "apply_url": page.url,
-                        "status": "skipped", "notes": "Non-US location",
-                    })
-                    session_jobs.append({
-                        "title": title, "company": co,
-                        "apply_url": page.url, "status": "skipped",
-                        "is_new": job_id not in prev_run_ids,
-                    })
-                    continue
-
-                apply_info = dict(YOUR_INFO)
-                if job.get("query_type") == "data_engineer" and DE_RESUME_PATH and Path(DE_RESUME_PATH).exists():
-                    apply_info["resume_path"] = DE_RESUME_PATH
-                    print(f"    [resume] using DE resume")
-                elif job.get("query_type") == "data_scientist" and DS_RESUME_PATH and Path(DS_RESUME_PATH).exists():
-                    apply_info["resume_path"] = DS_RESUME_PATH
-                    print(f"    [resume] using DS resume")
-                elif job.get("query_type") in ("data_analyst", "business_intelligence", "business_analyst"):
-                    # BI resume is already the default in YOUR_INFO
-                    print(f"    [resume] using BI resume")
-
-                success, note = await fill_application(page, apply_info)
-
-                status = "applied" if success else "failed"
-                print(f"    -> {status.upper()}: {note}")
-
-                # Debug: save HTML for any failing form (once per job_id)
-                _debug_html = Path(__file__).parent / f"debug_{job_id}.html"
-                if not success and not _debug_html.exists():
-                    _debug_html.write_text(await page.content(), encoding="utf-8")
-                    print(f"    [debug] HTML saved: {_debug_html.name}")
-
-                append_csv({
-                    "job_id":    job_id,
-                    "title":     title,
-                    "company":   co,
-                    "location":  loc,
-                    "apply_url": page.url,
-                    "status":    status,
-                    "notes":     note,
-                })
-
+            if any(slug in job["apply_url"] for slug in SKIP_COMPANY_SLUGS):
+                print(f"    -> SKIPPED: Company on skip list")
                 session_jobs.append({
                     "title": title, "company": co,
-                    "apply_url": page.url, "status": status,
-                    "is_new": job_id not in prev_run_ids,
+                    "apply_url": job["apply_url"],
+                    "status": "skipped", "is_new": is_new,
                 })
+                continue
 
-                if success:
-                    applied_ids[job_id] = {
-                        "title": title, "company": co,
-                        "applied_at": datetime.now().isoformat(),
-                    }
-                    save_applied_ids(applied_ids)
-                    new_applied += 1
-
-                    # Screenshot as proof
-                    ss_path = Path(__file__).parent / f"applied_{job_id}.png"
-                    await page.screenshot(path=str(ss_path))
-                    print(f"    [screenshot] {ss_path.name}")
-
-            except Exception as exc:
-                print(f"    -> ERROR: {exc}")
-                append_csv({
-                    "job_id": job_id, "title": title, "company": co,
-                    "location": loc, "apply_url": job["apply_url"],
-                    "status": "error", "notes": str(exc),
-                })
+            if is_senior:
+                print(f"    -> SKIPPED: Senior/Lead/Manager role")
                 session_jobs.append({
                     "title": title, "company": co,
-                    "apply_url": job["apply_url"], "status": "error",
-                    "is_new": job_id not in prev_run_ids,
+                    "apply_url": job["apply_url"],
+                    "status": "skipped (Senior Role)", "is_new": is_new,
                 })
+                continue
 
-            if idx < len(jobs):
-                await asyncio.sleep(DELAY_BETWEEN)
+            # New eligible job — record it
+            print(f"    -> FOUND")
+            session_jobs.append({
+                "title": title, "company": co,
+                "apply_url": job["apply_url"],
+                "status": "found", "is_new": is_new,
+            })
+            seen_ids[job_id] = {
+                "title": title, "company": co,
+                "applied_at": datetime.now().isoformat(),
+            }
+            new_count += 1
 
-        # Save session for next run
+        save_applied_ids(seen_ids)
         await context.storage_state(path=str(SESSION_FILE))
-
         save_last_run_jobs({(j.get("job_id") or j["apply_url"]) for j in jobs})
 
         print(f"\n{'='*60}")
-        print(f"[+] Done!  Applied: {new_applied}  |  Skipped: {skipped}  |  Total: {len(jobs)}")
-        print(f"[+] Log saved to: {OUTPUT_CSV}")
+        print(f"[+] Done!  New jobs found: {new_count}  |  Total scanned: {len(jobs)}")
 
         send_summary_email(session_jobs)
         await browser.close()
