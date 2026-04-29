@@ -128,8 +128,9 @@ def send_summary_email(all_jobs: list[dict]) -> None:
     n_skipped  = sum(1 for r in all_jobs if r["status"].startswith("skipped"))
     n_new      = sum(1 for r in all_jobs if r.get("is_new"))
 
-    if not all_jobs:
-        print("No jobs to report — skipping email.")
+    n_found = sum(1 for r in all_jobs if r["status"] == "failed")
+    if n_found == 0:
+        print("No new eligible jobs this run — skipping email.")
         return
 
     status_color = {
