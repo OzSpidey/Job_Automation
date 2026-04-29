@@ -1947,17 +1947,6 @@ async def fill_application(page: Page, info: dict) -> tuple[bool, str]:
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def main() -> None:
-    # Validate resume path early
-    if YOUR_INFO["resume_path"] and not Path(YOUR_INFO["resume_path"]).exists():
-        print(f"[!] Resume not found: {YOUR_INFO['resume_path']}")
-        print("    Update resume_path in YOUR_INFO and re-run.")
-        raise SystemExit(1)
-
-    if not YOUR_INFO["resume_path"]:
-        print("[!] WARNING: resume_path is empty — applications will be submitted without a resume.")
-        print("    Continuing in 5 seconds... (Ctrl+C to abort)")
-        await asyncio.sleep(5)
-
     applied_ids = load_applied_ids()
 
     async with async_playwright() as p:
@@ -2105,56 +2094,28 @@ async def main() -> None:
                     })
                     continue
 
-                apply_info = dict(YOUR_INFO)
-                if job.get("query_type") == "data_engineer" and DE_RESUME_PATH and Path(DE_RESUME_PATH).exists():
-                    apply_info["resume_path"] = DE_RESUME_PATH
-                    print(f"    [resume] using DE resume")
-                elif job.get("query_type") == "data_scientist" and DS_RESUME_PATH and Path(DS_RESUME_PATH).exists():
-                    apply_info["resume_path"] = DS_RESUME_PATH
-                    print(f"    [resume] using DS resume")
-                elif job.get("query_type") in ("data_analyst", "business_intelligence", "business_analyst"):
-                    # BI resume is already the default in YOUR_INFO
-                    print(f"    [resume] using BI resume")
-
-                success, note = await fill_application(page, apply_info)
-
-                status = "applied" if success else "failed"
-                print(f"    -> {status.upper()}: {note}")
-
-                # Debug: save HTML for any failing form (once per job_id)
-                _debug_html = Path(__file__).parent / f"debug_{job_id}.html"
-                if not success and not _debug_html.exists():
-                    _debug_html.write_text(await page.content(), encoding="utf-8")
-                    print(f"    [debug] HTML saved: {_debug_html.name}")
-
+                # Form filling disabled — log as failed so it appears in email
+                print(f"    -> FOUND (apply manually)")
                 append_csv({
                     "job_id":    job_id,
                     "title":     title,
                     "company":   co,
                     "location":  loc,
                     "apply_url": page.url,
-                    "status":    status,
-                    "notes":     note,
+                    "status":    "failed",
+                    "notes":     "Form filling disabled",
                 })
-
                 session_jobs.append({
                     "title": title, "company": co,
-                    "apply_url": page.url, "status": status,
+                    "apply_url": page.url, "status": "failed",
                     "is_new": job_id not in prev_run_ids,
                 })
-
-                if success:
-                    applied_ids[job_id] = {
-                        "title": title, "company": co,
-                        "applied_at": datetime.now().isoformat(),
-                    }
-                    save_applied_ids(applied_ids)
-                    new_applied += 1
-
-                    # Screenshot as proof
-                    ss_path = Path(__file__).parent / f"applied_{job_id}.png"
-                    await page.screenshot(path=str(ss_path))
-                    print(f"    [screenshot] {ss_path.name}")
+                applied_ids[job_id] = {
+                    "title": title, "company": co,
+                    "applied_at": datetime.now().isoformat(),
+                }
+                save_applied_ids(applied_ids)
+                new_applied += 1
 
             except Exception as exc:
                 print(f"    -> ERROR: {exc}")

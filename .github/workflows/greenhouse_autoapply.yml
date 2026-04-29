@@ -9,7 +9,7 @@ permissions:
 jobs:
   autoapply:
     runs-on: ubuntu-latest
-    timeout-minutes: 15    # Fail fast if session expires and OTP is needed
+    timeout-minutes: 20    # No form filling — just page visits for title/filtering
 
     steps:
       - name: Checkout repo
@@ -49,19 +49,9 @@ jobs:
             echo "No session secret found — run will fail if login is required."
           fi
 
-      - name: Download resumes
-        run: |
-          git clone https://github.com/OzSpidey/job-assets.git /tmp/job-assets
-          cp /tmp/job-assets/resume_main.pdf /tmp/resume_main.pdf
-          cp /tmp/job-assets/resume_de.pdf   /tmp/resume_de.pdf
-          cp /tmp/job-assets/resume_ds.pdf   /tmp/resume_ds.pdf
-
       - name: Run Greenhouse Auto-Apply
         env:
           APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
-          RESUME_PATH:          /tmp/resume_main.pdf
-          DE_RESUME_PATH:       /tmp/resume_de.pdf
-          DS_RESUME_PATH:       /tmp/resume_ds.pdf
           EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:             ${{ secrets.EMAIL_TO }}
