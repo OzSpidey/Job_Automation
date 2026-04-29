@@ -1,4 +1,4 @@
-name: Greenhouse Auto-Apply
+name: JobDiva Auto-Apply
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
 jobs:
   autoapply:
     runs-on: ubuntu-latest
-    timeout-minutes: 20    # No form filling — just page visits for title/filtering
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repo
@@ -37,42 +37,26 @@ jobs:
       - name: Install Playwright system deps
         run: playwright install-deps chromium
 
-      - name: Restore Greenhouse session
-        env:
-          GREENHOUSE_SESSION_B64: ${{ secrets.GREENHOUSE_SESSION_B64 }}
+      - name: Download DE resume
         run: |
-          if [ -n "$GREENHOUSE_SESSION_B64" ]; then
-            echo "$GREENHOUSE_SESSION_B64" | base64 -d > greenhouse_session.json
-            echo "Session restored."
-          else
-            echo "No session secret found — run will fail if login is required."
-          fi
+          git clone https://github.com/OzSpidey/job-assets.git /tmp/job-assets
+          cp /tmp/job-assets/resume_de.pdf /tmp/resume_de.pdf
 
-      - name: Run Greenhouse Auto-Apply
+      - name: Run JobDiva Auto-Apply
         env:
+          HEADLESS:             "true"
           APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
+          DE_RESUME_PATH:       /tmp/resume_de.pdf
           EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:             ${{ secrets.EMAIL_TO }}
-        run: python greenhouse_autoapply.py
-
-      - name: Update session secret
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          if [ -f greenhouse_session.json ] && [ -n "$GH_TOKEN" ]; then
-            gh secret set GREENHOUSE_SESSION_B64 \
-              --body "$(base64 -w 0 greenhouse_session.json)" \
-              --repo OzSpidey/Job_Automation
-            echo "Session secret updated."
-          fi
+        run: python jobdiva_autoapply.py
 
       - name: Persist applied-jobs state
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add greenhouse_applied_ids.json greenhouse_last_run_jobs.json greenhouse_applied.csv 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "chore: update greenhouse applied jobs [skip ci]"
+          git add jobdiva_applied_ids.json jobdiva_applied.csv 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update jobdiva applied jobs [skip ci]"
           git pull --rebase origin main
           git push

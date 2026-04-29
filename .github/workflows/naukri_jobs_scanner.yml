@@ -28,10 +28,9 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('requirements.txt') }}
+          key: playwright-chromium-v2-${{ hashFiles('requirements.txt') }}
 
-      - name: Install Playwright browser (if not cached)
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+      - name: Install Playwright browser
         run: playwright install chromium
 
       - name: Install Playwright system deps
