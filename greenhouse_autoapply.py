@@ -2068,13 +2068,11 @@ async def main() -> None:
                 print(f"{label}  →  already seen, skipping")
                 continue
 
-            is_senior = bool(title and SENIOR_TITLE_RE.search(title))
-            is_new    = job_id not in prev_run_ids
-
-            print(f"\n{label}")
-            print(f"    URL: {job['apply_url']}")
+            is_new = job_id not in prev_run_ids
 
             if any(slug in job["apply_url"] for slug in SKIP_COMPANY_SLUGS):
+                print(f"\n{label}")
+                print(f"    URL: {job['apply_url']}")
                 print(f"    -> SKIPPED: Company on skip list")
                 session_jobs.append({
                     "title": title, "company": co,
@@ -2083,7 +2081,29 @@ async def main() -> None:
                 })
                 continue
 
-            if is_senior:
+            # Navigate to job page to get real title (needed for senior-role filtering)
+            try:
+                await page.goto(job["apply_url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+                await page.wait_for_timeout(1000)
+                scraped = await page.evaluate("""() => {
+                    const h = document.querySelector(
+                        'h1,[class*="app-title"],[class*="job-title"],[class*="position-title"]'
+                    );
+                    if (h?.innerText?.trim()) return h.innerText.trim();
+                    const t = document.title;
+                    const m = t.match(/^(.+?)(?:\\s+at\\s+|\\s+[-|–]\\s+)/i);
+                    return m ? m[1].trim() : t.split('|')[0].split('-')[0].trim();
+                }""")
+                if scraped and not re.match(r'^view job', scraped, re.I):
+                    title = scraped
+            except Exception:
+                pass
+
+            label = f"[{idx}/{len(jobs)}] {title or '(unknown)'}" + (f" @ {co}" if co else "")
+            print(f"\n{label}")
+            print(f"    URL: {job['apply_url']}")
+
+            if title and SENIOR_TITLE_RE.search(title):
                 print(f"    -> SKIPPED: Senior/Lead/Manager role")
                 session_jobs.append({
                     "title": title, "company": co,

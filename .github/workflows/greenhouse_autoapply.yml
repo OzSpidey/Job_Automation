@@ -9,7 +9,7 @@ permissions:
 jobs:
   scraper:
     runs-on: ubuntu-latest
-    timeout-minutes: 10    # Scrape-only is fast; fail quickly if session expires
+    timeout-minutes: 20    # Visits each new job page to get real title + filter senior roles
 
     steps:
       - name: Checkout repo
