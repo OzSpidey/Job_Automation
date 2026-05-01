@@ -11,22 +11,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install requests python-dotenv
-
-      - name: Run Data Engineer scraper
+      - run: pip install requests python-dotenv
+      - name: Run scraper
         env:
-          EMAIL_SENDER:        ${{ secrets.EMAIL_SENDER }}
-          GMAIL_APP_PASSWORD:  ${{ secrets.GMAIL_APP_PASSWORD }}
-          EMAIL_TO:            ${{ secrets.EMAIL_TO }}
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
         run: python workday_scraper.py --role de
-
-      - name: Save seen-IDs back to repo
+      - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -41,22 +36,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install requests python-dotenv
-
-      - name: Run Data Analyst scraper
+      - run: pip install requests python-dotenv
+      - name: Run scraper
         env:
-          EMAIL_SENDER:        ${{ secrets.EMAIL_SENDER }}
-          GMAIL_APP_PASSWORD:  ${{ secrets.GMAIL_APP_PASSWORD }}
-          EMAIL_TO:            ${{ secrets.EMAIL_TO }}
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
         run: python workday_scraper.py --role da
-
-      - name: Save seen-IDs back to repo
+      - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -65,31 +55,176 @@ jobs:
           git push
 
   scrape-bi:
+    name: Business Intelligence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests python-dotenv
+      - name: Run scraper
+        env:
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: python workday_scraper.py --role bi
+      - name: Save seen-IDs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add workday_seen_bi.json workday_jobs_bi.csv || true
+          git diff --cached --quiet || git commit -m "chore: update BI seen jobs [skip ci]"
+          git push
+
+  scrape-bia:
     name: BI Analyst
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install requests python-dotenv
-
-      - name: Run BI Analyst scraper
+      - run: pip install requests python-dotenv
+      - name: Run scraper
         env:
-          EMAIL_SENDER:        ${{ secrets.EMAIL_SENDER }}
-          GMAIL_APP_PASSWORD:  ${{ secrets.GMAIL_APP_PASSWORD }}
-          EMAIL_TO:            ${{ secrets.EMAIL_TO }}
-        run: python workday_scraper.py --role bi
-
-      - name: Save seen-IDs back to repo
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: python workday_scraper.py --role bia
+      - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add workday_seen_bi.json workday_jobs_bi.csv || true
-          git diff --cached --quiet || git commit -m "chore: update BI seen jobs [skip ci]"
+          git add workday_seen_bia.json workday_jobs_bia.csv || true
+          git diff --cached --quiet || git commit -m "chore: update BIA seen jobs [skip ci]"
+          git push
+
+  scrape-ra:
+    name: Reporting Analyst
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests python-dotenv
+      - name: Run scraper
+        env:
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: python workday_scraper.py --role ra
+      - name: Save seen-IDs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add workday_seen_ra.json workday_jobs_ra.csv || true
+          git diff --cached --quiet || git commit -m "chore: update RA seen jobs [skip ci]"
+          git push
+
+  scrape-aa:
+    name: Analytics Analyst
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests python-dotenv
+      - name: Run scraper
+        env:
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: python workday_scraper.py --role aa
+      - name: Save seen-IDs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add workday_seen_aa.json workday_jobs_aa.csv || true
+          git diff --cached --quiet || git commit -m "chore: update AA seen jobs [skip ci]"
+          git push
+
+  scrape-ds:
+    name: Data Scientist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests python-dotenv
+      - name: Run scraper
+        env:
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: python workday_scraper.py --role ds
+      - name: Save seen-IDs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add workday_seen_ds.json workday_jobs_ds.csv || true
+          git diff --cached --quiet || git commit -m "chore: update DS seen jobs [skip ci]"
+          git push
+
+  scrape-sd:
+    name: Software Developer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests python-dotenv
+      - name: Run scraper
+        env:
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: python workday_scraper.py --role sd
+      - name: Save seen-IDs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add workday_seen_sd.json workday_jobs_sd.csv || true
+          git diff --cached --quiet || git commit -m "chore: update SD seen jobs [skip ci]"
+          git push
+
+  scrape-se:
+    name: Software Engineer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests python-dotenv
+      - name: Run scraper
+        env:
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: python workday_scraper.py --role se
+      - name: Save seen-IDs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add workday_seen_se.json workday_jobs_se.csv || true
+          git diff --cached --quiet || git commit -m "chore: update SE seen jobs [skip ci]"
           git push

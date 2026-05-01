@@ -37,36 +37,78 @@ except ImportError:
 # ── Role profiles ──────────────────────────────────────────────────────────────
 _ROLES = {
     "de": {
-        "label":       "Data Engineer",
-        "search_term": "Data Engineer",
-        "allow_re":    re.compile(r"\bdata\s+engineer\b", re.I),
-        "seen_log":    "workday_seen_de.json",
-        "output_csv":  "workday_jobs_de.csv",
+        "label":        "Data Engineer",
+        "search_terms": ["Data Engineer"],
+        "allow_re":     re.compile(r"\bdata\s+engineer\b", re.I),
+        "seen_log":     "workday_seen_de.json",
+        "output_csv":   "workday_jobs_de.csv",
     },
     "da": {
-        "label":       "Data Analyst",
-        "search_term": "Data Analyst",
-        "allow_re":    re.compile(r"\bdata\s+analyst\b", re.I),
-        "seen_log":    "workday_seen_da.json",
-        "output_csv":  "workday_jobs_da.csv",
+        "label":        "Data Analyst",
+        "search_terms": ["Data Analyst"],
+        "allow_re":     re.compile(r"\bdata\s+analyst\b", re.I),
+        "seen_log":     "workday_seen_da.json",
+        "output_csv":   "workday_jobs_da.csv",
     },
     "bi": {
-        "label":       "BI Analyst",
-        "search_term": "Business Intelligence Analyst",
-        "allow_re":    re.compile(r"\b(business\s+intelligence\s+analyst|bi\s+analyst)\b", re.I),
-        "seen_log":    "workday_seen_bi.json",
-        "output_csv":  "workday_jobs_bi.csv",
+        "label":        "Business Intelligence",
+        "search_terms": ["Business Intelligence"],
+        "allow_re":     re.compile(r"\bbusiness\s+intelligence\b", re.I),
+        "seen_log":     "workday_seen_bi.json",
+        "output_csv":   "workday_jobs_bi.csv",
+    },
+    "bia": {
+        "label":        "BI Analyst",
+        "search_terms": ["BI Analyst"],
+        "allow_re":     re.compile(r"\bbi\s+(analyst|developer|engineer|specialist)\b", re.I),
+        "seen_log":     "workday_seen_bia.json",
+        "output_csv":   "workday_jobs_bia.csv",
+    },
+    "ra": {
+        "label":        "Reporting Analyst",
+        "search_terms": ["Reporting Analyst"],
+        "allow_re":     re.compile(r"\breporting\s+analyst\b", re.I),
+        "seen_log":     "workday_seen_ra.json",
+        "output_csv":   "workday_jobs_ra.csv",
+    },
+    "aa": {
+        "label":        "Analytics Analyst",
+        "search_terms": ["Analytics Analyst"],
+        "allow_re":     re.compile(r"\banalytics\s+analyst\b", re.I),
+        "seen_log":     "workday_seen_aa.json",
+        "output_csv":   "workday_jobs_aa.csv",
+    },
+    "ds": {
+        "label":        "Data Scientist",
+        "search_terms": ["Data Scientist"],
+        "allow_re":     re.compile(r"\bdata\s+scientist\b", re.I),
+        "seen_log":     "workday_seen_ds.json",
+        "output_csv":   "workday_jobs_ds.csv",
+    },
+    "sd": {
+        "label":        "Software Developer",
+        "search_terms": ["Software Developer"],
+        "allow_re":     re.compile(r"\bsoftware\s+developer\b", re.I),
+        "seen_log":     "workday_seen_sd.json",
+        "output_csv":   "workday_jobs_sd.csv",
+    },
+    "se": {
+        "label":        "Software Engineer",
+        "search_terms": ["Software Engineer"],
+        "allow_re":     re.compile(r"\bsoftware\s+engineer\b", re.I),
+        "seen_log":     "workday_seen_se.json",
+        "output_csv":   "workday_jobs_se.csv",
     },
 }
 
 # ── Parse role argument ────────────────────────────────────────────────────────
 _parser = argparse.ArgumentParser(add_help=False)
-_parser.add_argument("--role", choices=["de", "da", "bi"], default=None)
+_parser.add_argument("--role", choices=["de", "da", "bi", "bia", "ra", "aa", "ds", "sd", "se"], default=None)
 _args, _ = _parser.parse_known_args()
 
 if _args.role:
     _profile     = _ROLES[_args.role]
-    SEARCH_TERMS = [_profile["search_term"]]
+    SEARCH_TERMS = _profile["search_terms"]
     ALLOWED_TITLE_RE = _profile["allow_re"]
     _seen_file   = _profile["seen_log"]
     _csv_file    = _profile["output_csv"]
@@ -75,7 +117,7 @@ else:
     # No --role: search all three (original behaviour)
     SEARCH_TERMS = ["Data Engineer", "Data Analyst", "Business Intelligence Analyst"]
     ALLOWED_TITLE_RE = re.compile(
-        r"\b(data\s+engineer|data\s+analyst|business\s+intelligence\s+analyst|bi\s+analyst)\b",
+        r"\b(data\s+engineer|data\s+analyst|business\s+intelligence)\b",
         re.I,
     )
     _seen_file  = "workday_seen_ids.json"
