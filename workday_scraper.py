@@ -291,7 +291,7 @@ CAREER_PATH_FALLBACKS = [
     "CareersExternal",
 ]
 
-WD_INSTANCE_FALLBACKS = ["wd1", "wd3", "wd5", "wd12", "wd14"]
+WD_INSTANCE_FALLBACKS = ["wd1", "wd3", "wd5", "wd12", "wd14", "wd501"]
 
 
 def build_api_url(tenant: str, instance: str, career: str) -> str:

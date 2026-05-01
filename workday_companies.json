@@ -964,5 +964,245 @@
     "tenant": "qualcomm",
     "instance": "wd12",
     "career": "External"
+  },
+  {
+    "name": "Bank of America",
+    "tenant": "ghr",
+    "instance": "wd1",
+    "career": "Lateral-US"
+  },
+  {
+    "name": "Citigroup",
+    "tenant": "citi",
+    "instance": "wd5",
+    "career": "2"
+  },
+  {
+    "name": "Visa",
+    "tenant": "visa",
+    "instance": "wd5",
+    "career": "Visa"
+  },
+  {
+    "name": "Marsh McLennan",
+    "tenant": "mmc",
+    "instance": "wd1",
+    "career": "MMC"
+  },
+  {
+    "name": "Amgen",
+    "tenant": "amgen",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "Gilead Sciences",
+    "tenant": "gilead",
+    "instance": "wd1",
+    "career": "gileadcareers"
+  },
+  {
+    "name": "Eli Lilly",
+    "tenant": "lilly",
+    "instance": "wd5",
+    "career": "LLY"
+  },
+  {
+    "name": "Bristol-Myers Squibb",
+    "tenant": "bristolmyerssquibb",
+    "instance": "wd5",
+    "career": "BMS"
+  },
+  {
+    "name": "Novartis",
+    "tenant": "novartis",
+    "instance": "wd3",
+    "career": "Novartis_Careers"
+  },
+  {
+    "name": "Merck",
+    "tenant": "msd",
+    "instance": "wd5",
+    "career": "SearchJobs"
+  },
+  {
+    "name": "Vertex Pharmaceuticals",
+    "tenant": "vrtx",
+    "instance": "wd501",
+    "career": "Vertex_Careers"
+  },
+  {
+    "name": "Sarepta Therapeutics",
+    "tenant": "sarepta",
+    "instance": "wd5",
+    "career": "sarepta_external"
+  },
+  {
+    "name": "Thermo Fisher Scientific",
+    "tenant": "thermofisher",
+    "instance": "wd5",
+    "career": "thermofishercareers"
+  },
+  {
+    "name": "Danaher",
+    "tenant": "danaher",
+    "instance": "wd1",
+    "career": "DanaherJobs"
+  },
+  {
+    "name": "General Motors",
+    "tenant": "generalmotors",
+    "instance": "wd5",
+    "career": "Careers_GM"
+  },
+  {
+    "name": "DuPont",
+    "tenant": "dupont",
+    "instance": "wd5",
+    "career": "Jobs"
+  },
+  {
+    "name": "Dow Chemical",
+    "tenant": "dow",
+    "instance": "wd1",
+    "career": "ExternalCareers"
+  },
+  {
+    "name": "Corteva Agriscience",
+    "tenant": "corteva",
+    "instance": "wd5",
+    "career": "CTP"
+  },
+  {
+    "name": "Air Products",
+    "tenant": "airproducts",
+    "instance": "wd5",
+    "career": "AP0001"
+  },
+  {
+    "name": "VF Corporation",
+    "tenant": "vfc",
+    "instance": "wd5",
+    "career": "vfc_careers"
+  },
+  {
+    "name": "Kimberly-Clark",
+    "tenant": "kimberlyclark",
+    "instance": "wd1",
+    "career": "GLOBAL"
+  },
+  {
+    "name": "Procter & Gamble",
+    "tenant": "pg",
+    "instance": "wd5",
+    "career": "1000"
+  },
+  {
+    "name": "Broadcom",
+    "tenant": "broadcom",
+    "instance": "wd1",
+    "career": "External_Career"
+  },
+  {
+    "name": "Analog Devices",
+    "tenant": "analogdevices",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "NXP Semiconductors",
+    "tenant": "nxp",
+    "instance": "wd3",
+    "career": "careers"
+  },
+  {
+    "name": "Marvell Technology",
+    "tenant": "marvell",
+    "instance": "wd1",
+    "career": "MarvellCareers"
+  },
+  {
+    "name": "CDW",
+    "tenant": "cdw",
+    "instance": "wd5",
+    "career": "Careers"
+  },
+  {
+    "name": "Ingram Micro",
+    "tenant": "ingrammicro",
+    "instance": "wd5",
+    "career": "IngramMicro"
+  },
+  {
+    "name": "Motorola Solutions",
+    "tenant": "motorolasolutions",
+    "instance": "wd5",
+    "career": "Careers"
+  },
+  {
+    "name": "Rackspace Technology",
+    "tenant": "rackspace",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Flextronics",
+    "tenant": "flextronics",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "CoStar Group",
+    "tenant": "costar",
+    "instance": "wd1",
+    "career": "CoStarCareers"
+  },
+  {
+    "name": "Procore Technologies",
+    "tenant": "procore",
+    "instance": "wd12",
+    "career": "Procore_External_Careers"
+  },
+  {
+    "name": "Gartner",
+    "tenant": "gartner",
+    "instance": "wd5",
+    "career": "EXT"
+  },
+  {
+    "name": "Forrester Research",
+    "tenant": "forrester",
+    "instance": "wd1",
+    "career": "careers"
+  },
+  {
+    "name": "Dow Jones",
+    "tenant": "dowjones",
+    "instance": "wd1",
+    "career": "Dow_Jones_Career"
+  },
+  {
+    "name": "Markel Corporation",
+    "tenant": "markelcorp",
+    "instance": "wd5",
+    "career": "GlobalCareers"
+  },
+  {
+    "name": "CarMax",
+    "tenant": "carmax",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "AutoNation",
+    "tenant": "autonation",
+    "instance": "wd5",
+    "career": "Careers"
+  },
+  {
+    "name": "FedEx",
+    "tenant": "fedex",
+    "instance": "wd1",
+    "career": "FXF_External_Career_Site"
   }
 ]
