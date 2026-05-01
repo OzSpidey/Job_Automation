@@ -42,9 +42,9 @@ CONCURRENCY  = 15
 MAX_AGE_DAYS = 7
 
 ALLOWED_TITLES = re.compile(
-    r"^(data\s+engineer|data\s+analyst|analytics\s+engineer|analytics\s+analyst"
+    r"\b(data\s+engineer|data\s+analyst|analytics\s+engineer|analytics\s+analyst"
     r"|business\s+intelligence\s+analyst|machine\s+learning\s+engineer"
-    r"|data\s+scientist|ai\s+engineer|software\s+developer|software\s+engineer)$",
+    r"|data\s+scientist|ai\s+engineer|software\s+developer|software\s+engineer)\b",
     re.I
 )
 SKIP_TITLE_RE  = re.compile(
@@ -194,7 +194,7 @@ def is_allowed_title(title: str) -> bool:
     title = title.strip()
     if SKIP_TITLE_RE.search(title):
         return False
-    return bool(ALLOWED_TITLES.match(title))
+    return bool(ALLOWED_TITLES.search(title))
 
 
 def is_us_location(location: str) -> bool:
