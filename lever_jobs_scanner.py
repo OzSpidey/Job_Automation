@@ -42,8 +42,9 @@ CONCURRENCY  = 15
 MAX_AGE_DAYS = 7
 
 ALLOWED_TITLES = re.compile(
-    r"^(data\s+engineer|data\s+analyst|business\s+intelligence\s+analyst"
-    r"|software\s+developer|software\s+engineer)$",
+    r"^(data\s+engineer|data\s+analyst|analytics\s+engineer|analytics\s+analyst"
+    r"|business\s+intelligence\s+analyst|machine\s+learning\s+engineer"
+    r"|data\s+scientist|software\s+developer|software\s+engineer)$",
     re.I
 )
 SKIP_TITLE_RE  = re.compile(
@@ -168,6 +169,8 @@ COMPANIES = [
     "trustarc", "upguard",
     "caseware", "cority", "payactiv", "topdesk", "wonolo",
     "drivetrain",
+    # Fintech / Healthcare (agent-verified)
+    "zopa", "pointclickcare",
 ]
 
 COMPANIES = list(dict.fromkeys(COMPANIES))  # dedupe, preserve order
@@ -254,9 +257,12 @@ async def fetch_all() -> list[dict]:
 
 # ── Email ─────────────────────────────────────────────────────────────────────────
 
-def send_email(jobs: list[dict]) -> None:
+def send_email(jobs: list[dict], already_seen_count: int = 0) -> None:
     count   = len(jobs)
     subject = f"[Lever Scanner] {count} Matching Role(s) Found"
+
+    # Sort newest first
+    jobs = sorted(jobs, key=lambda j: j.get("createdAt", 0), reverse=True)
 
     rows_html = []
     for j in jobs:
@@ -278,8 +284,10 @@ def send_email(jobs: list[dict]) -> None:
     <html><body style="font-family:Arial,sans-serif;color:#333">
     <h2 style="color:#4a4a4a">Lever Jobs — New Matches</h2>
     <p>Found <strong>{count}</strong> new role(s) &nbsp;|&nbsp;
-       Data Engineer &nbsp;|&nbsp; Data Analyst &nbsp;|&nbsp;
-       BI Analyst &nbsp;|&nbsp; Software Developer &nbsp;|&nbsp;
+       {already_seen_count} already seen this week &nbsp;|&nbsp;
+       Data Engineer &nbsp;·&nbsp; Data Analyst &nbsp;·&nbsp; Analytics Engineer &nbsp;·&nbsp;
+       Analytics Analyst &nbsp;·&nbsp; BI Analyst &nbsp;·&nbsp; ML Engineer &nbsp;·&nbsp;
+       Data Scientist &nbsp;·&nbsp; Software Developer &nbsp;·&nbsp;
        Software Engineer &nbsp;|&nbsp; US / Remote</p>
     <table style="border-collapse:collapse;width:100%;max-width:1300px">
       <tr style="background:#4a4a4a;color:#fff">
@@ -332,12 +340,13 @@ async def main():
     print(f"\n  Total postings fetched: {len(all_postings)}")
 
     matched = []
-    seen_ids: set = set()
+    seen_keys: set = set()  # dedup by company+title to handle reposted roles
 
     for p in all_postings:
         title    = p.get("text", "").strip()
         location = p.get("categories", {}).get("location", "")
         job_id   = p.get("id", "")
+        dedup_key = f"{p['_company']}|{title.lower()}"
 
         if not is_allowed_title(title):
             continue
@@ -345,14 +354,16 @@ async def main():
             continue
         if not is_us_location(location):
             continue
-        if job_id in seen_ids:
+        if dedup_key in seen_keys:
             continue
-        seen_ids.add(job_id)
+        seen_keys.add(dedup_key)
         matched.append(p)
 
-    new_jobs = [p for p in matched if p["id"] not in previously_seen]
+    new_jobs      = [p for p in matched if p["id"] not in previously_seen]
+    already_seen  = [p for p in matched if p["id"] in previously_seen]
 
     print(f"  Matched (title + US):          {len(matched)}")
+    print(f"  Already seen:                  {len(already_seen)}")
     print(f"  New (not sent before):         {len(new_jobs)}")
 
     for j in new_jobs:
@@ -368,7 +379,7 @@ async def main():
         print("\n  No new matching roles found.")
     else:
         print(f"\n  Sending email ({len(new_jobs)} new role(s))...")
-        send_email(new_jobs)
+        send_email(new_jobs, already_seen_count=len(already_seen))
         save_seen(previously_seen | {j["id"] for j in new_jobs})
 
     print("\nDone.")
