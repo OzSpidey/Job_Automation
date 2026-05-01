@@ -37,9 +37,8 @@ SENDER_EMAIL    = os.environ.get("EMAIL_SENDER", "")
 SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 RECIPIENTS      = [e.strip() for e in os.environ.get("EMAIL_TO", "").split(",") if e.strip()]
 
-SEEN_FILE    = Path(__file__).parent / "lever_seen_jobs.json"
-CONCURRENCY  = 15
-MAX_AGE_DAYS = 3
+SEEN_FILE   = Path(__file__).parent / "lever_seen_jobs.json"
+CONCURRENCY = 15
 
 ALLOWED_TITLES = re.compile(
     r"^(data\s+engineer|data\s+analyst|business\s+intelligence\s+analyst"
@@ -124,6 +123,50 @@ COMPANIES = [
     "adhoclabs", "startengine", "repurposeglobal", "venteur",
     "cloaked-app", "intersect", "noodle", "jiostar",
     "oowlish", "hatchit", "jobgether", "revefi",
+    # Fintech / Payments (additional)
+    "binance", "nium", "wealthsimple", "prosper",
+    "rackspace", "spendesk", "ravio",
+    # Sales / Revenue
+    "reply", "stackadapt", "highspot", "mindtickle",
+    # HR / People (additional)
+    "humaans",
+    # Marketing / Analytics
+    "brightedge", "nielsen", "revinate",
+    # Healthcare (additional)
+    "aledade", "everlywell",
+    # PropTech
+    "belong", "lessen",
+    # E-commerce / Retail
+    "skio", "sugarcrm", "olo", "restaurant365", "revel",
+    # Media / Consumer
+    "restream", "playvs", "glide", "super", "thunkable",
+    "buildium",
+    # Learning / Education
+    "360learning", "docebo", "instructure",
+    # Logistics / Ops
+    "getcircuit", "zoox",
+    # Observability / DevTools
+    "100ms", "conduktor", "flatfile", "snaplogic",
+    "pivotal", "lemon",
+    # Finance / Payments
+    "factor",
+    # Data / AI
+    "appen", "superannotate", "aquarium",
+    # Crypto / Web3
+    "1inch", "safe",
+    # Field Service / Hospitality
+    "aircall", "boxcast",
+    # Consulting / Services
+    "bounteous", "cprime",
+    # Hosting / Infra
+    "hostinger", "kinsta", "siteground", "scaleway",
+    # Identity / Verification
+    "finch", "teller",
+    # Misc
+    "arable", "salesmsg", "mirror",
+    "trustarc", "upguard",
+    "caseware", "cority", "payactiv", "topdesk", "wonolo",
+    "drivetrain",
 ]
 
 COMPANIES = list(dict.fromkeys(COMPANIES))  # dedupe, preserve order
@@ -154,11 +197,6 @@ def is_us_location(location: str) -> bool:
     if not location.strip():
         return True
     return bool(US_LOCATION_RE.search(location))
-
-
-def is_recent(created_at_ms: int) -> bool:
-    posted = datetime.fromtimestamp(created_at_ms / 1000, tz=timezone.utc)
-    return (datetime.now(timezone.utc) - posted).days <= MAX_AGE_DAYS
 
 
 def posted_label(created_at_ms: int) -> str:
@@ -296,8 +334,6 @@ async def main():
         job_id   = p.get("id", "")
 
         if not is_allowed_title(title):
-            continue
-        if not is_recent(p.get("createdAt", 0)):
             continue
         if not is_us_location(location):
             continue
