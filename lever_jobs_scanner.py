@@ -249,7 +249,7 @@ def send_email(jobs: list[dict]) -> None:
         srv.login(SENDER_EMAIL, SENDER_PASSWORD)
         srv.sendmail(SENDER_EMAIL, RECIPIENTS, msg.as_string())
 
-    print(f"[email] Sent to {', '.join(RECIPIENTS)} — {count} job(s).")
+    print(f"[email] Sent — {count} job(s).")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────────
