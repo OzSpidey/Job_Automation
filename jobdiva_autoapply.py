@@ -53,14 +53,14 @@ PORTAL_URL = (
     "?a=svjdnwzkulao5hqo7t0ifgvj8s71sf01d7dtgdstyhdixakxt6ty85zljsdyhgz2"
     "&jr_id=69f1011eecbc8c2f73203108#/"
 )
-SEARCH_TERM  = "Data Engineer"
+SEARCH_TERMS = ["Data Engineer", "Data Analyst"]
 MAX_AGE_DAYS = 1
 
 OUTPUT_CSV  = Path(__file__).parent / "jobdiva_applied.csv"
 APPLIED_LOG = Path(__file__).parent / "jobdiva_applied_ids.json"
 
 # Exact allowed titles (case-insensitive full match), no senior/sr variants
-ALLOWED_TITLES = re.compile(r"^(python\s+data\s+engineer|data\s+engineer)$", re.I)
+ALLOWED_TITLES = re.compile(r"^(python\s+data\s+engineer|data\s+engineer|data\s+analyst)$", re.I)
 SKIP_TITLE_RE  = re.compile(r"\b(senior|sr\.?|lead|manager|principal|staff|ii|iii)\b", re.I)
 
 # US location filter — matches US states, "United States", "Remote" (US-based remotes)
@@ -235,14 +235,14 @@ def send_summary_email(results: list[dict]) -> None:
 
 # ── Navigation helpers ───────────────────────────────────────────────────────────
 
-async def navigate_to_search(page: Page) -> None:
-    """(Re)load the portal, search for Data Engineer in United States, sort newest-to-oldest."""
+async def navigate_to_search(page: Page, search_term: str = SEARCH_TERMS[0]) -> None:
+    """(Re)load the portal, search for the given term in United States, sort newest-to-oldest."""
     await page.goto(PORTAL_URL, wait_until="networkidle", timeout=45_000)
     await page.wait_for_timeout(3_000)
 
     await page.fill(
         "input.inputbox_search, input[placeholder*='Search job title' i]",
-        SEARCH_TERM,
+        search_term,
     )
     await page.wait_for_timeout(300)
 
@@ -432,12 +432,22 @@ async def main() -> None:
         page = await ctx.new_page()
 
         print("[+] Loading JobDiva portal...")
-        await navigate_to_search(page)
 
-        print("[+] Scanning job listings...")
-        all_jobs = await scan_jobs(page)
-        print(f"    Total jobs visible: {len(all_jobs)}")
-        print(f"    Raw scan: {all_jobs}")
+        all_jobs = []
+        seen_keys: set[str] = set()
+        for term in SEARCH_TERMS:
+            print(f"\n[+] Searching: '{term}'")
+            await navigate_to_search(page, term)
+            jobs = await scan_jobs(page)
+            print(f"    Jobs found: {len(jobs)}")
+            for job in jobs:
+                key = f"{job.get('title', '')}|{job.get('date', '')}"
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    job["search_term"] = term
+                    all_jobs.append(job)
+
+        print(f"\n[+] Scanning job listings ({len(all_jobs)} total across all searches)...")
 
         to_apply = []
         for job in all_jobs:
@@ -481,7 +491,7 @@ async def main() -> None:
 
             try:
                 # Always re-navigate so index-based clicking is stable
-                await navigate_to_search(page)
+                await navigate_to_search(page, job.get("search_term", SEARCH_TERMS[0]))
 
                 # Click by scan index (handles duplicate title+date pairs)
                 target_idx = job["idx"]
@@ -600,7 +610,7 @@ async def main() -> None:
 
                 # If not back at portal, re-navigate and re-search
                 if not page.url.startswith(PORTAL_URL.split("?")[0]):
-                    await navigate_to_search(page)
+                    await navigate_to_search(page, job.get("search_term", SEARCH_TERMS[0]))
                 else:
                     # Re-sort (SPA may have reset it)
                     try:
