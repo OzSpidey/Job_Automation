@@ -41,7 +41,11 @@ SEEN_FILE    = Path(__file__).parent / "lever_seen_jobs.json"
 CONCURRENCY  = 15
 MAX_AGE_DAYS = 3
 
-ALLOWED_TITLES = re.compile(r"^(data\s+engineer|data\s+analyst)$", re.I)
+ALLOWED_TITLES = re.compile(
+    r"^(data\s+engineer|data\s+analyst|business\s+intelligence\s+analyst"
+    r"|software\s+developer|software\s+engineer)$",
+    re.I
+)
 SKIP_TITLE_RE  = re.compile(
     r"\b(senior|sr\.?|lead|manager|principal|staff|head|director|vp|ii|iii|iv)\b", re.I
 )
@@ -208,7 +212,9 @@ def send_email(jobs: list[dict]) -> None:
     <html><body style="font-family:Arial,sans-serif;color:#333">
     <h2 style="color:#4a4a4a">Lever Jobs — New Matches</h2>
     <p>Found <strong>{count}</strong> new role(s) &nbsp;|&nbsp;
-       Data Engineer &nbsp;|&nbsp; Data Analyst &nbsp;|&nbsp; US / Remote</p>
+       Data Engineer &nbsp;|&nbsp; Data Analyst &nbsp;|&nbsp;
+       BI Analyst &nbsp;|&nbsp; Software Developer &nbsp;|&nbsp;
+       Software Engineer &nbsp;|&nbsp; US / Remote</p>
     <table style="border-collapse:collapse;width:100%;max-width:1300px">
       <tr style="background:#4a4a4a;color:#fff">
         <th style="padding:10px;border:1px solid #555;text-align:left;">Role</th>
