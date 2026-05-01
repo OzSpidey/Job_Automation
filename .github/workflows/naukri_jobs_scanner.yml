@@ -1,6 +1,8 @@
 name: Naukri Jobs Scanner
 
 on:
+  schedule:
+    - cron: '0 * * * *'   # every hour
   workflow_dispatch:
 
 permissions:
