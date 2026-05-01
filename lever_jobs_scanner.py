@@ -257,19 +257,31 @@ async def fetch_all() -> list[dict]:
 
 # ── Email ─────────────────────────────────────────────────────────────────────────
 
-def send_email(jobs: list[dict], already_seen_count: int = 0) -> None:
-    count   = len(jobs)
-    subject = f"[Lever Scanner] {count} Matching Role(s) Found"
+def send_email(all_jobs: list[dict], new_ids: set) -> None:
+    new_count  = len(new_ids)
+    seen_count = len(all_jobs) - new_count
+    subject    = f"[Lever Scanner] {new_count} New Role(s) Found"
 
-    # Sort newest first
-    jobs = sorted(jobs, key=lambda j: j.get("createdAt", 0), reverse=True)
+    # Sort newest first, new roles bubble to top within same date
+    all_jobs = sorted(
+        all_jobs,
+        key=lambda j: (j["id"] in new_ids, j.get("createdAt", 0)),
+        reverse=True,
+    )
 
     rows_html = []
-    for j in jobs:
-        cats = j.get("categories", {})
+    for j in all_jobs:
+        cats    = j.get("categories", {})
+        is_new  = j["id"] in new_ids
+        new_badge = (
+            '<span style="background:#2ecc71;color:#fff;padding:2px 7px;'
+            'border-radius:4px;font-size:11px;font-weight:bold;margin-left:6px;">NEW</span>'
+            if is_new else ""
+        )
+        row_bg  = 'background:#f0fff4;' if is_new else ''
         rows_html.append(
-            f'<tr>'
-            f'<td style="padding:8px;border:1px solid #ddd;">{j["text"]}</td>'
+            f'<tr style="{row_bg}">'
+            f'<td style="padding:8px;border:1px solid #ddd;">{j["text"]}{new_badge}</td>'
             f'<td style="padding:8px;border:1px solid #ddd;">{j["_company"].replace("-"," ").title()}</td>'
             f'<td style="padding:8px;border:1px solid #ddd;">{cats.get("location","")}</td>'
             f'<td style="padding:8px;border:1px solid #ddd;">{cats.get("team","")}</td>'
@@ -282,13 +294,15 @@ def send_email(jobs: list[dict], already_seen_count: int = 0) -> None:
 
     html = f"""
     <html><body style="font-family:Arial,sans-serif;color:#333">
-    <h2 style="color:#4a4a4a">Lever Jobs — New Matches</h2>
-    <p>Found <strong>{count}</strong> new role(s) &nbsp;|&nbsp;
-       {already_seen_count} already seen this week &nbsp;|&nbsp;
+    <h2 style="color:#4a4a4a">Lever Jobs — Weekly Digest</h2>
+    <p><strong style="color:#2ecc71">{new_count} new</strong> role(s) &nbsp;|&nbsp;
+       {seen_count} already seen &nbsp;|&nbsp;
+       Last 7 days &nbsp;|&nbsp; US / Remote</p>
+    <p style="font-size:12px;color:#666;">
        Data Engineer &nbsp;·&nbsp; Data Analyst &nbsp;·&nbsp; Analytics Engineer &nbsp;·&nbsp;
        Analytics Analyst &nbsp;·&nbsp; BI Analyst &nbsp;·&nbsp; ML Engineer &nbsp;·&nbsp;
        Data Scientist &nbsp;·&nbsp; AI Engineer &nbsp;·&nbsp; Software Developer &nbsp;·&nbsp;
-       Software Engineer &nbsp;|&nbsp; US / Remote</p>
+       Software Engineer</p>
     <table style="border-collapse:collapse;width:100%;max-width:1300px">
       <tr style="background:#4a4a4a;color:#fff">
         <th style="padding:10px;border:1px solid #555;text-align:left;">Role</th>
@@ -305,12 +319,14 @@ def send_email(jobs: list[dict], already_seen_count: int = 0) -> None:
     </p>
     </body></html>
     """
-    plain = f"Lever Jobs — {count} new match(es):\n\n" + "\n".join(
-        f"- {j['text']} @ {j['_company'].replace('-',' ').title()} "
-        f"| {j.get('categories',{}).get('location','')} "
-        f"| {posted_label(j.get('createdAt',0))}\n  {j.get('hostedUrl','')}"
-        for j in jobs
-    )
+    plain = f"Lever Jobs — {new_count} new role(s) this run ({len(all_jobs)} total in last 7 days):\n\n"
+    for j in all_jobs:
+        tag = "[NEW] " if j["id"] in new_ids else "      "
+        plain += (
+            f"{tag}{j['text']} @ {j['_company'].replace('-',' ').title()} "
+            f"| {j.get('categories',{}).get('location','')} "
+            f"| {posted_label(j.get('createdAt',0))}\n  {j.get('hostedUrl','')}\n\n"
+        )
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -359,28 +375,27 @@ async def main():
         seen_keys.add(dedup_key)
         matched.append(p)
 
-    new_jobs      = [p for p in matched if p["id"] not in previously_seen]
-    already_seen  = [p for p in matched if p["id"] in previously_seen]
+    new_ids = {p["id"] for p in matched if p["id"] not in previously_seen}
 
-    print(f"  Matched (title + US):          {len(matched)}")
-    print(f"  Already seen:                  {len(already_seen)}")
-    print(f"  New (not sent before):         {len(new_jobs)}")
+    print(f"  Matched (title + US, 7 days):  {len(matched)}")
+    print(f"  Already seen:                  {len(matched) - len(new_ids)}")
+    print(f"  New (not sent before):         {len(new_ids)}")
 
-    for j in new_jobs:
-        cats = j.get("categories", {})
-        print(f"\n  • {j['text']}")
-        print(f"    Company:  {j['_company'].replace('-', ' ').title()}")
+    for p in matched:
+        cats = p.get("categories", {})
+        tag  = "[NEW]" if p["id"] in new_ids else "     "
+        print(f"\n  {tag} {p['text']}")
+        print(f"    Company:  {p['_company'].replace('-', ' ').title()}")
         print(f"    Location: {cats.get('location', '')}")
-        print(f"    Team:     {cats.get('team', '')}")
-        print(f"    Posted:   {posted_label(j.get('createdAt', 0))}")
-        print(f"    URL:      {j.get('hostedUrl', '')}")
+        print(f"    Posted:   {posted_label(p.get('createdAt', 0))}")
+        print(f"    URL:      {p.get('hostedUrl', '')}")
 
-    if not new_jobs:
-        print("\n  No new matching roles found.")
+    if not new_ids:
+        print("\n  No new roles since last run — skipping email.")
     else:
-        print(f"\n  Sending email ({len(new_jobs)} new role(s))...")
-        send_email(new_jobs, already_seen_count=len(already_seen))
-        save_seen(previously_seen | {j["id"] for j in new_jobs})
+        print(f"\n  Sending email ({len(new_ids)} new, {len(matched)} total)...")
+        send_email(matched, new_ids)
+        save_seen(previously_seen | new_ids)
 
     print("\nDone.")
 
