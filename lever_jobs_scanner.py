@@ -63,6 +63,7 @@ US_LOCATION_RE = re.compile(
 COMPANIES = [
     # Data / Analytics
     "hevo", "matillion", "acceldata", "logrocket",
+    "tinybird", "qonto",
     # Tech / SaaS
     "outreach", "pipedrive", "clari", "contentsquare", "algolia",
     "intercom", "typeform", "contentful", "sanity", "prismic",
@@ -71,37 +72,58 @@ COMPANIES = [
     "bazaarvoice", "okendo", "entrata", "agiloft", "regrello",
     "conversica", "secureframe", "jobvite", "angellist", "findem",
     "skillshare", "brilliant",
+    "freshworks", "houzz", "atlassian", "netflix",
     # Cloud / Infra / Security
     "anyscale", "neon", "cockroachlabs", "temporal", "netlify",
     "tailscale", "render", "replicate", "jumpcloud", "sysdig",
     "verygoodsecurity", "evidentid",
+    "teleport", "saviynt", "sonatype", "logz",
     # Fintech / Crypto
     "plaid", "anchorage", "zerion", "ledger", "remitly", "relay",
     "clearco", "pipe", "fundrise",
+    "kraken", "alloy", "sure", "better",
     # Healthcare / Wellness / Bio
     "ro", "lyrahealth", "color", "tempus", "benchsci", "modernhealth",
     "headspace", "forward", "helix", "insitro", "zocdoc", "veeva",
+    "artera", "quantum-health", "nava",
     # Media / Consumer / Gaming
     "spotify", "theathletic", "medium", "patreon", "rover",
     "gopuff", "turo", "kabam", "whereby",
     # Logistics / Supply Chain
     "loadsmart",
+    "duffel", "resilinc", "meroxa",
     # Autonomous / Deep Tech
     "weride", "hermeus", "rigetti", "voltus", "tamr", "toku",
+    "robust-ai",
     # AI / ML
     "mistral", "palantir", "whoop",
+    "labelbox", "beam", "humata",
     # Fintech (additional)
     "wealthfront",
     # HR / People Ops
     "15five", "trinet", "justworks", "bamboohr", "leapsome", "linkedin", "cornerstone",
+    "achievers", "deputy",
     # Security (additional)
     "sophos",
+    "accurate",
     # Data / Streaming
     "snowplow", "zilliz",
     # Marketing / E-commerce
     "omnisend",
-    # Other
+    "kochava",
+    # Climate / Clean Tech
+    "arcadia", "pachama", "verdigris",
+    # Legal Tech
+    "filevine",
+    # EdTech
+    "bloom",
+    # Other / Misc
     "lever", "greenhouse",
+    "canarytechnologies", "hhaexchange", "BestEgg", "3pillarglobal",
+    "integrate", "electricmind", "thinkahead", "insiderone",
+    "adhoclabs", "startengine", "repurposeglobal", "venteur",
+    "cloaked-app", "intersect", "noodle", "jiostar",
+    "oowlish", "hatchit", "jobgether", "revefi",
 ]
 
 COMPANIES = list(dict.fromkeys(COMPANIES))  # dedupe, preserve order
