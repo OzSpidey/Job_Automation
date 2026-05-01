@@ -58,26 +58,44 @@ US_LOCATION_RE = re.compile(
 # Slugs confirmed live via API — add more as you discover them at jobs.lever.co/<slug>
 COMPANIES = [
     # Data / Analytics
-    "hevo",
+    "hevo", "matillion", "acceldata", "logrocket",
     # Tech / SaaS
     "outreach", "pipedrive", "clari", "contentsquare", "algolia",
     "intercom", "typeform", "contentful", "sanity", "prismic",
     "metabase", "linear", "postman", "sentry", "launchdarkly",
-    "toptal", "gohighlevel", "attentive",
-    # Cloud / Infra
+    "toptal", "gohighlevel", "attentive", "activecampaign",
+    "bazaarvoice", "okendo", "entrata", "agiloft", "regrello",
+    "conversica", "secureframe", "jobvite", "angellist", "findem",
+    "skillshare", "brilliant",
+    # Cloud / Infra / Security
     "anyscale", "neon", "cockroachlabs", "temporal", "netlify",
-    "tailscale", "render", "replicate",
+    "tailscale", "render", "replicate", "jumpcloud", "sysdig",
+    "verygoodsecurity", "evidentid",
     # Fintech / Crypto
     "plaid", "anchorage", "zerion", "ledger", "remitly", "relay",
-    "clearco", "pipe",
-    # Healthcare / Wellness
+    "clearco", "pipe", "fundrise",
+    # Healthcare / Wellness / Bio
     "ro", "lyrahealth", "color", "tempus", "benchsci", "modernhealth",
-    "headspace", "forward", "helix", "insitro", "zocdoc",
-    # Media / Consumer
+    "headspace", "forward", "helix", "insitro", "zocdoc", "veeva",
+    # Media / Consumer / Gaming
     "spotify", "theathletic", "medium", "patreon", "rover",
-    "gopuff", "turo",
+    "gopuff", "turo", "kabam", "whereby",
+    # Logistics / Supply Chain
+    "loadsmart",
+    # Autonomous / Deep Tech
+    "weride", "hermeus", "rigetti", "voltus", "tamr", "toku",
+    # AI / ML
+    "mistral", "palantir", "whoop",
+    # Fintech (additional)
+    "wealthfront",
     # HR / People Ops
-    "15five", "trinet", "justworks", "bamboohr", "leapsome",
+    "15five", "trinet", "justworks", "bamboohr", "leapsome", "linkedin", "cornerstone",
+    # Security (additional)
+    "sophos",
+    # Data / Streaming
+    "snowplow", "zilliz",
+    # Marketing / E-commerce
+    "omnisend",
     # Other
     "lever", "greenhouse",
 ]
