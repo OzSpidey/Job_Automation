@@ -883,5 +883,20 @@
     "title": "Quality Analyst",
     "company": "Blueprintinternal",
     "applied_at": "2026-05-01T00:32:01.378403"
+  },
+  "5201133008": {
+    "title": "Flight Software Engineer",
+    "company": "Samaraaerospace",
+    "applied_at": "2026-05-01T02:32:10.653641"
+  },
+  "8526593002": {
+    "title": "Frontend Software Engineer",
+    "company": "Addepar1",
+    "applied_at": "2026-05-01T02:32:17.901505"
+  },
+  "8526599002": {
+    "title": "Sr. Software Engineer",
+    "company": "Addepar1",
+    "applied_at": "2026-05-01T02:32:27.351269"
   }
 }
