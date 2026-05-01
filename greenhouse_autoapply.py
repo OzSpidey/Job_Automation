@@ -289,8 +289,7 @@ async def ensure_logged_in(page: Page, email: str) -> None:
     await page.wait_for_timeout(1500)
 
     print("\n" + "="*60)
-    print("[!] CHECK YOUR EMAIL — a security code was sent to:")
-    print(f"    {email}")
+    print("[!] CHECK YOUR EMAIL — a security code was sent to your registered address.")
     print("="*60)
 
     # In headless mode the user types the OTP in the terminal

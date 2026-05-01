@@ -1,5 +1,6 @@
 # Credentials / secrets
 .env
+applicant_info_secret.txt
 
 # Python
 __pycache__/
