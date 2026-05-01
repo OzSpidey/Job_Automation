@@ -20,6 +20,9 @@ package-lock.json
 *_session.json
 emails_output.*
 linkedin_urls.txt
+emails_outreach_sent.json
+naukri_output.txt
+*.bak
 
 # Local runners (bat files are local only)
 *.bat

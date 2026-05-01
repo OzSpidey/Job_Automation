@@ -1,0 +1,470 @@
+"""
+workday_scraper.py
+
+Scrapes public Workday career APIs for Data Engineer roles.
+No login or account required — uses the same JSON endpoints Workday career pages call.
+
+To add a company:
+  1. Go to the company's careers page
+  2. DevTools → Network tab → filter by "jobs" → find POST to *.myworkdayjobs.com
+  3. The URL pattern: {tenant}.wd{n}.myworkdayjobs.com/wday/cxs/{tenant}/{career}/jobs
+  4. Add an entry to workday_companies.json
+"""
+
+import argparse
+import csv
+import json
+import os
+import re
+import smtplib
+import sys
+import time
+from datetime import datetime
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from pathlib import Path
+
+import requests
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+# ── Role profiles ──────────────────────────────────────────────────────────────
+_ROLES = {
+    "de": {
+        "label":       "Data Engineer",
+        "search_term": "Data Engineer",
+        "allow_re":    re.compile(r"\bdata\s+engineer\b", re.I),
+        "seen_log":    "workday_seen_de.json",
+        "output_csv":  "workday_jobs_de.csv",
+    },
+    "da": {
+        "label":       "Data Analyst",
+        "search_term": "Data Analyst",
+        "allow_re":    re.compile(r"\bdata\s+analyst\b", re.I),
+        "seen_log":    "workday_seen_da.json",
+        "output_csv":  "workday_jobs_da.csv",
+    },
+    "bi": {
+        "label":       "BI Analyst",
+        "search_term": "Business Intelligence Analyst",
+        "allow_re":    re.compile(r"\b(business\s+intelligence\s+analyst|bi\s+analyst)\b", re.I),
+        "seen_log":    "workday_seen_bi.json",
+        "output_csv":  "workday_jobs_bi.csv",
+    },
+}
+
+# ── Parse role argument ────────────────────────────────────────────────────────
+_parser = argparse.ArgumentParser(add_help=False)
+_parser.add_argument("--role", choices=["de", "da", "bi"], default=None)
+_args, _ = _parser.parse_known_args()
+
+if _args.role:
+    _profile     = _ROLES[_args.role]
+    SEARCH_TERMS = [_profile["search_term"]]
+    ALLOWED_TITLE_RE = _profile["allow_re"]
+    _seen_file   = _profile["seen_log"]
+    _csv_file    = _profile["output_csv"]
+    _role_label  = _profile["label"]
+else:
+    # No --role: search all three (original behaviour)
+    SEARCH_TERMS = ["Data Engineer", "Data Analyst", "Business Intelligence Analyst"]
+    ALLOWED_TITLE_RE = re.compile(
+        r"\b(data\s+engineer|data\s+analyst|business\s+intelligence\s+analyst|bi\s+analyst)\b",
+        re.I,
+    )
+    _seen_file  = "workday_seen_ids.json"
+    _csv_file   = "workday_jobs.csv"
+    _role_label = "DE / DA / BI"
+
+# ── Config ─────────────────────────────────────────────────────────────────────
+MAX_AGE_DAYS  = 1           # skip jobs older than this (Workday shows "Posted X Days Ago")
+REQUEST_DELAY = 2.0         # seconds between company requests
+RESULTS_LIMIT = 20          # jobs per page per company
+
+OUTPUT_CSV     = Path(__file__).parent / _csv_file
+SEEN_LOG       = Path(__file__).parent / _seen_file
+COMPANIES_FILE = Path(__file__).parent / "workday_companies.json"
+
+# ── Email config ───────────────────────────────────────────────────────────────
+EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")
+EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+EMAIL_TO       = os.environ.get("EMAIL_TO", "")
+
+# ── Title filters ──────────────────────────────────────────────────────────────
+SKIP_TITLE_RE = re.compile(
+    r"\b(senior|sr\.?|lead|manager|principal|staff|director|head|vp|"
+    r"architect|consultant)\b",
+    re.I,
+)
+
+# ── Location filter ────────────────────────────────────────────────────────────
+_US_STATES = (
+    r"AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|"
+    r"MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC"
+)
+US_LOCATION_RE = re.compile(
+    rf"\b(united\s+states|usa|u\.s\.a?\.?|remote|{_US_STATES})\b", re.I
+)
+
+# ── Age parser — "Posted 3 Days Ago" / "Posted Today" / "Posted 30+ Days Ago" ──
+POSTED_DAYS_RE = re.compile(r"(\d+)\+?\s+day", re.I)
+
+
+# ── Default company list (written to workday_companies.json on first run) ──────
+DEFAULT_COMPANIES = [
+    {"name": "Salesforce",      "tenant": "salesforce",      "instance": "wd12", "career": "External_Career_Site"},
+    {"name": "Target",          "tenant": "target",          "instance": "wd5",  "career": "WD"},
+    {"name": "Nike",            "tenant": "nike",            "instance": "wd1",  "career": "CorporateCareers"},
+    {"name": "Accenture",       "tenant": "accenture",       "instance": "wd3",  "career": "AccentureCareers"},
+    {"name": "Deloitte",        "tenant": "deloitte",        "instance": "wd1",  "career": "careers"},
+    {"name": "EY",              "tenant": "ey",              "instance": "wd5",  "career": "ey"},
+    {"name": "Spotify",         "tenant": "spotify",         "instance": "wd14", "career": "spotify"},
+    {"name": "Lyft",            "tenant": "lyft",            "instance": "wd5",  "career": "lyft"},
+    {"name": "DocuSign",        "tenant": "docusign",        "instance": "wd5",  "career": "DocuSign"},
+    {"name": "Workday",         "tenant": "workday",         "instance": "wd5",  "career": "Workday"},
+    {"name": "Okta",            "tenant": "okta",            "instance": "wd5",  "career": "okta"},
+    {"name": "ServiceNow",      "tenant": "servicenow",      "instance": "wd5",  "career": "External"},
+    {"name": "Twilio",          "tenant": "twilio",          "instance": "wd5",  "career": "twilio"},
+    {"name": "Stripe",          "tenant": "stripe",          "instance": "wd5",  "career": "stripe"},
+    {"name": "Airbnb",          "tenant": "airbnb",          "instance": "wd5",  "career": "Airbnb"},
+    {"name": "Robinhood",       "tenant": "robinhood",       "instance": "wd5",  "career": "Robinhood"},
+    {"name": "Coinbase",        "tenant": "coinbase",        "instance": "wd5",  "career": "coinbase"},
+    {"name": "Wayfair",         "tenant": "wayfair",         "instance": "wd5",  "career": "Wayfair"},
+    {"name": "DraftKings",      "tenant": "draftkings",      "instance": "wd1",  "career": "DraftKings"},
+    {"name": "Toast",           "tenant": "toast",           "instance": "wd5",  "career": "ToastCareers"},
+    {"name": "HubSpot",         "tenant": "hubspot",         "instance": "wd5",  "career": "HubSpot"},
+    {"name": "Rapid7",          "tenant": "rapid7",          "instance": "wd5",  "career": "Rapid7"},
+    {"name": "Klaviyo",         "tenant": "klaviyo",         "instance": "wd5",  "career": "klaviyo"},
+    {"name": "Fidelity",        "tenant": "fidelity",        "instance": "wd5",  "career": "Fidelity"},
+    {"name": "State Street",    "tenant": "statestreet",     "instance": "wd5",  "career": "StateStreet"},
+    {"name": "Liberty Mutual",  "tenant": "libertymutual",   "instance": "wd5",  "career": "LibertyMutual"},
+]
+
+
+# ── Persistence ────────────────────────────────────────────────────────────────
+
+def load_seen_ids() -> set:
+    if SEEN_LOG.exists():
+        try:
+            data = json.loads(SEEN_LOG.read_text(encoding="utf-8"))
+            return set(data) if isinstance(data, list) else set(data.keys())
+        except Exception:
+            pass
+    return set()
+
+
+def save_seen_ids(ids: set) -> None:
+    SEEN_LOG.write_text(json.dumps(sorted(ids), indent=2), encoding="utf-8")
+
+
+def append_csv(row: dict) -> None:
+    fieldnames = ["title", "company", "location", "posted", "link", "found_on"]
+    write_header = not OUTPUT_CSV.exists() or OUTPUT_CSV.stat().st_size == 0
+    with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+
+
+def load_companies() -> list[dict]:
+    if not COMPANIES_FILE.exists():
+        COMPANIES_FILE.write_text(
+            json.dumps(DEFAULT_COMPANIES, indent=2), encoding="utf-8"
+        )
+        print(f"[+] Created {COMPANIES_FILE.name} with {len(DEFAULT_COMPANIES)} companies.")
+    return json.loads(COMPANIES_FILE.read_text(encoding="utf-8"))
+
+
+# ── Filters ────────────────────────────────────────────────────────────────────
+
+def is_allowed_title(title: str) -> bool:
+    if SKIP_TITLE_RE.search(title):
+        return False
+    return bool(ALLOWED_TITLE_RE.search(title))
+
+
+def is_us_location(location: str) -> bool:
+    if not location.strip():
+        return True  # blank = don't filter out
+    return bool(US_LOCATION_RE.search(location))
+
+
+def posted_days_ago(posted_text: str) -> int:
+    """Parse 'Posted 3 Days Ago' → 3. 'Posted Today' → 0. '30+' → 31."""
+    text = posted_text.lower()
+    if "today" in text or "just now" in text or "hour" in text:
+        return 0
+    m = POSTED_DAYS_RE.search(text)
+    if m:
+        n = int(m.group(1))
+        return n + 1 if "+" in text else n
+    return 999  # unknown = treat as old
+
+
+# ── Workday API ────────────────────────────────────────────────────────────────
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+}
+
+# Tried in order when the configured career path returns 422 or 404
+CAREER_PATH_FALLBACKS = [
+    "External_Career_Site",
+    "careers",
+    "Careers",
+    "External",
+    "external",
+    "JobBoard",
+    "CareersExternal",
+]
+
+WD_INSTANCE_FALLBACKS = ["wd1", "wd3", "wd5", "wd12", "wd14"]
+
+
+def build_api_url(tenant: str, instance: str, career: str) -> str:
+    return f"https://{tenant}.{instance}.myworkdayjobs.com/wday/cxs/{tenant}/{career}/jobs"
+
+
+def build_job_url(company: dict, external_path: str) -> str:
+    t = company["tenant"]
+    i = company["instance"]
+    c = company["career"]
+    return f"https://{t}.{i}.myworkdayjobs.com/en-US/{c}{external_path}"
+
+
+def _post(url: str, search: str, offset: int) -> tuple[int, list]:
+    """Single POST attempt. Returns (status_code, job_list)."""
+    payload = {
+        "limit":         RESULTS_LIMIT,
+        "offset":        offset,
+        "searchText":    search,
+        "locations":     [],
+        "appliedFacets": {},
+    }
+    try:
+        resp = requests.post(url, json=payload, headers=HEADERS, timeout=15)
+        if resp.status_code == 200:
+            return 200, resp.json().get("jobPostings", [])
+        return resp.status_code, []
+    except requests.exceptions.Timeout:
+        return -1, []
+    except requests.exceptions.ConnectionError:
+        return -2, []
+    except Exception:
+        return -3, []
+
+
+def fetch_jobs(company: dict, search: str, offset: int = 0) -> list[dict]:
+    """
+    Fetch jobs for a company. If the configured career path fails with 422/404,
+    automatically tries common fallback paths and instance numbers.
+    Saves a discovered working config back to the company dict (mutates in place).
+    """
+    t = company["tenant"]
+    i = company["instance"]
+    c = company["career"]
+
+    url = build_api_url(t, i, c)
+    status, jobs = _post(url, search, offset)
+
+    if status == 200:
+        return jobs
+
+    if status in (-1,):
+        print(f"  [skip] {company['name']} — timeout")
+        return []
+    if status in (-2, -3):
+        print(f"  [skip] {company['name']} — connection error")
+        return []
+    if status == 401:
+        print(f"  [skip] {company['name']} — requires auth (private Workday)")
+        return []
+
+    # 422 = career path wrong, 404 = tenant/instance wrong — try discovery
+    if status in (422, 404):
+        # First try alternate career paths on the same instance
+        for fallback_career in CAREER_PATH_FALLBACKS:
+            if fallback_career == c:
+                continue
+            test_url = build_api_url(t, i, fallback_career)
+            s, jobs = _post(test_url, search, offset)
+            if s == 200:
+                print(f"  [discovered] {company['name']} career path: {fallback_career}")
+                company["career"] = fallback_career
+                return jobs
+
+        # Then try alternate wd instances with the original + fallback career paths
+        for fallback_instance in WD_INSTANCE_FALLBACKS:
+            if fallback_instance == i:
+                continue
+            for fallback_career in [c] + CAREER_PATH_FALLBACKS:
+                test_url = build_api_url(t, fallback_instance, fallback_career)
+                s, jobs = _post(test_url, search, offset)
+                if s == 200:
+                    print(f"  [discovered] {company['name']} → {fallback_instance}/{fallback_career}")
+                    company["instance"] = fallback_instance
+                    company["career"]   = fallback_career
+                    return jobs
+
+        print(f"  [skip] {company['name']} — could not discover working endpoint")
+        return []
+
+    print(f"  [skip] {company['name']} — HTTP {status}")
+    return []
+
+
+# ── Email summary ──────────────────────────────────────────────────────────────
+
+def send_summary_email(new_jobs: list[dict]) -> None:
+    if not EMAIL_PASSWORD:
+        print("[!] GMAIL_APP_PASSWORD not set — skipping email.")
+        return
+    if not new_jobs:
+        print("[i] No new jobs found — skipping email.")
+        return
+
+    def _row(j):
+        return (
+            f"<tr>"
+            f"<td>{j['title']}</td>"
+            f"<td>{j['company']}</td>"
+            f"<td>{j['location']}</td>"
+            f"<td>{j['posted']}</td>"
+            f"<td><a href='{j['link']}'>Apply</a></td>"
+            f"</tr>"
+        )
+
+    rows     = "".join(_row(j) for j in new_jobs)
+    subject  = (
+        f"[Workday Scraper] {len(new_jobs)} new {_role_label} role(s) — "
+        f"{datetime.now().strftime('%b %d, %Y %H:%M')}"
+    )
+    body_html = f"""
+    <h2>Workday — New {_role_label} Jobs</h2>
+    <p><b>{len(new_jobs)} new role(s)</b> found matching your filters.</p>
+    <table border="1" cellpadding="6" cellspacing="0"
+           style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
+      <tr style="background:#e0e0e0">
+        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Link</th>
+      </tr>
+      {rows}
+    </table>
+    """
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = EMAIL_SENDER
+        msg["To"]      = EMAIL_TO
+        msg.attach(MIMEText(body_html, "html"))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, EMAIL_TO, msg.as_string())
+        print(f"[+] Summary email sent to {EMAIL_TO}")
+    except Exception as e:
+        print(f"[!] Email failed: {e}")
+
+
+# ── Main ───────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    seen_ids  = load_seen_ids()
+    companies = load_companies()
+    new_jobs: list[dict] = []
+
+    print(f"[+] Workday scraper started — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"    Searching: {SEARCH_TERMS} | max age: {MAX_AGE_DAYS}d | companies: {len(companies)}\n")
+
+    for company in companies:
+        print(f"[→] {company['name']}")
+
+        all_postings = []
+        seen_req_ids: set = set()
+        for term in SEARCH_TERMS:
+            for job in fetch_jobs(company, term):
+                rid = job.get("jobReqId") or job.get("externalPath", "")
+                if rid not in seen_req_ids:
+                    seen_req_ids.add(rid)
+                    all_postings.append(job)
+            time.sleep(0.5)
+
+        if not all_postings:
+            time.sleep(REQUEST_DELAY)
+            continue
+
+        matched = 0
+        for job in all_postings:
+            title         = job.get("title", "").strip()
+            location      = job.get("locationsText", "").strip()
+            posted_text   = job.get("postedOn", "").strip()
+            external_path = job.get("externalPath", "")
+            job_req_id    = job.get("jobReqId", external_path)
+
+            job_id = f"{company['tenant']}_{job_req_id}"
+
+            # ── Title filter ──────────────────────────────────────────────────
+            if not is_allowed_title(title):
+                continue
+
+            # ── Location filter ───────────────────────────────────────────────
+            if not is_us_location(location):
+                continue
+
+            # ── Age filter ────────────────────────────────────────────────────
+            age = posted_days_ago(posted_text)
+            if age > MAX_AGE_DAYS:
+                continue
+
+            # ── Dedup ─────────────────────────────────────────────────────────
+            if job_id in seen_ids:
+                continue
+
+            job_url = build_job_url(company, external_path)
+
+            row = {
+                "title":    title,
+                "company":  company["name"],
+                "location": location,
+                "posted":   posted_text,
+                "link":     job_url,
+                "found_on": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            }
+            new_jobs.append(row)
+            append_csv(row)
+            seen_ids.add(job_id)
+            matched += 1
+
+            print(f"    [+] {title} | {location} | {posted_text}")
+
+        if matched == 0:
+            print(f"    [–] No new matches")
+
+        time.sleep(REQUEST_DELAY)
+
+    save_seen_ids(seen_ids)
+
+    # Persist any career paths/instances discovered during this run
+    COMPANIES_FILE.write_text(json.dumps(companies, indent=2), encoding="utf-8")
+
+    print(f"\n{'='*65}")
+    print(f"[+] Done — {len(new_jobs)} new job(s) found across {len(companies)} companies")
+    if new_jobs:
+        print(f"    Saved → {OUTPUT_CSV.name}")
+
+    send_summary_email(new_jobs)
+
+
+if __name__ == "__main__":
+    main()

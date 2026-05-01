@@ -1,0 +1,968 @@
+[
+  {
+    "name": "Salesforce",
+    "tenant": "salesforce",
+    "instance": "wd12",
+    "career": "External_Career_Site"
+  },
+  {
+    "name": "Workday",
+    "tenant": "workday",
+    "instance": "wd5",
+    "career": "Workday"
+  },
+  {
+    "name": "NVIDIA",
+    "tenant": "nvidia",
+    "instance": "wd5",
+    "career": "nvidiaexternalcareersite"
+  },
+  {
+    "name": "Adobe",
+    "tenant": "adobe",
+    "instance": "wd5",
+    "career": "external_experienced"
+  },
+  {
+    "name": "Snap",
+    "tenant": "snapchat",
+    "instance": "wd1",
+    "career": "snap"
+  },
+  {
+    "name": "Autodesk",
+    "tenant": "autodesk",
+    "instance": "wd1",
+    "career": "Ext"
+  },
+  {
+    "name": "Intel",
+    "tenant": "intel",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "CrowdStrike",
+    "tenant": "crowdstrike",
+    "instance": "wd5",
+    "career": "crowdstrikecareers"
+  },
+  {
+    "name": "Zoom",
+    "tenant": "zoom",
+    "instance": "wd5",
+    "career": "Zoom"
+  },
+  {
+    "name": "Comcast",
+    "tenant": "comcast",
+    "instance": "wd5",
+    "career": "Comcast_Careers"
+  },
+  {
+    "name": "Teladoc Health",
+    "tenant": "teladoc",
+    "instance": "wd503",
+    "career": "teladochealth_is_hiring"
+  },
+  {
+    "name": "Merative",
+    "tenant": "merative",
+    "instance": "wd12",
+    "career": "External_Career_Site"
+  },
+  {
+    "name": "Capital One",
+    "tenant": "capitalone",
+    "instance": "wd12",
+    "career": "Capital_One"
+  },
+  {
+    "name": "Mastercard",
+    "tenant": "mastercard",
+    "instance": "wd1",
+    "career": "CorporateCareers"
+  },
+  {
+    "name": "BlackRock",
+    "tenant": "blackrock",
+    "instance": "wd1",
+    "career": "BlackRock_Professional"
+  },
+  {
+    "name": "Vanguard",
+    "tenant": "vanguard",
+    "instance": "wd5",
+    "career": "vanguard_external"
+  },
+  {
+    "name": "Fidelity",
+    "tenant": "fil",
+    "instance": "wd3",
+    "career": "001"
+  },
+  {
+    "name": "Nasdaq",
+    "tenant": "nasdaq",
+    "instance": "wd1",
+    "career": "Global_External_Site"
+  },
+  {
+    "name": "LSEG",
+    "tenant": "lseg",
+    "instance": "wd3",
+    "career": "Careers"
+  },
+  {
+    "name": "AIG",
+    "tenant": "aig",
+    "instance": "wd1",
+    "career": "aig"
+  },
+  {
+    "name": "Deutsche Bank",
+    "tenant": "db",
+    "instance": "wd3",
+    "career": "DBWebsite"
+  },
+  {
+    "name": "RBC",
+    "tenant": "rbc",
+    "instance": "wd3",
+    "career": "RBCGLOBAL1"
+  },
+  {
+    "name": "S&P Global",
+    "tenant": "spgi",
+    "instance": "wd5",
+    "career": "SPGI_Careers"
+  },
+  {
+    "name": "Prudential",
+    "tenant": "pru",
+    "instance": "wd5",
+    "career": "Careers"
+  },
+  {
+    "name": "Barclays",
+    "tenant": "barclays",
+    "instance": "wd3",
+    "career": "External_Career_Site_Barclays"
+  },
+  {
+    "name": "BBVA",
+    "tenant": "bbva",
+    "instance": "wd3",
+    "career": "BBVA"
+  },
+  {
+    "name": "Allstate",
+    "tenant": "allstate",
+    "instance": "wd5",
+    "career": "allstate_careers"
+  },
+  {
+    "name": "Nationwide",
+    "tenant": "nationwide",
+    "instance": "wd1",
+    "career": "Nationwide_Career"
+  },
+  {
+    "name": "US Bank",
+    "tenant": "usbank",
+    "instance": "wd1",
+    "career": "US_Bank_Careers"
+  },
+  {
+    "name": "PNC",
+    "tenant": "pnc",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Truist",
+    "tenant": "truist",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "Travelers",
+    "tenant": "travelers",
+    "instance": "wd5",
+    "career": "external"
+  },
+  {
+    "name": "Rocket Companies",
+    "tenant": "quickenloans",
+    "instance": "wd5",
+    "career": "rocket_careers"
+  },
+  {
+    "name": "Zillow",
+    "tenant": "zillow",
+    "instance": "wd5",
+    "career": "Zillow_Group_External"
+  },
+  {
+    "name": "DraftKings",
+    "tenant": "draftkings",
+    "instance": "wd1",
+    "career": "DraftKings"
+  },
+  {
+    "name": "Accenture",
+    "tenant": "accenture",
+    "instance": "wd103",
+    "career": "AccentureCareers"
+  },
+  {
+    "name": "PwC",
+    "tenant": "pwc",
+    "instance": "wd3",
+    "career": "Global_Experienced_Careers"
+  },
+  {
+    "name": "Booz Allen Hamilton",
+    "tenant": "bah",
+    "instance": "wd1",
+    "career": "BAH_Jobs"
+  },
+  {
+    "name": "Guidehouse",
+    "tenant": "guidehouse",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "JLL",
+    "tenant": "jll",
+    "instance": "wd1",
+    "career": "jllcareers"
+  },
+  {
+    "name": "Walmart",
+    "tenant": "walmart",
+    "instance": "wd5",
+    "career": "WalmartExternal"
+  },
+  {
+    "name": "Netflix",
+    "tenant": "netflix",
+    "instance": "wd1",
+    "career": "Netflix"
+  },
+  {
+    "name": "Expedia",
+    "tenant": "expedia",
+    "instance": "wd108",
+    "career": "search"
+  },
+  {
+    "name": "AmFam Insurance",
+    "tenant": "amfam",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "Pfizer",
+    "tenant": "pfizer",
+    "instance": "wd1",
+    "career": "PfizerCareers"
+  },
+  {
+    "name": "Medtronic",
+    "tenant": "medtronic",
+    "instance": "wd1",
+    "career": "MedtronicCareers"
+  },
+  {
+    "name": "AstraZeneca",
+    "tenant": "astrazeneca",
+    "instance": "wd3",
+    "career": "broadbean_external"
+  },
+  {
+    "name": "Takeda",
+    "tenant": "takeda",
+    "instance": "wd3",
+    "career": "External"
+  },
+  {
+    "name": "Humana",
+    "tenant": "humana",
+    "instance": "wd5",
+    "career": "Humana_External_Career_Site"
+  },
+  {
+    "name": "McKesson",
+    "tenant": "mckesson",
+    "instance": "wd3",
+    "career": "External_Careers"
+  },
+  {
+    "name": "CVS Health",
+    "tenant": "cvshealth",
+    "instance": "wd1",
+    "career": "CVS_Health_Careers"
+  },
+  {
+    "name": "Cigna",
+    "tenant": "cigna",
+    "instance": "wd5",
+    "career": "cignacareers"
+  },
+  {
+    "name": "Highmark Health",
+    "tenant": "highmarkhealth",
+    "instance": "wd1",
+    "career": "highmark"
+  },
+  {
+    "name": "Cardinal Health",
+    "tenant": "cardinalhealth",
+    "instance": "wd1",
+    "career": "EXT"
+  },
+  {
+    "name": "IQVIA",
+    "tenant": "iqvia",
+    "instance": "wd1",
+    "career": "IQVIA"
+  },
+  {
+    "name": "Northrop Grumman",
+    "tenant": "ngc",
+    "instance": "wd1",
+    "career": "Northrop_Grumman_External_Site"
+  },
+  {
+    "name": "Boeing",
+    "tenant": "boeing",
+    "instance": "wd1",
+    "career": "EXTERNAL_CAREERS"
+  },
+  {
+    "name": "RTX",
+    "tenant": "globalhr",
+    "instance": "wd5",
+    "career": "REC_RTX_Ext_Gateway"
+  },
+  {
+    "name": "Chevron",
+    "tenant": "chevron",
+    "instance": "wd5",
+    "career": "jobs"
+  },
+  {
+    "name": "Shell",
+    "tenant": "shell",
+    "instance": "wd3",
+    "career": "ShellCareers"
+  },
+  {
+    "name": "Carrier",
+    "tenant": "carrier",
+    "instance": "wd5",
+    "career": "jobs"
+  },
+  {
+    "name": "Federal Reserve",
+    "tenant": "rb",
+    "instance": "wd5",
+    "career": "FRS"
+  },
+  {
+    "name": "Arch Capital Group",
+    "tenant": "archgroup",
+    "instance": "wd1",
+    "career": "careers"
+  },
+  {
+    "name": "BlueCross BlueShield of Tennessee",
+    "tenant": "bcbst",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "CAE",
+    "tenant": "cae",
+    "instance": "wd3",
+    "career": "career"
+  },
+  {
+    "name": "College Board",
+    "tenant": "collegeboard",
+    "instance": "wd1",
+    "career": "careers"
+  },
+  {
+    "name": "HHMI",
+    "tenant": "hhmi",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Press Ganey",
+    "tenant": "pressganey",
+    "instance": "wd1",
+    "career": "careers"
+  },
+  {
+    "name": "Sullivan & Cromwell",
+    "tenant": "stblaw",
+    "instance": "wd1",
+    "career": "careers"
+  },
+  {
+    "name": "Dell Technologies",
+    "tenant": "dell",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "HP",
+    "tenant": "hp",
+    "instance": "wd5",
+    "career": "ExternalCareerSite"
+  },
+  {
+    "name": "Cisco",
+    "tenant": "cisco",
+    "instance": "wd5",
+    "career": "Cisco_Careers"
+  },
+  {
+    "name": "HPE",
+    "tenant": "hpe",
+    "instance": "wd5",
+    "career": "Jobsathpe"
+  },
+  {
+    "name": "Kyndryl",
+    "tenant": "kyndryl",
+    "instance": "wd5",
+    "career": "KyndrylProfessionalCareers"
+  },
+  {
+    "name": "Elevance Health",
+    "tenant": "elevancehealth",
+    "instance": "wd1",
+    "career": "ANT"
+  },
+  {
+    "name": "Caterpillar",
+    "tenant": "cat",
+    "instance": "wd5",
+    "career": "CaterpillarCareers"
+  },
+  {
+    "name": "GE HealthCare",
+    "tenant": "gehc",
+    "instance": "wd5",
+    "career": "GEHC_ExternalSite"
+  },
+  {
+    "name": "GE Aerospace",
+    "tenant": "geaerospace",
+    "instance": "wd5",
+    "career": "GE_ExternalSite"
+  },
+  {
+    "name": "AT&T",
+    "tenant": "att",
+    "instance": "wd1",
+    "career": "ATTGeneral"
+  },
+  {
+    "name": "Verizon",
+    "tenant": "verizon",
+    "instance": "wd12",
+    "career": "verizon-careers"
+  },
+  {
+    "name": "T-Mobile",
+    "tenant": "tmobile",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Wells Fargo",
+    "tenant": "wf",
+    "instance": "wd1",
+    "career": "WellsFargoJobs"
+  },
+  {
+    "name": "SC Johnson",
+    "tenant": "scj",
+    "instance": "wd5",
+    "career": "External_Career_Site"
+  },
+  {
+    "name": "Generac",
+    "tenant": "generac",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Morgan Stanley",
+    "tenant": "ms",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "TIAA",
+    "tenant": "tiaa",
+    "instance": "wd1",
+    "career": "Search"
+  },
+  {
+    "name": "Northwestern Mutual",
+    "tenant": "northwesternmutual",
+    "instance": "wd5",
+    "career": "CORPORATE-CAREERS"
+  },
+  {
+    "name": "Sun Life Financial",
+    "tenant": "sunlife",
+    "instance": "wd3",
+    "career": "Experienced-Jobs"
+  },
+  {
+    "name": "Micron Technology",
+    "tenant": "micron",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Applied Materials",
+    "tenant": "amat",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "KLA Corporation",
+    "tenant": "kla",
+    "instance": "wd1",
+    "career": "Search"
+  },
+  {
+    "name": "SS&C Technologies",
+    "tenant": "ssctech",
+    "instance": "wd1",
+    "career": "SSCTechnologies"
+  },
+  {
+    "name": "FIS Global",
+    "tenant": "fis",
+    "instance": "wd5",
+    "career": "SearchJobs"
+  },
+  {
+    "name": "Fiserv",
+    "tenant": "fiserv",
+    "instance": "wd5",
+    "career": "EXT"
+  },
+  {
+    "name": "NCR",
+    "tenant": "ncr",
+    "instance": "wd1",
+    "career": "ext_us"
+  },
+  {
+    "name": "Robert Half",
+    "tenant": "roberthalf",
+    "instance": "wd1",
+    "career": "RobertHalfStaffingCareers"
+  },
+  {
+    "name": "Centene Corporation",
+    "tenant": "centene",
+    "instance": "wd5",
+    "career": "Centene_External"
+  },
+  {
+    "name": "Labcorp",
+    "tenant": "labcorp",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "DaVita",
+    "tenant": "davita",
+    "instance": "wd1",
+    "career": "DKC_External"
+  },
+  {
+    "name": "Dollar Tree",
+    "tenant": "dollartree",
+    "instance": "wd5",
+    "career": "dollartreeus"
+  },
+  {
+    "name": "Lowes",
+    "tenant": "lowes",
+    "instance": "wd5",
+    "career": "LWS_External_CS"
+  },
+  {
+    "name": "Target",
+    "tenant": "target",
+    "instance": "wd5",
+    "career": "targetcareers"
+  },
+  {
+    "name": "Leidos",
+    "tenant": "leidos",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "General Dynamics IT",
+    "tenant": "gdit",
+    "instance": "wd5",
+    "career": "External_Career_Site"
+  },
+  {
+    "name": "ConocoPhillips",
+    "tenant": "conocophillips",
+    "instance": "wd1",
+    "career": "eQuest"
+  },
+  {
+    "name": "Baker Hughes",
+    "tenant": "bakerhughes",
+    "instance": "wd5",
+    "career": "BakerHughes"
+  },
+  {
+    "name": "Marathon Petroleum",
+    "tenant": "mpc",
+    "instance": "wd1",
+    "career": "MPCCareers"
+  },
+  {
+    "name": "United Airlines",
+    "tenant": "uaa",
+    "instance": "wd12",
+    "career": "EXT"
+  },
+  {
+    "name": "Walt Disney Company",
+    "tenant": "disney",
+    "instance": "wd5",
+    "career": "disneycareer"
+  },
+  {
+    "name": "Warner Bros. Discovery",
+    "tenant": "warnerbros",
+    "instance": "wd5",
+    "career": "global"
+  },
+  {
+    "name": "Sony Pictures",
+    "tenant": "spe",
+    "instance": "wd1",
+    "career": "SonyPicturesEntertainment"
+  },
+  {
+    "name": "Gap Inc.",
+    "tenant": "gapinc",
+    "instance": "wd1",
+    "career": "GAPINC"
+  },
+  {
+    "name": "Nike",
+    "tenant": "nike",
+    "instance": "wd1",
+    "career": "nke"
+  },
+  {
+    "name": "PVH Corp",
+    "tenant": "pvh",
+    "instance": "wd1",
+    "career": "PVH_Careers"
+  },
+  {
+    "name": "Tapestry",
+    "tenant": "tapestry",
+    "instance": "wd108",
+    "career": "Tapestry_Careers"
+  },
+  {
+    "name": "Synchrony Financial",
+    "tenant": "synchronyfinancial",
+    "instance": "wd5",
+    "career": "careers"
+  },
+  {
+    "name": "PayPal",
+    "tenant": "paypal",
+    "instance": "wd1",
+    "career": "jobs"
+  },
+  {
+    "name": "3M",
+    "tenant": "3m",
+    "instance": "wd1",
+    "career": "Search"
+  },
+  {
+    "name": "Johnson Controls",
+    "tenant": "jci",
+    "instance": "wd5",
+    "career": "JCI"
+  },
+  {
+    "name": "Trimble",
+    "tenant": "trimble",
+    "instance": "wd1",
+    "career": "TrimbleCareers"
+  },
+  {
+    "name": "Zebra Technologies",
+    "tenant": "zebra",
+    "instance": "wd501",
+    "career": "Zebra_careers"
+  },
+  {
+    "name": "Biogen",
+    "tenant": "biibhr",
+    "instance": "wd3",
+    "career": "external"
+  },
+  {
+    "name": "Regeneron",
+    "tenant": "regeneron",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "Moderna",
+    "tenant": "modernatx",
+    "instance": "wd1",
+    "career": "M_tx"
+  },
+  {
+    "name": "Roche/Genentech",
+    "tenant": "roche",
+    "instance": "wd3",
+    "career": "ROG-A2O-GENE"
+  },
+  {
+    "name": "Sanofi",
+    "tenant": "sanofi",
+    "instance": "wd3",
+    "career": "SanofiCareers"
+  },
+  {
+    "name": "GSK",
+    "tenant": "gsk",
+    "instance": "wd5",
+    "career": "GSKCareers"
+  },
+  {
+    "name": "Edwards Lifesciences",
+    "tenant": "edwards",
+    "instance": "wd5",
+    "career": "EdwardsCareers"
+  },
+  {
+    "name": "Becton Dickinson",
+    "tenant": "bdx",
+    "instance": "wd1",
+    "career": "EXTERNAL_CAREER_SITE_USA"
+  },
+  {
+    "name": "Stryker",
+    "tenant": "stryker",
+    "instance": "wd1",
+    "career": "StrykerCareers"
+  },
+  {
+    "name": "Abbott",
+    "tenant": "abbott",
+    "instance": "wd5",
+    "career": "abbottcareers"
+  },
+  {
+    "name": "Baxter",
+    "tenant": "baxter",
+    "instance": "wd1",
+    "career": "baxter"
+  },
+  {
+    "name": "PTC Inc.",
+    "tenant": "ptc",
+    "instance": "wd1",
+    "career": "PTC"
+  },
+  {
+    "name": "Agilent Technologies",
+    "tenant": "agilent",
+    "instance": "wd5",
+    "career": "Agilent_Careers"
+  },
+  {
+    "name": "Rockwell Automation",
+    "tenant": "rockwellautomation",
+    "instance": "wd1",
+    "career": "External-Rockwell-Automation-Early-Careers"
+  },
+  {
+    "name": "Ameriprise Financial",
+    "tenant": "ameriprise",
+    "instance": "wd5",
+    "career": "Ameriprise"
+  },
+  {
+    "name": "Raymond James",
+    "tenant": "raymondjames",
+    "instance": "wd1",
+    "career": "RaymondJamesCareers"
+  },
+  {
+    "name": "LPL Financial",
+    "tenant": "lplfinancial",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Invesco",
+    "tenant": "invesco",
+    "instance": "wd1",
+    "career": "IVZ"
+  },
+  {
+    "name": "Franklin Templeton",
+    "tenant": "franklintempleton",
+    "instance": "wd5",
+    "career": "Primary-External-1"
+  },
+  {
+    "name": "T. Rowe Price",
+    "tenant": "troweprice",
+    "instance": "wd5",
+    "career": "TRowePrice"
+  },
+  {
+    "name": "Northern Trust",
+    "tenant": "ntrs",
+    "instance": "wd1",
+    "career": "northerntrust"
+  },
+  {
+    "name": "Regions Financial",
+    "tenant": "regions",
+    "instance": "wd5",
+    "career": "Regions_Careers"
+  },
+  {
+    "name": "KeyBank",
+    "tenant": "keybank",
+    "instance": "wd5",
+    "career": "External_Career_Site"
+  },
+  {
+    "name": "Cloudera",
+    "tenant": "cloudera",
+    "instance": "wd5",
+    "career": "External_Career"
+  },
+  {
+    "name": "SAS Institute",
+    "tenant": "sasllc",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "Unum Group",
+    "tenant": "unum",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Assurant",
+    "tenant": "assurant",
+    "instance": "wd1",
+    "career": "Assurant_Careers"
+  },
+  {
+    "name": "WEX Inc.",
+    "tenant": "wexinc",
+    "instance": "wd5",
+    "career": "WEXInc"
+  },
+  {
+    "name": "DXC Technology",
+    "tenant": "dxctechnology",
+    "instance": "wd1",
+    "career": "DXCJobs"
+  },
+  {
+    "name": "Unisys",
+    "tenant": "unisys",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Duke Energy",
+    "tenant": "dukeenergy",
+    "instance": "wd1",
+    "career": "Search"
+  },
+  {
+    "name": "Xcel Energy",
+    "tenant": "xcelenergy",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Ameren",
+    "tenant": "ameren",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Domo",
+    "tenant": "domo",
+    "instance": "wd12",
+    "career": "DomoCareers"
+  },
+  {
+    "name": "Southwest Airlines",
+    "tenant": "swa",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "UPS",
+    "tenant": "hcmportal",
+    "instance": "wd5",
+    "career": "Search"
+  },
+  {
+    "name": "Wyndham Hotels",
+    "tenant": "wynd",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Cognizant",
+    "tenant": "collaborative",
+    "instance": "wd1",
+    "career": "SHIFT"
+  },
+  {
+    "name": "Huntington Bank",
+    "tenant": "huntington",
+    "instance": "wd12",
+    "career": "HNBcareers"
+  },
+  {
+    "name": "Qualcomm",
+    "tenant": "qualcomm",
+    "instance": "wd12",
+    "career": "External"
+  }
+]
