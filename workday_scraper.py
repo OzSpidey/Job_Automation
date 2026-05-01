@@ -99,11 +99,18 @@ _ROLES = {
         "seen_log":     "workday_seen_se.json",
         "output_csv":   "workday_jobs_se.csv",
     },
+    "aie": {
+        "label":        "AI Engineer",
+        "search_terms": ["AI Engineer"],
+        "allow_re":     re.compile(r"\bai\s+engineer\b", re.I),
+        "seen_log":     "workday_seen_aie.json",
+        "output_csv":   "workday_jobs_aie.csv",
+    },
 }
 
 # ── Parse role argument ────────────────────────────────────────────────────────
 _parser = argparse.ArgumentParser(add_help=False)
-_parser.add_argument("--role", choices=["de", "da", "bi", "bia", "ra", "aa", "ds", "sd", "se"], default=None)
+_parser.add_argument("--role", choices=["de", "da", "bi", "bia", "ra", "aa", "ds", "sd", "se", "aie"], default=None)
 _args, _ = _parser.parse_known_args()
 
 if _args.role:

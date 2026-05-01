@@ -267,3 +267,32 @@ jobs:
             git pull --rebase && git push && break
             sleep $((RANDOM % 10 + 5))
           done
+
+  scrape-aie:
+    name: AI Engineer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests python-dotenv
+      - name: Run scraper
+        env:
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: python workday_scraper.py --role aie
+      - name: Save seen-IDs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add workday_seen_aie.json 2>/dev/null || true
+          git add workday_jobs_aie.csv 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "chore: update AIE seen jobs [skip ci]"
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
