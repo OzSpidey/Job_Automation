@@ -132,10 +132,9 @@ else:
     _role_label = "DE / DA / BI"
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-MAX_AGE_DAYS         = 1    # skip jobs older than this (Workday shows "Posted X Days Ago")
-REQUEST_DELAY        = 2.0  # seconds between company requests
-RESULTS_LIMIT        = 10   # jobs per page per company
-MAX_PAGES_PER_SEARCH = 5    # max pages to fetch per search term per company (50 jobs max)
+MAX_AGE_DAYS  = 1    # skip jobs older than this (Workday shows "Posted X Days Ago")
+REQUEST_DELAY = 2.0  # seconds between company requests
+RESULTS_LIMIT = 10   # jobs to fetch per company (first page only)
 
 OUTPUT_CSV     = Path(__file__).parent / _csv_file
 SEEN_LOG       = Path(__file__).parent / _seen_file
@@ -391,18 +390,7 @@ def fetch_jobs(company: dict, search: str) -> list[dict]:
             print(f"  [skip] {company['name']} — HTTP {status}")
             return []
 
-    # Paginate through remaining pages
-    all_jobs = list(jobs)
-    page = 1
-    while len(all_jobs) < total and page < MAX_PAGES_PER_SEARCH:
-        _, more_jobs, _ = _post(url, search, page * RESULTS_LIMIT)
-        if not more_jobs:
-            break
-        all_jobs.extend(more_jobs)
-        page += 1
-        time.sleep(0.3)
-
-    return all_jobs
+    return list(jobs)
 
 
 # ── Email summary ──────────────────────────────────────────────────────────────
