@@ -36,12 +36,20 @@ jobs:
       - name: Install Playwright system deps
         run: playwright install-deps chromium
 
+      - name: Install Xvfb
+        run: sudo apt-get install -y xvfb
+
       - name: Run Naukri Jobs Scanner
         env:
           EMAIL_TO_INDIA:     ${{ secrets.EMAIL_TO_INDIA }}
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: python naukri_jobs_scanner.py
+          HEADLESS: "false"
+          DISPLAY: ":99"
+        run: |
+          Xvfb :99 -screen 0 1280x900x24 &
+          sleep 2
+          python naukri_jobs_scanner.py
 
       - name: Persist seen-jobs list
         run: |

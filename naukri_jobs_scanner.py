@@ -225,14 +225,15 @@ async def scrape_keyword(page, keyword: str, search_url: str) -> list[dict]:
     print(f"  Searching: {keyword}")
     print(f"{'=' * 55}")
 
-    # Navigate directly to pre-built search URL — bypasses the search form entirely
     try:
         await page.goto(search_url, wait_until="domcontentloaded", timeout=35_000)
         await page.wait_for_timeout(3_500)
         await page.wait_for_selector('a.title', timeout=15_000)
         print(f"  URL: {page.url}")
     except PlaywrightTimeout:
-        print("  No results found — skipping keyword.")
+        print(f"  Timed out waiting for results.")
+        print(f"  Page title: {await page.title()}")
+        print(f"  Current URL: {page.url}")
         return matched
     except Exception as e:
         print(f"  Failed to load results: {e}")
@@ -286,10 +287,6 @@ async def main():
                 extra_http_headers={"Accept-Language": "en-IN,en;q=0.9"},
             )
             page = await ctx.new_page()
-            # Hide webdriver flag that sites use to detect automation
-            await page.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-            )
             try:
                 results = await scrape_keyword(page, keyword, search_url)
                 all_matched.extend(results)
