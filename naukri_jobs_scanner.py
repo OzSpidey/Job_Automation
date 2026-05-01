@@ -270,16 +270,26 @@ async def main():
     async with async_playwright() as pw:
         for i, (keyword, search_url) in enumerate(TARGET_SEARCHES):
             # Fresh browser per keyword — avoids crashes carrying over between searches
-            browser = await pw.chromium.launch(headless=HEADLESS)
+            browser = await pw.chromium.launch(
+                headless=HEADLESS,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
             ctx = await browser.new_context(
                 viewport={"width": 1280, "height": 900},
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/124.0.0.0 Safari/537.36"
-                )
+                ),
+                locale="en-IN",
+                timezone_id="Asia/Kolkata",
+                extra_http_headers={"Accept-Language": "en-IN,en;q=0.9"},
             )
             page = await ctx.new_page()
+            # Hide webdriver flag that sites use to detect automation
+            await page.add_init_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            )
             try:
                 results = await scrape_keyword(page, keyword, search_url)
                 all_matched.extend(results)
