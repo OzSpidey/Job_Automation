@@ -370,18 +370,24 @@ def fetch_jobs(company: dict, search: str, offset: int = 0) -> list[dict]:
 
 # ── Email summary ──────────────────────────────────────────────────────────────
 
-def send_summary_email(new_jobs: list[dict]) -> None:
+def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     if not EMAIL_PASSWORD:
         print("[!] GMAIL_APP_PASSWORD not set — skipping email.")
         return
-    if not new_jobs:
-        print("[i] No new jobs found — skipping email.")
+    if not all_jobs:
+        print("[i] No jobs to send — skipping email.")
         return
 
     def _row(j):
+        if j.get("is_new"):
+            badge = "&nbsp;<span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span>"
+            bg    = "#f1f8e9"
+        else:
+            badge = ""
+            bg    = ""
         return (
-            f"<tr>"
-            f"<td>{j['title']}</td>"
+            f"<tr style='background:{bg}'>"
+            f"<td>{j['title']}{badge}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
             f"<td>{j['posted']}</td>"
@@ -389,14 +395,14 @@ def send_summary_email(new_jobs: list[dict]) -> None:
             f"</tr>"
         )
 
-    rows     = "".join(_row(j) for j in new_jobs)
-    subject  = (
-        f"[Workday Scraper] {len(new_jobs)} new {_role_label} role(s) — "
+    rows    = "".join(_row(j) for j in all_jobs)
+    subject = (
+        f"[Workday] {new_count} new {_role_label} role(s) — "
         f"{datetime.now().strftime('%b %d, %Y %H:%M')}"
     )
     body_html = f"""
-    <h2>Workday — New {_role_label} Jobs</h2>
-    <p><b>{len(new_jobs)} new role(s)</b> found matching your filters.</p>
+    <h2>Workday — {_role_label} Jobs (Last {MAX_AGE_DAYS} Day)</h2>
+    <p><b>{new_count} new role(s)</b> found. All listings from the last {MAX_AGE_DAYS} day(s) shown — new ones highlighted in green.</p>
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#e0e0e0">
@@ -424,7 +430,8 @@ def send_summary_email(new_jobs: list[dict]) -> None:
 def main() -> None:
     seen_ids  = load_seen_ids()
     companies = load_companies()
-    new_jobs: list[dict] = []
+    all_current_jobs: list[dict] = []  # all matching jobs within age window
+    new_count = 0                      # how many are genuinely new this run
 
     print(f"[+] Workday scraper started — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"    Searching: {SEARCH_TERMS} | max age: {MAX_AGE_DAYS}d | companies: {len(companies)}\n")
@@ -446,7 +453,7 @@ def main() -> None:
             time.sleep(REQUEST_DELAY)
             continue
 
-        matched = 0
+        matched_new = 0
         for job in all_postings:
             title         = job.get("title", "").strip()
             location      = job.get("locationsText", "").strip()
@@ -456,24 +463,17 @@ def main() -> None:
 
             job_id = f"{company['tenant']}_{job_req_id}"
 
-            # ── Title filter ──────────────────────────────────────────────────
             if not is_allowed_title(title):
                 continue
-
-            # ── Location filter ───────────────────────────────────────────────
             if not is_us_location(location):
                 continue
 
-            # ── Age filter ────────────────────────────────────────────────────
             age = posted_days_ago(posted_text)
             if age > MAX_AGE_DAYS:
                 continue
 
-            # ── Dedup ─────────────────────────────────────────────────────────
-            if job_id in seen_ids:
-                continue
-
             job_url = build_job_url(company, external_path)
+            is_new  = job_id not in seen_ids
 
             row = {
                 "title":    title,
@@ -482,15 +482,18 @@ def main() -> None:
                 "posted":   posted_text,
                 "link":     job_url,
                 "found_on": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "is_new":   is_new,
             }
-            new_jobs.append(row)
-            append_csv(row)
-            seen_ids.add(job_id)
-            matched += 1
+            all_current_jobs.append(row)
 
-            print(f"    [+] {title} | {location} | {posted_text}")
+            if is_new:
+                append_csv(row)
+                seen_ids.add(job_id)
+                matched_new += 1
+                new_count   += 1
+                print(f"    [+] NEW: {title} | {location} | {posted_text}")
 
-        if matched == 0:
+        if matched_new == 0:
             print(f"    [–] No new matches")
 
         time.sleep(REQUEST_DELAY)
@@ -501,11 +504,14 @@ def main() -> None:
     COMPANIES_FILE.write_text(json.dumps(companies, indent=2), encoding="utf-8")
 
     print(f"\n{'='*65}")
-    print(f"[+] Done — {len(new_jobs)} new job(s) found across {len(companies)} companies")
-    if new_jobs:
+    print(f"[+] Done — {new_count} new job(s) found across {len(companies)} companies")
+    if new_count:
         print(f"    Saved → {OUTPUT_CSV.name}")
 
-    send_summary_email(new_jobs)
+    if new_count:
+        send_summary_email(all_current_jobs, new_count)
+    else:
+        print("[i] No new jobs — skipping email.")
 
 
 if __name__ == "__main__":
