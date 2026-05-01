@@ -37,8 +37,9 @@ SENDER_EMAIL    = os.environ.get("EMAIL_SENDER", "")
 SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 RECIPIENTS      = [e.strip() for e in os.environ.get("EMAIL_TO", "").split(",") if e.strip()]
 
-SEEN_FILE   = Path(__file__).parent / "lever_seen_jobs.json"
-CONCURRENCY = 15
+SEEN_FILE    = Path(__file__).parent / "lever_seen_jobs.json"
+CONCURRENCY  = 15
+MAX_AGE_DAYS = 3
 
 ALLOWED_TITLES = re.compile(r"^(data\s+engineer|data\s+analyst)$", re.I)
 SKIP_TITLE_RE  = re.compile(
@@ -109,6 +110,11 @@ def is_us_location(location: str) -> bool:
     if not location.strip():
         return True
     return bool(US_LOCATION_RE.search(location))
+
+
+def is_recent(created_at_ms: int) -> bool:
+    posted = datetime.fromtimestamp(created_at_ms / 1000, tz=timezone.utc)
+    return (datetime.now(timezone.utc) - posted).days <= MAX_AGE_DAYS
 
 
 def posted_label(created_at_ms: int) -> str:
@@ -244,6 +250,8 @@ async def main():
         job_id   = p.get("id", "")
 
         if not is_allowed_title(title):
+            continue
+        if not is_recent(p.get("createdAt", 0)):
             continue
         if not is_us_location(location):
             continue
