@@ -37,6 +37,7 @@ SMTP_PORT       = 465
 
 SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "naukri_seen_jobs.json")
 PAGES_TO_SCRAPE = 1
+HEADLESS        = os.environ.get("HEADLESS", "true").lower() != "false"
 
 # (keyword, direct search URL with experience=1 filter)
 TARGET_SEARCHES = [
@@ -247,9 +248,9 @@ async def scrape_keyword(page, keyword: str, search_url: str) -> list[dict]:
 
         if is_recent(job["posted"]):
             matched.append(job)
-            # print(f"  ✔  KEPT    [{job['posted']:>15}]  {job['title']} @ {job['company']} — {job['location']}")
-        # else:
-            # print(f"  ✘  SKIPPED [{job['posted']:>15}]  {job['title']} @ {job['company']} — {job['location']}")
+            print(f"  ✔  KEPT    [{job['posted']:>15}]  {job['title']} @ {job['company']} — {job['location']}")
+        else:
+            print(f"  ✘  SKIPPED [{job['posted']:>15}]  {job['title']} @ {job['company']} — {job['location']}")
 
     print(f"\n  Recent matches: {len(matched)}")
     return matched
@@ -269,7 +270,7 @@ async def main():
     async with async_playwright() as pw:
         for i, (keyword, search_url) in enumerate(TARGET_SEARCHES):
             # Fresh browser per keyword — avoids crashes carrying over between searches
-            browser = await pw.chromium.launch(headless=True)
+            browser = await pw.chromium.launch(headless=HEADLESS)
             ctx = await browser.new_context(
                 viewport={"width": 1280, "height": 900},
                 user_agent=(
