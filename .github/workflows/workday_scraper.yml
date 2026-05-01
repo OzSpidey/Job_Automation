@@ -31,8 +31,10 @@ jobs:
           git add workday_seen_de.json 2>/dev/null || true
           git add workday_jobs_de.csv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update DE seen jobs [skip ci]"
-          git pull --rebase
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
 
   scrape-da:
     name: Data Analyst
@@ -58,8 +60,10 @@ jobs:
           git add workday_seen_da.json 2>/dev/null || true
           git add workday_jobs_da.csv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update DA seen jobs [skip ci]"
-          git pull --rebase
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
 
   scrape-bi:
     name: Business Intelligence
@@ -85,8 +89,10 @@ jobs:
           git add workday_seen_bi.json 2>/dev/null || true
           git add workday_jobs_bi.csv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update BI seen jobs [skip ci]"
-          git pull --rebase
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
 
   scrape-bia:
     name: BI Analyst
@@ -112,8 +118,10 @@ jobs:
           git add workday_seen_bia.json 2>/dev/null || true
           git add workday_jobs_bia.csv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update BIA seen jobs [skip ci]"
-          git pull --rebase
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
 
   scrape-ra:
     name: Reporting Analyst
@@ -139,8 +147,10 @@ jobs:
           git add workday_seen_ra.json 2>/dev/null || true
           git add workday_jobs_ra.csv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update RA seen jobs [skip ci]"
-          git pull --rebase
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
 
   scrape-aa:
     name: Analytics Analyst
@@ -166,8 +176,10 @@ jobs:
           git add workday_seen_aa.json 2>/dev/null || true
           git add workday_jobs_aa.csv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update AA seen jobs [skip ci]"
-          git pull --rebase
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
 
   scrape-ds:
     name: Data Scientist
@@ -193,8 +205,10 @@ jobs:
           git add workday_seen_ds.json 2>/dev/null || true
           git add workday_jobs_ds.csv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update DS seen jobs [skip ci]"
-          git pull --rebase
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
 
   scrape-sd:
     name: Software Developer
@@ -220,8 +234,10 @@ jobs:
           git add workday_seen_sd.json 2>/dev/null || true
           git add workday_jobs_sd.csv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update SD seen jobs [skip ci]"
-          git pull --rebase
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
 
   scrape-se:
     name: Software Engineer
@@ -247,5 +263,7 @@ jobs:
           git add workday_seen_se.json 2>/dev/null || true
           git add workday_jobs_se.csv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update SE seen jobs [skip ci]"
-          git pull --rebase
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
