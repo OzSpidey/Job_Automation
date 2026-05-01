@@ -44,7 +44,7 @@ MAX_AGE_DAYS = 7
 ALLOWED_TITLES = re.compile(
     r"^(data\s+engineer|data\s+analyst|analytics\s+engineer|analytics\s+analyst"
     r"|business\s+intelligence\s+analyst|machine\s+learning\s+engineer"
-    r"|data\s+scientist|software\s+developer|software\s+engineer)$",
+    r"|data\s+scientist|ai\s+engineer|software\s+developer|software\s+engineer)$",
     re.I
 )
 SKIP_TITLE_RE  = re.compile(
@@ -287,7 +287,7 @@ def send_email(jobs: list[dict], already_seen_count: int = 0) -> None:
        {already_seen_count} already seen this week &nbsp;|&nbsp;
        Data Engineer &nbsp;·&nbsp; Data Analyst &nbsp;·&nbsp; Analytics Engineer &nbsp;·&nbsp;
        Analytics Analyst &nbsp;·&nbsp; BI Analyst &nbsp;·&nbsp; ML Engineer &nbsp;·&nbsp;
-       Data Scientist &nbsp;·&nbsp; Software Developer &nbsp;·&nbsp;
+       Data Scientist &nbsp;·&nbsp; AI Engineer &nbsp;·&nbsp; Software Developer &nbsp;·&nbsp;
        Software Engineer &nbsp;|&nbsp; US / Remote</p>
     <table style="border-collapse:collapse;width:100%;max-width:1300px">
       <tr style="background:#4a4a4a;color:#fff">
