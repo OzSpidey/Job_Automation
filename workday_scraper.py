@@ -132,9 +132,10 @@ else:
     _role_label = "DE / DA / BI"
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-MAX_AGE_DAYS  = 1           # skip jobs older than this (Workday shows "Posted X Days Ago")
-REQUEST_DELAY = 2.0         # seconds between company requests
-RESULTS_LIMIT = 20          # jobs per page per company
+MAX_AGE_DAYS         = 1    # skip jobs older than this (Workday shows "Posted X Days Ago")
+REQUEST_DELAY        = 2.0  # seconds between company requests
+RESULTS_LIMIT        = 10   # jobs per page per company
+MAX_PAGES_PER_SEARCH = 5    # max pages to fetch per search term per company (50 jobs max)
 
 OUTPUT_CSV     = Path(__file__).parent / _csv_file
 SEEN_LOG       = Path(__file__).parent / _seen_file
@@ -148,7 +149,13 @@ EMAIL_TO       = os.environ.get("EMAIL_TO", "")
 # ── Title filters ──────────────────────────────────────────────────────────────
 SKIP_TITLE_RE = re.compile(
     r"\b(senior|sr\.?|lead|manager|principal|staff|director|head|vp|"
-    r"architect|consultant)\b",
+    r"architect|consultant|iii|iv)\b",
+    re.I,
+)
+
+# Titles with these signals are preferred entry-level roles
+ENTRY_LEVEL_RE = re.compile(
+    r"\b(junior|jr\.?|associate|entry[\s\-]level|new\s+grad|graduate)\b",
     re.I,
 )
 
@@ -239,6 +246,10 @@ def is_allowed_title(title: str) -> bool:
     return bool(ALLOWED_TITLE_RE.search(title))
 
 
+def is_entry_level(title: str) -> bool:
+    return bool(ENTRY_LEVEL_RE.search(title))
+
+
 def is_us_location(location: str) -> bool:
     if not location.strip():
         return True  # blank = don't filter out
@@ -294,8 +305,8 @@ def build_job_url(company: dict, external_path: str) -> str:
     return f"https://{t}.{i}.myworkdayjobs.com/en-US/{c}{external_path}"
 
 
-def _post(url: str, search: str, offset: int) -> tuple[int, list]:
-    """Single POST attempt. Returns (status_code, job_list)."""
+def _post(url: str, search: str, offset: int) -> tuple[int, list, int]:
+    """Single POST attempt. Returns (status_code, job_list, total)."""
     payload = {
         "limit":         RESULTS_LIMIT,
         "offset":        offset,
@@ -306,73 +317,92 @@ def _post(url: str, search: str, offset: int) -> tuple[int, list]:
     try:
         resp = requests.post(url, json=payload, headers=HEADERS, timeout=15)
         if resp.status_code == 200:
-            return 200, resp.json().get("jobPostings", [])
-        return resp.status_code, []
+            data = resp.json()
+            return 200, data.get("jobPostings", []), data.get("total", 0)
+        return resp.status_code, [], 0
     except requests.exceptions.Timeout:
-        return -1, []
+        return -1, [], 0
     except requests.exceptions.ConnectionError:
-        return -2, []
+        return -2, [], 0
     except Exception:
-        return -3, []
+        return -3, [], 0
 
 
-def fetch_jobs(company: dict, search: str, offset: int = 0) -> list[dict]:
+def fetch_jobs(company: dict, search: str) -> list[dict]:
     """
-    Fetch jobs for a company. If the configured career path fails with 422/404,
-    automatically tries common fallback paths and instance numbers.
-    Saves a discovered working config back to the company dict (mutates in place).
+    Fetch all pages of jobs for a company/search term. If the configured career
+    path fails with 422/404, automatically tries common fallback paths and
+    instance numbers. Saves a discovered working config back to the company dict.
     """
     t = company["tenant"]
     i = company["instance"]
     c = company["career"]
 
     url = build_api_url(t, i, c)
-    status, jobs = _post(url, search, offset)
+    status, jobs, total = _post(url, search, 0)
 
-    if status == 200:
-        return jobs
+    if status != 200:
+        if status in (-1,):
+            print(f"  [skip] {company['name']} — timeout")
+            return []
+        if status in (-2, -3):
+            print(f"  [skip] {company['name']} — connection error")
+            return []
+        if status == 401:
+            print(f"  [skip] {company['name']} — requires auth (private Workday)")
+            return []
 
-    if status in (-1,):
-        print(f"  [skip] {company['name']} — timeout")
-        return []
-    if status in (-2, -3):
-        print(f"  [skip] {company['name']} — connection error")
-        return []
-    if status == 401:
-        print(f"  [skip] {company['name']} — requires auth (private Workday)")
-        return []
-
-    # 422 = career path wrong, 404 = tenant/instance wrong — try discovery
-    if status in (422, 404):
-        # First try alternate career paths on the same instance
-        for fallback_career in CAREER_PATH_FALLBACKS:
-            if fallback_career == c:
-                continue
-            test_url = build_api_url(t, i, fallback_career)
-            s, jobs = _post(test_url, search, offset)
-            if s == 200:
-                print(f"  [discovered] {company['name']} career path: {fallback_career}")
-                company["career"] = fallback_career
-                return jobs
-
-        # Then try alternate wd instances with the original + fallback career paths
-        for fallback_instance in WD_INSTANCE_FALLBACKS:
-            if fallback_instance == i:
-                continue
-            for fallback_career in [c] + CAREER_PATH_FALLBACKS:
-                test_url = build_api_url(t, fallback_instance, fallback_career)
-                s, jobs = _post(test_url, search, offset)
+        # 422 = career path wrong, 404 = tenant/instance wrong — try discovery
+        if status in (422, 404):
+            found = False
+            for fallback_career in CAREER_PATH_FALLBACKS:
+                if fallback_career == c:
+                    continue
+                test_url = build_api_url(t, i, fallback_career)
+                s, jobs, total = _post(test_url, search, 0)
                 if s == 200:
-                    print(f"  [discovered] {company['name']} → {fallback_instance}/{fallback_career}")
-                    company["instance"] = fallback_instance
-                    company["career"]   = fallback_career
-                    return jobs
+                    print(f"  [discovered] {company['name']} career path: {fallback_career}")
+                    company["career"] = fallback_career
+                    url = test_url
+                    found = True
+                    break
 
-        print(f"  [skip] {company['name']} — could not discover working endpoint")
-        return []
+            if not found:
+                for fallback_instance in WD_INSTANCE_FALLBACKS:
+                    if fallback_instance == i:
+                        continue
+                    for fallback_career in [c] + CAREER_PATH_FALLBACKS:
+                        test_url = build_api_url(t, fallback_instance, fallback_career)
+                        s, jobs, total = _post(test_url, search, 0)
+                        if s == 200:
+                            print(f"  [discovered] {company['name']} → {fallback_instance}/{fallback_career}")
+                            company["instance"] = fallback_instance
+                            company["career"]   = fallback_career
+                            url = test_url
+                            found = True
+                            break
+                    if found:
+                        break
 
-    print(f"  [skip] {company['name']} — HTTP {status}")
-    return []
+            if not found:
+                print(f"  [skip] {company['name']} — could not discover working endpoint")
+                return []
+        else:
+            print(f"  [skip] {company['name']} — HTTP {status}")
+            return []
+
+    # Paginate through remaining pages
+    all_jobs = list(jobs)
+    page = 1
+    while len(all_jobs) < total and page < MAX_PAGES_PER_SEARCH:
+        _, more_jobs, _ = _post(url, search, page * RESULTS_LIMIT)
+        if not more_jobs:
+            break
+        all_jobs.extend(more_jobs)
+        page += 1
+        time.sleep(0.3)
+
+    return all_jobs
 
 
 # ── Email summary ──────────────────────────────────────────────────────────────
@@ -386,15 +416,20 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
         return
 
     def _row(j):
+        badges = ""
         if j.get("is_new"):
-            badge = "&nbsp;<span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span>"
-            bg    = "#f1f8e9"
+            badges += "&nbsp;<span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span>"
+        if j.get("entry_level"):
+            badges += "&nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span>"
+        if j.get("is_new") and j.get("entry_level"):
+            bg = "#e3f2fd"
+        elif j.get("is_new"):
+            bg = "#f1f8e9"
         else:
-            badge = ""
-            bg    = ""
+            bg = ""
         return (
             f"<tr style='background:{bg}'>"
-            f"<td>{j['title']}{badge}</td>"
+            f"<td>{j['title']}{badges}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
             f"<td>{j['posted']}</td>"
@@ -483,13 +518,14 @@ def main() -> None:
             is_new  = job_id not in seen_ids
 
             row = {
-                "title":    title,
-                "company":  company["name"],
-                "location": location,
-                "posted":   posted_text,
-                "link":     job_url,
-                "found_on": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "is_new":   is_new,
+                "title":       title,
+                "company":     company["name"],
+                "location":    location,
+                "posted":      posted_text,
+                "link":        job_url,
+                "found_on":    datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "is_new":      is_new,
+                "entry_level": is_entry_level(title),
             }
             all_current_jobs.append(row)
 
@@ -516,6 +552,11 @@ def main() -> None:
         print(f"    Saved → {OUTPUT_CSV.name}")
 
     if new_count:
+        # Sort: new+entry-level first, then new, then seen
+        all_current_jobs.sort(key=lambda j: (
+            0 if (j["is_new"] and j["entry_level"]) else
+            1 if j["is_new"] else 2
+        ))
         send_summary_email(all_current_jobs, new_count)
     else:
         print("[i] No new jobs — skipping email.")
