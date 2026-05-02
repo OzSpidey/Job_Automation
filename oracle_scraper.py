@@ -141,7 +141,7 @@ BATCH = _args.batch  # None = all companies, 1 = first 100, 2 = last 100
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 MAX_AGE_DAYS   = 1
-REQUEST_DELAY  = 2.0
+REQUEST_DELAY  = 1.0
 RESULTS_LIMIT  = 25
 
 OUTPUT_CSV      = Path(__file__).parent / "csv" / _csv_file
