@@ -140,7 +140,7 @@ if _args.batch:
     _role_label = f"{_role_label} (batch {_args.batch})"
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-MAX_AGE_DAYS  = 1    # skip jobs older than this (Workday shows "Posted X Days Ago")
+MAX_AGE_DAYS  = 3    # skip jobs older than this (Workday shows "Posted X Days Ago")
 REQUEST_DELAY = 1.0  # seconds between company requests
 RESULTS_LIMIT = 20   # jobs to fetch per company (first page only)
 
