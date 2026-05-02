@@ -111,6 +111,7 @@ _ROLES = {
 # ── Parse role argument ────────────────────────────────────────────────────────
 _parser = argparse.ArgumentParser(add_help=False)
 _parser.add_argument("--role", choices=["de", "da", "bi", "bia", "ra", "aa", "ds", "sd", "se", "aie"], default=None)
+_parser.add_argument("--batch", choices=["1", "2"], default=None)
 _args, _ = _parser.parse_known_args()
 
 if _args.role:
@@ -130,6 +131,11 @@ else:
     _seen_file  = "workday_seen_ids.json"
     _csv_file   = "workday_jobs.csv"
     _role_label = "DE / DA / BI"
+
+if _args.batch:
+    _seen_file  = _seen_file.replace(".json", f"_{_args.batch}.json")
+    _csv_file   = _csv_file.replace(".csv",  f"_{_args.batch}.csv")
+    _role_label = f"{_role_label} (batch {_args.batch})"
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 MAX_AGE_DAYS  = 1    # skip jobs older than this (Workday shows "Posted X Days Ago")
@@ -460,6 +466,10 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
 def main() -> None:
     seen_ids  = load_seen_ids()
     companies = load_companies()
+    if _args.batch == "1":
+        companies = companies[:300]
+    elif _args.batch == "2":
+        companies = companies[300:]
     all_current_jobs: list[dict] = []  # all matching jobs within age window
     new_count = 0                      # how many are genuinely new this run
 

@@ -17,7 +17,9 @@ import re
 import smtplib
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+IST = timezone(timedelta(hours=5, minutes=30))
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -243,7 +245,7 @@ def send_email(new_jobs: list[dict]) -> None:
     rows    = "".join(job_row(j) for j in new_jobs)
     subject = (
         f"[Cron Job] Linkedin India Jobs Scraper: {len(new_jobs)} new role(s) — "
-        f"{datetime.now().strftime('%b %d %I:%M %p')}"
+        f"{datetime.now(IST).strftime('%b %d %I:%M %p')}"
     )
     body = f"""
     <h2 style="color:#0a66c2">LinkedIn No Login Job Alert (C++, Quant, Software) Developer/h2>
@@ -257,7 +259,7 @@ def send_email(new_jobs: list[dict]) -> None:
     </table>
     <p style="font-size:12px;color:#888;margin-top:16px">
       Scraped via LinkedIn public guest API — no login, no account risk.<br>
-      Generated {datetime.now().strftime("%Y-%m-%d %H:%M")}
+      Generated {datetime.now(IST).strftime("%Y-%m-%d %H:%M")}
     </p>
     """
 
