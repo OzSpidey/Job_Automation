@@ -1852,5 +1852,563 @@
     "tenant": "vcuhealth",
     "instance": "wd1",
     "career": "VCUHealth_careers"
+  },
+  {
+    "name": "Kohl's",
+    "tenant": "kohls",
+    "instance": "wd1",
+    "career": "kohlscareers"
+  },
+  {
+    "name": "TJX Companies",
+    "tenant": "tjx",
+    "instance": "wd1",
+    "career": "TJX_EXTERNAL"
+  },
+  {
+    "name": "Burlington Coat Factory",
+    "tenant": "burlington",
+    "instance": "wd5",
+    "career": "BurlingtonCareers"
+  },
+  {
+    "name": "Signet Jewelers",
+    "tenant": "signetjewelers",
+    "instance": "wd1",
+    "career": "signetjeweleryretailsales"
+  },
+  {
+    "name": "Carter's",
+    "tenant": "carters",
+    "instance": "wd1",
+    "career": "CareersCareers"
+  },
+  {
+    "name": "Finish Line / JD Sports",
+    "tenant": "finishline",
+    "instance": "wd1",
+    "career": "Store_Careers"
+  },
+  {
+    "name": "Kraft Heinz",
+    "tenant": "heinz",
+    "instance": "wd1",
+    "career": "KraftHeinz_Careers"
+  },
+  {
+    "name": "Mondelez International",
+    "tenant": "mdlz",
+    "instance": "wd3",
+    "career": "External"
+  },
+  {
+    "name": "The Hartford Financial Services",
+    "tenant": "thehartford",
+    "instance": "wd5",
+    "career": "Careers_External"
+  },
+  {
+    "name": "CNA Financial",
+    "tenant": "cna",
+    "instance": "wd1",
+    "career": "CNA_Careers"
+  },
+  {
+    "name": "ICW Group",
+    "tenant": "icwgroup",
+    "instance": "wd5",
+    "career": "ICW"
+  },
+  {
+    "name": "EMC Insurance",
+    "tenant": "emcins",
+    "instance": "wd5",
+    "career": "EMC_Careers"
+  },
+  {
+    "name": "Great American Insurance Group",
+    "tenant": "gaig",
+    "instance": "wd1",
+    "career": "GAIG_External"
+  },
+  {
+    "name": "Pacific Life",
+    "tenant": "pacificlife",
+    "instance": "wd1",
+    "career": "PacificLifeCareers"
+  },
+  {
+    "name": "American Fidelity",
+    "tenant": "americanfidelity",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "First American Financial",
+    "tenant": "firstam",
+    "instance": "wd1",
+    "career": "firstamericancareers"
+  },
+  {
+    "name": "Brown & Brown Insurance",
+    "tenant": "bbinsurance",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "The Standard Insurance",
+    "tenant": "standard",
+    "instance": "wd1",
+    "career": "Search"
+  },
+  {
+    "name": "Prologis",
+    "tenant": "prologis",
+    "instance": "wd5",
+    "career": "Prologis_External_Careers"
+  },
+  {
+    "name": "Simon Property Group",
+    "tenant": "simon",
+    "instance": "wd1",
+    "career": "Simon"
+  },
+  {
+    "name": "Ventas",
+    "tenant": "ventas",
+    "instance": "wd1",
+    "career": "ventas_careers"
+  },
+  {
+    "name": "Realty Income",
+    "tenant": "realtyincome",
+    "instance": "wd108",
+    "career": "realty_income_careers"
+  },
+  {
+    "name": "SBA Communications",
+    "tenant": "sbasite",
+    "instance": "wd5",
+    "career": "SBA_Communications_Careers"
+  },
+  {
+    "name": "Equinix",
+    "tenant": "equinix",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Extra Space Storage",
+    "tenant": "extraspace",
+    "instance": "wd5",
+    "career": "ESS_External"
+  },
+  {
+    "name": "CACI International",
+    "tenant": "caci",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "ICF International",
+    "tenant": "icf",
+    "instance": "wd5",
+    "career": "ICFExternal_Career_Site"
+  },
+  {
+    "name": "Amentum",
+    "tenant": "pae",
+    "instance": "wd1",
+    "career": "Amentum_Careers"
+  },
+  {
+    "name": "Fidelity Investments",
+    "tenant": "fmr",
+    "instance": "wd1",
+    "career": "FidelityCareers"
+  },
+  {
+    "name": "FNB Corporation",
+    "tenant": "fnbcorp",
+    "instance": "wd1",
+    "career": "FNBCORP"
+  },
+  {
+    "name": "First National Bank Omaha",
+    "tenant": "firstnational",
+    "instance": "wd12",
+    "career": "fnbocareers"
+  },
+  {
+    "name": "Cencora",
+    "tenant": "myhrabc",
+    "instance": "wd5",
+    "career": "Global"
+  },
+  {
+    "name": "Owens & Minor",
+    "tenant": "owensminor",
+    "instance": "wd1",
+    "career": "OMCareers"
+  },
+  {
+    "name": "Medline Industries",
+    "tenant": "medline",
+    "instance": "wd5",
+    "career": "Medline"
+  },
+  {
+    "name": "Integra LifeSciences",
+    "tenant": "integralife",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "Haemonetics",
+    "tenant": "haemonetics",
+    "instance": "wd5",
+    "career": "HAE"
+  },
+  {
+    "name": "Fresenius Medical Care",
+    "tenant": "freseniusmedicalcare",
+    "instance": "wd3",
+    "career": "fme"
+  },
+  {
+    "name": "Fresenius Kabi",
+    "tenant": "freseniusglobal",
+    "instance": "wd3",
+    "career": "FK_Careers"
+  },
+  {
+    "name": "Hexcel",
+    "tenant": "hexcel",
+    "instance": "wd5",
+    "career": "HexcelCareers"
+  },
+  {
+    "name": "Curtiss-Wright",
+    "tenant": "curtisswright",
+    "instance": "wd1",
+    "career": "CW_External_Career_Site"
+  },
+  {
+    "name": "Nordson",
+    "tenant": "nordsonhcm",
+    "instance": "wd5",
+    "career": "nordsoncareers"
+  },
+  {
+    "name": "Oshkosh Corporation",
+    "tenant": "oshkoshcorporation",
+    "instance": "wd5",
+    "career": "Oshkosh"
+  },
+  {
+    "name": "Avis Budget Group",
+    "tenant": "avisbudget",
+    "instance": "wd1",
+    "career": "ABG_Careers"
+  },
+  {
+    "name": "GlobalFoundries",
+    "tenant": "globalfoundries",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Genuine Parts Company",
+    "tenant": "genpt",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "Sabre Corporation",
+    "tenant": "sabre",
+    "instance": "wd1",
+    "career": "SabreJobs"
+  },
+  {
+    "name": "Genesys",
+    "tenant": "genesys",
+    "instance": "wd1",
+    "career": "Genesys"
+  },
+  {
+    "name": "Eversource Energy",
+    "tenant": "eversource",
+    "instance": "wd1",
+    "career": "ExternalSite"
+  },
+  {
+    "name": "Diageo",
+    "tenant": "diageo",
+    "instance": "wd3",
+    "career": "Diageo_Careers"
+  },
+  {
+    "name": "Rolls-Royce",
+    "tenant": "rollsroyce",
+    "instance": "wd3",
+    "career": "professional"
+  },
+  {
+    "name": "Airbus",
+    "tenant": "ag",
+    "instance": "wd3",
+    "career": "Airbus"
+  },
+  {
+    "name": "NTT Limited",
+    "tenant": "nttlimited",
+    "instance": "wd3",
+    "career": "NTT_Careers"
+  },
+  {
+    "name": "MGM Resorts International",
+    "tenant": "mgmresorts",
+    "instance": "wd5",
+    "career": "MGMCareers"
+  },
+  {
+    "name": "Equifax",
+    "tenant": "equifax",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "AAA The Auto Club Group",
+    "tenant": "acg",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "US Foods",
+    "tenant": "usfoods",
+    "instance": "wd1",
+    "career": "usfoodscareersExternal"
+  },
+  {
+    "name": "Whole Foods Market",
+    "tenant": "wholefoods",
+    "instance": "wd5",
+    "career": "wholefoods"
+  },
+  {
+    "name": "Transamerica",
+    "tenant": "transamerica",
+    "instance": "wd5",
+    "career": "US"
+  },
+  {
+    "name": "Optiv Security",
+    "tenant": "optiv",
+    "instance": "wd5",
+    "career": "Optiv_Careers"
+  },
+  {
+    "name": "HCSC",
+    "tenant": "hcsc",
+    "instance": "wd1",
+    "career": "HCSC_External"
+  },
+  {
+    "name": "Hartford HealthCare",
+    "tenant": "hhc",
+    "instance": "wd5",
+    "career": "HHC"
+  },
+  {
+    "name": "Methodist Health System",
+    "tenant": "methodisthealthsystem",
+    "instance": "wd1",
+    "career": "MHS_Careers"
+  },
+  {
+    "name": "Vizient",
+    "tenant": "vizient",
+    "instance": "wd1",
+    "career": "Vizient_Careers"
+  },
+  {
+    "name": "Equinor",
+    "tenant": "equinor",
+    "instance": "wd3",
+    "career": "EQNR"
+  },
+  {
+    "name": "Aritzia",
+    "tenant": "aritzia",
+    "instance": "wd3",
+    "career": "External"
+  },
+  {
+    "name": "Canada Goose",
+    "tenant": "canadagoose",
+    "instance": "wd3",
+    "career": "CanadaGooseCareers"
+  },
+  {
+    "name": "Ciena Corporation",
+    "tenant": "ciena",
+    "instance": "wd5",
+    "career": "Careers"
+  },
+  {
+    "name": "Blue Yonder",
+    "tenant": "jda",
+    "instance": "wd5",
+    "career": "JDA_Careers"
+  },
+  {
+    "name": "ServiceTitan",
+    "tenant": "servicetitan",
+    "instance": "wd1",
+    "career": "servicetitan"
+  },
+  {
+    "name": "Thomson Reuters",
+    "tenant": "thomsonreuters",
+    "instance": "wd5",
+    "career": "External_Career_Site"
+  },
+  {
+    "name": "Redfin",
+    "tenant": "redfin",
+    "instance": "wd1",
+    "career": "redfin_careers"
+  },
+  {
+    "name": "Uline",
+    "tenant": "uline",
+    "instance": "wd1",
+    "career": "Uline_Careers"
+  },
+  {
+    "name": "Cadence Design Systems",
+    "tenant": "cadence",
+    "instance": "wd1",
+    "career": "External_Careers"
+  },
+  {
+    "name": "Vail Resorts",
+    "tenant": "vailresorts",
+    "instance": "wd1",
+    "career": "vailresortscareers"
+  },
+  {
+    "name": "FICO",
+    "tenant": "fico",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Outfront Media",
+    "tenant": "outfrontmedia",
+    "instance": "wd1",
+    "career": "outfrontmedia"
+  },
+  {
+    "name": "PJT Partners",
+    "tenant": "pjtpartners",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "Maxar Technologies",
+    "tenant": "maxar",
+    "instance": "wd1",
+    "career": "Vantor"
+  },
+  {
+    "name": "SEL Engineering",
+    "tenant": "selinc",
+    "instance": "wd1",
+    "career": "SEL"
+  },
+  {
+    "name": "ASM Global",
+    "tenant": "asmglobal",
+    "instance": "wd1",
+    "career": "careers"
+  },
+  {
+    "name": "AeroVironment",
+    "tenant": "avav",
+    "instance": "wd1",
+    "career": "AVAV"
+  },
+  {
+    "name": "Genmab",
+    "tenant": "genmab",
+    "instance": "wd3",
+    "career": "Genmab_Careers_Site"
+  },
+  {
+    "name": "Illinois Tool Works",
+    "tenant": "talentmanagementsolution",
+    "instance": "wd3",
+    "career": "ITWERCS-CareerSite"
+  },
+  {
+    "name": "Belk Department Stores",
+    "tenant": "belk",
+    "instance": "wd1",
+    "career": "Jobs-Stores"
+  },
+  {
+    "name": "J.Crew / Madewell",
+    "tenant": "jcrew",
+    "instance": "wd1",
+    "career": "MadewellCareers"
+  },
+  {
+    "name": "Intapp",
+    "tenant": "intapp",
+    "instance": "wd1",
+    "career": "Intapp"
+  },
+  {
+    "name": "Permian Resources",
+    "tenant": "permianres",
+    "instance": "wd12",
+    "career": "Permian_Resources_Careers"
+  },
+  {
+    "name": "HEICO Corporation",
+    "tenant": "aero",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Novanta",
+    "tenant": "novanta",
+    "instance": "wd5",
+    "career": "Novanta-Careers"
+  },
+  {
+    "name": "Hillenbrand",
+    "tenant": "hillenbrand",
+    "instance": "wd3",
+    "career": "Global"
+  },
+  {
+    "name": "Zelis Healthcare",
+    "tenant": "zelis",
+    "instance": "wd1",
+    "career": "ZelisCareers"
+  },
+  {
+    "name": "SWBC Financial Services",
+    "tenant": "swbc",
+    "instance": "wd1",
+    "career": "swbccareers"
+  },
+  {
+    "name": "Transwestern Real Estate",
+    "tenant": "transwestern",
+    "instance": "wd1",
+    "career": "TWCareers"
   }
 ]
