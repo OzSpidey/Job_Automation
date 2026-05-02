@@ -339,7 +339,7 @@ def send_email(all_jobs: list[dict], new_ids: set) -> None:
         srv.login(SENDER_EMAIL, SENDER_PASSWORD)
         srv.sendmail(SENDER_EMAIL, RECIPIENTS, msg.as_string())
 
-    print(f"[email] Sent — {count} job(s).")
+    print(f"[email] Sent — {new_count} job(s).")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────────
