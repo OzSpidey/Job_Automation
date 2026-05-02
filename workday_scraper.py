@@ -140,7 +140,7 @@ if _args.batch:
 # ── Config ─────────────────────────────────────────────────────────────────────
 MAX_AGE_DAYS  = 3    # skip jobs older than this (Workday shows "Posted X Days Ago")
 REQUEST_DELAY = 2.0  # seconds between company requests
-RESULTS_LIMIT = 10   # jobs to fetch per company (first page only)
+RESULTS_LIMIT = 20   # jobs to fetch per company (first page only)
 
 OUTPUT_CSV     = Path(__file__).parent / "csv" / _csv_file
 SEEN_LOG       = Path(__file__).parent / "json" / _seen_file
