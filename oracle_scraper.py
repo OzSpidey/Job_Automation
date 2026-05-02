@@ -112,26 +112,32 @@ _ROLES = {
     },
 }
 
-# ── Parse role argument ────────────────────────────────────────────────────────
+# ── Parse role + batch arguments ───────────────────────────────────────────────
 _parser = argparse.ArgumentParser(add_help=False)
 _parser.add_argument("--role", choices=list(_ROLES.keys()), default=None)
+_parser.add_argument("--batch", type=int, choices=[1, 2], default=None)
 _args, _ = _parser.parse_known_args()
+
+_batch_suffix = f"_b{_args.batch}" if _args.batch else ""
 
 if _args.role:
     _profile     = _ROLES[_args.role]
     SEARCH_TERMS = _profile["search_terms"]
     ALLOWED_TITLE_RE = _profile["allow_re"]
-    _seen_file   = _profile["seen_log"]
-    _csv_file    = _profile["output_csv"]
+    # Insert batch suffix before .json / .csv so each batch has its own file
+    _seen_file   = _profile["seen_log"].replace(".json", f"{_batch_suffix}.json")
+    _csv_file    = _profile["output_csv"].replace(".csv",  f"{_batch_suffix}.csv")
     _role_label  = _profile["label"]
 else:
     SEARCH_TERMS = ["Data Engineer", "Data Analyst", "Business Intelligence Analyst"]
     ALLOWED_TITLE_RE = re.compile(
         r"\b(data\s+engineer|data\s+analyst|business\s+intelligence)\b", re.I
     )
-    _seen_file  = "oracle_seen_ids.json"
-    _csv_file   = "oracle_jobs.csv"
+    _seen_file  = f"oracle_seen_ids{_batch_suffix}.json"
+    _csv_file   = f"oracle_jobs{_batch_suffix}.csv"
     _role_label = "DE / DA / BI"
+
+BATCH = _args.batch  # None = all companies, 1 = first 100, 2 = last 100
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 MAX_AGE_DAYS   = 1
@@ -465,12 +471,19 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
 
 def main() -> None:
     seen_ids  = load_seen_ids()
-    companies = load_companies()
+    all_companies = load_companies()
+    if BATCH == 1:
+        companies = all_companies[:100]
+    elif BATCH == 2:
+        companies = all_companies[100:]
+    else:
+        companies = all_companies
     all_current_jobs: list[dict] = []
     new_count = 0
 
+    batch_label = f" | batch {BATCH}/2" if BATCH else ""
     print(f"[+] Oracle scraper started — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print(f"    Searching: {SEARCH_TERMS} | max age: {MAX_AGE_DAYS}d | companies: {len(companies)}\n")
+    print(f"    Searching: {SEARCH_TERMS} | max age: {MAX_AGE_DAYS}d | companies: {len(companies)}{batch_label}\n")
 
     for company in companies:
         print(f"[→] {company['name']}")

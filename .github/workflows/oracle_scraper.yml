@@ -1,15 +1,18 @@
-﻿name: Oracle Recruiting Cloud Job Scraper
+name: Oracle Recruiting Cloud Job Scraper
 
 on:
-  workflow_dispatch:        # trigger manually from GitHub UI or via API
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   scrape-de:
-    name: Data Engineer
+    name: Data Engineer (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,15 +26,15 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python oracle_scraper.py --role de
+        run: python oracle_scraper.py --role de --batch ${{ matrix.batch }}
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/oracle_seen_de.json 2>/dev/null || true
-          git add csv/oracle_jobs_de.csv  2>/dev/null || true
+          git add json/oracle_seen_de_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_de_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update oracle DE seen jobs [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update oracle DE b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
@@ -39,8 +42,11 @@ jobs:
           done
 
   scrape-da:
-    name: Data Analyst
+    name: Data Analyst (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,15 +60,15 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python oracle_scraper.py --role da
+        run: python oracle_scraper.py --role da --batch ${{ matrix.batch }}
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/oracle_seen_da.json 2>/dev/null || true
-          git add csv/oracle_jobs_da.csv  2>/dev/null || true
+          git add json/oracle_seen_da_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_da_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update oracle DA seen jobs [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update oracle DA b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
@@ -70,8 +76,11 @@ jobs:
           done
 
   scrape-bi:
-    name: Business Intelligence
+    name: Business Intelligence (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,15 +94,15 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python oracle_scraper.py --role bi
+        run: python oracle_scraper.py --role bi --batch ${{ matrix.batch }}
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/oracle_seen_bi.json 2>/dev/null || true
-          git add csv/oracle_jobs_bi.csv  2>/dev/null || true
+          git add json/oracle_seen_bi_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_bi_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update oracle BI seen jobs [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update oracle BI b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
@@ -101,8 +110,11 @@ jobs:
           done
 
   scrape-bia:
-    name: BI Analyst
+    name: BI Analyst (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -116,15 +128,15 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python oracle_scraper.py --role bia
+        run: python oracle_scraper.py --role bia --batch ${{ matrix.batch }}
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/oracle_seen_bia.json 2>/dev/null || true
-          git add csv/oracle_jobs_bia.csv  2>/dev/null || true
+          git add json/oracle_seen_bia_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_bia_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update oracle BIA seen jobs [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update oracle BIA b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
@@ -132,8 +144,11 @@ jobs:
           done
 
   scrape-ra:
-    name: Reporting Analyst
+    name: Reporting Analyst (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -147,15 +162,15 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python oracle_scraper.py --role ra
+        run: python oracle_scraper.py --role ra --batch ${{ matrix.batch }}
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/oracle_seen_ra.json 2>/dev/null || true
-          git add csv/oracle_jobs_ra.csv  2>/dev/null || true
+          git add json/oracle_seen_ra_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_ra_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update oracle RA seen jobs [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update oracle RA b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
@@ -163,8 +178,11 @@ jobs:
           done
 
   scrape-aa:
-    name: Analytics Analyst
+    name: Analytics Analyst (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -178,15 +196,15 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python oracle_scraper.py --role aa
+        run: python oracle_scraper.py --role aa --batch ${{ matrix.batch }}
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/oracle_seen_aa.json 2>/dev/null || true
-          git add csv/oracle_jobs_aa.csv  2>/dev/null || true
+          git add json/oracle_seen_aa_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_aa_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update oracle AA seen jobs [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update oracle AA b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
@@ -194,8 +212,11 @@ jobs:
           done
 
   scrape-ds:
-    name: Data Scientist
+    name: Data Scientist (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -209,15 +230,15 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python oracle_scraper.py --role ds
+        run: python oracle_scraper.py --role ds --batch ${{ matrix.batch }}
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/oracle_seen_ds.json 2>/dev/null || true
-          git add csv/oracle_jobs_ds.csv  2>/dev/null || true
+          git add json/oracle_seen_ds_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_ds_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update oracle DS seen jobs [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update oracle DS b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
@@ -225,8 +246,11 @@ jobs:
           done
 
   scrape-sd:
-    name: Software Developer
+    name: Software Developer (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -240,15 +264,15 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python oracle_scraper.py --role sd
+        run: python oracle_scraper.py --role sd --batch ${{ matrix.batch }}
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/oracle_seen_sd.json 2>/dev/null || true
-          git add csv/oracle_jobs_sd.csv  2>/dev/null || true
+          git add json/oracle_seen_sd_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_sd_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update oracle SD seen jobs [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update oracle SD b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
@@ -256,8 +280,11 @@ jobs:
           done
 
   scrape-se:
-    name: Software Engineer
+    name: Software Engineer (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -271,15 +298,15 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python oracle_scraper.py --role se
+        run: python oracle_scraper.py --role se --batch ${{ matrix.batch }}
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/oracle_seen_se.json 2>/dev/null || true
-          git add csv/oracle_jobs_se.csv  2>/dev/null || true
+          git add json/oracle_seen_se_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_se_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update oracle SE seen jobs [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update oracle SE b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
@@ -287,8 +314,11 @@ jobs:
           done
 
   scrape-aie:
-    name: AI Engineer
+    name: AI Engineer (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -302,15 +332,15 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python oracle_scraper.py --role aie
+        run: python oracle_scraper.py --role aie --batch ${{ matrix.batch }}
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/oracle_seen_aie.json 2>/dev/null || true
-          git add csv/oracle_jobs_aie.csv  2>/dev/null || true
+          git add json/oracle_seen_aie_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_aie_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update oracle AIE seen jobs [skip ci]"
+          git diff --cached --quiet || git commit -m "chore: update oracle AIE b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
