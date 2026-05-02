@@ -543,9 +543,9 @@ def main() -> None:
     seen_ids  = load_seen_ids()
     companies = load_companies()
     if _args.batch == "1":
-        companies = companies[:400]
+        companies = companies[:500]
     elif _args.batch == "2":
-        companies = companies[400:]
+        companies = companies[500:]
     all_current_jobs: list[dict] = []
     counter  = [0]   # mutable int for thread-safe increment
     lock     = threading.Lock()

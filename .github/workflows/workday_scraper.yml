@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   scrape-de-1:
-    name: Data Engineer (1-400)
+    name: Data Engineer (1-500)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
           done
 
   scrape-de-2:
-    name: Data Engineer (401-800)
+    name: Data Engineer (501-976)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +68,7 @@ jobs:
           done
 
   scrape-da-1:
-    name: Data Analyst (1-400)
+    name: Data Analyst (1-500)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +98,7 @@ jobs:
           done
 
   scrape-da-2:
-    name: Data Analyst (401-800)
+    name: Data Analyst (501-976)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -128,7 +128,7 @@ jobs:
           done
 
   scrape-bi-1:
-    name: Business Intelligence (1-400)
+    name: Business Intelligence (1-500)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -158,7 +158,7 @@ jobs:
           done
 
   scrape-bi-2:
-    name: Business Intelligence (401-800)
+    name: Business Intelligence (501-976)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -188,7 +188,7 @@ jobs:
           done
 
   scrape-bia-1:
-    name: BI Analyst (1-400)
+    name: BI Analyst (1-500)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -218,7 +218,7 @@ jobs:
           done
 
   scrape-bia-2:
-    name: BI Analyst (401-800)
+    name: BI Analyst (501-976)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -248,7 +248,7 @@ jobs:
           done
 
   scrape-ra-1:
-    name: Reporting Analyst (1-400)
+    name: Reporting Analyst (1-500)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -278,7 +278,7 @@ jobs:
           done
 
   scrape-ra-2:
-    name: Reporting Analyst (401-800)
+    name: Reporting Analyst (501-976)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -308,7 +308,7 @@ jobs:
           done
 
   scrape-aa-1:
-    name: Analytics Analyst (1-400)
+    name: Analytics Analyst (1-500)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -338,7 +338,7 @@ jobs:
           done
 
   scrape-aa-2:
-    name: Analytics Analyst (401-800)
+    name: Analytics Analyst (501-976)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -368,7 +368,7 @@ jobs:
           done
 
   scrape-ds-1:
-    name: Data Scientist (1-400)
+    name: Data Scientist (1-500)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -398,7 +398,7 @@ jobs:
           done
 
   scrape-ds-2:
-    name: Data Scientist (401-800)
+    name: Data Scientist (501-976)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -428,7 +428,7 @@ jobs:
           done
 
   scrape-sd-1:
-    name: Software Developer (1-400)
+    name: Software Developer (1-500)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -458,7 +458,7 @@ jobs:
           done
 
   scrape-sd-2:
-    name: Software Developer (401-800)
+    name: Software Developer (501-976)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -488,7 +488,7 @@ jobs:
           done
 
   scrape-se-1:
-    name: Software Engineer (1-400)
+    name: Software Engineer (1-500)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -518,7 +518,7 @@ jobs:
           done
 
   scrape-se-2:
-    name: Software Engineer (401-800)
+    name: Software Engineer (501-976)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -548,7 +548,7 @@ jobs:
           done
 
   scrape-aie-1:
-    name: AI Engineer (1-400)
+    name: AI Engineer (1-500)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -578,7 +578,7 @@ jobs:
           done
 
   scrape-aie-2:
-    name: AI Engineer (401-800)
+    name: AI Engineer (501-976)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
