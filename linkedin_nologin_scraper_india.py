@@ -242,11 +242,11 @@ def send_email(new_jobs: list[dict]) -> None:
 
     rows    = "".join(job_row(j) for j in new_jobs)
     subject = (
-        f"LinkedIn India: {len(new_jobs)} new role(s) — "
+        f"LinkedIn India Roles: {len(new_jobs)} new role(s) — "
         f"{datetime.now().strftime('%b %d %I:%M %p')}"
     )
     body = f"""
-    <h2 style="color:#0a66c2">LinkedIn Job Alert — India (Public API)</h2>
+    <h2 style="color:#0a66c2">LinkedIn No Login Job Alert (C++, Quant, Software) Developer/h2>
     <p><b style="color:#155724">{len(new_jobs)} new role(s)</b> — posted in last hour · India</p>
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%">
