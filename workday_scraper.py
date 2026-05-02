@@ -225,6 +225,7 @@ def save_seen_ids(ids: set) -> None:
 
 
 def append_csv(row: dict) -> None:
+    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = ["title", "company", "location", "posted", "link", "found_on"]
     write_header = not OUTPUT_CSV.exists() or OUTPUT_CSV.stat().st_size == 0
     with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
