@@ -163,8 +163,8 @@ async def collect_page_jobs(page) -> list[dict]:
                 continue
             if not href.startswith("http"):
                 href = "https://careers.microsoft.com" + href
-            # Normalize to the working URL format
-            job_id_match = re.search(r'/job/(\d+)', href)
+            # Normalize to the working URL format (/job/ or /jobs/ plural)
+            job_id_match = re.search(r'/jobs?/(\d+)', href)
             if job_id_match:
                 href = f"https://apply.careers.microsoft.com/careers?pid={job_id_match.group(1)}"
             if href in seen:
