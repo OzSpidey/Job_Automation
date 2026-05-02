@@ -4468,5 +4468,29 @@
     "tenant": "macu",
     "instance": "wd5",
     "career": "MACU_Careers"
+  },
+  {
+    "name": "Dexcom",
+    "tenant": "dexcom",
+    "instance": "wd1",
+    "career": "Dexcom"
+  },
+  {
+    "name": "Toyota",
+    "tenant": "toyota",
+    "instance": "wd503",
+    "career": "TMNA"
+  },
+  {
+    "name": "NYU Langone Health",
+    "tenant": "nyuhs",
+    "instance": "wd12",
+    "career": "nyuhscareers1"
+  },
+  {
+    "name": "TD Synnex",
+    "tenant": "synnex",
+    "instance": "wd5",
+    "career": "tdsynnexcareers"
   }
 ]
