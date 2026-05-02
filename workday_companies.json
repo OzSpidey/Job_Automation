@@ -2410,5 +2410,269 @@
     "tenant": "transwestern",
     "instance": "wd1",
     "career": "TWCareers"
+  },
+  {
+    "name": "Manhattan Associates",
+    "tenant": "manh",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Sprinklr",
+    "tenant": "sprinklr",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Capri Holdings",
+    "tenant": "capri",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Oxford Industries",
+    "tenant": "oxford",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Kontoor Brands",
+    "tenant": "kbi",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Marriott Vacations",
+    "tenant": "mymvw",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Watts Water Technologies",
+    "tenant": "wattswater",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Materion",
+    "tenant": "materion",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Live Nation",
+    "tenant": "livenation",
+    "instance": "wd503",
+    "career": "External"
+  },
+  {
+    "name": "Georgetown University",
+    "tenant": "georgetown",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "University of Wisconsin-Madison",
+    "tenant": "wisconsin",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Iowa State University",
+    "tenant": "isu",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Wake Forest University",
+    "tenant": "wfu",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "USC",
+    "tenant": "usc",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Colorado State University",
+    "tenant": "csusystem",
+    "instance": "wd12",
+    "career": "External"
+  },
+  {
+    "name": "University of Virginia",
+    "tenant": "uva",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Northeastern University",
+    "tenant": "northeastern",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "University of Central Florida",
+    "tenant": "ucf",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "SEI Investments",
+    "tenant": "seic",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "CoreLogic",
+    "tenant": "corelogic",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Epicor",
+    "tenant": "epicorsoftware",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "AspenTech",
+    "tenant": "aspentech",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "F5 Networks",
+    "tenant": "ffive",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Alliant Energy",
+    "tenant": "alliantenergy",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "AES Corporation",
+    "tenant": "aes",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "CMS Energy",
+    "tenant": "cmno",
+    "instance": "wd3",
+    "career": "External"
+  },
+  {
+    "name": "Crane Co",
+    "tenant": "cranecompany",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "LivaNova",
+    "tenant": "livanova",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Dexcom",
+    "tenant": "dexcom",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Ortho Clinical Diagnostics",
+    "tenant": "orthoclinical",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Merit Medical Systems",
+    "tenant": "merit",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "CONMED Corporation",
+    "tenant": "conmed",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Aspen Dental",
+    "tenant": "aspendental",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "UFP Industries",
+    "tenant": "ufpi",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "TD Synnex",
+    "tenant": "synnex",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "OCC (Options Clearing Corp)",
+    "tenant": "theocc",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Alkami Technology",
+    "tenant": "alkami",
+    "instance": "wd12",
+    "career": "External"
+  },
+  {
+    "name": "Dynata",
+    "tenant": "dynata",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "NYU Langone Health",
+    "tenant": "nyuhs",
+    "instance": "wd12",
+    "career": "External"
+  },
+  {
+    "name": "Occidental Petroleum",
+    "tenant": "oxy",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "ACE Hardware",
+    "tenant": "ecc",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "Flexential",
+    "tenant": "flexential",
+    "instance": "wd503",
+    "career": "External"
+  },
+  {
+    "name": "University of Miami",
+    "tenant": "umiami",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "KUMC",
+    "tenant": "kumc",
+    "instance": "wd5",
+    "career": "External"
   }
 ]
