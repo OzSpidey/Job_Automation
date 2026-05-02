@@ -91,6 +91,7 @@ def load_seen() -> set:
     return set(raw.keys())  # handle old dict format if present
 
 def save_seen(seen: set) -> None:
+    SEEN_FILE.parent.mkdir(parents=True, exist_ok=True)
     SEEN_FILE.write_text(json.dumps(sorted(seen), indent=2), encoding="utf-8")
 
 # ── HTTP ──────────────────────────────────────────────────────────────────────

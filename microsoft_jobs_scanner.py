@@ -43,7 +43,7 @@ SMTP_PORT       = 465
 
 MICROSOFT_URL   = "https://careers.microsoft.com/v2/global/en/home.html"
 PAGES_TO_SCRAPE = 10
-SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "microsoft_seen_jobs.json")
+SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "microsoft_seen_jobs.json")
 
 TARGET_ROLES = [
     "software engineer",

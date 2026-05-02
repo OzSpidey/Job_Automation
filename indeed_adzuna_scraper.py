@@ -47,7 +47,7 @@ LOCATION     = "United States"
 MAX_DAYS_OLD = 1      # last 24 hours
 RESULTS_PAGE = 50     # max per query
 
-SEEN_FILE = Path(__file__).parent / "adzuna_seen_jobs.json"
+SEEN_FILE = Path(__file__).parent / "json" / "adzuna_seen_jobs.json"
 
 EMAIL_SENDER   = os.environ.get("EMAIL_SENDER",       "")
 EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD",  "")

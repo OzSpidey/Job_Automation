@@ -35,7 +35,7 @@ RECIPIENTS      = [e.strip() for e in os.environ.get("EMAIL_TO_INDIA", "").split
 SMTP_SERVER     = "smtp.gmail.com"
 SMTP_PORT       = 465
 
-SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "naukri_seen_jobs.json")
+SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "naukri_seen_jobs.json")
 PAGES_TO_SCRAPE = 1
 HEADLESS        = os.environ.get("HEADLESS", "true").lower() != "false"
 

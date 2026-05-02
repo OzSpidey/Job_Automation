@@ -136,9 +136,9 @@ MAX_AGE_DAYS  = 1    # skip jobs older than this (Workday shows "Posted X Days A
 REQUEST_DELAY = 2.0  # seconds between company requests
 RESULTS_LIMIT = 10   # jobs to fetch per company (first page only)
 
-OUTPUT_CSV     = Path(__file__).parent / _csv_file
-SEEN_LOG       = Path(__file__).parent / _seen_file
-COMPANIES_FILE = Path(__file__).parent / "workday_companies.json"
+OUTPUT_CSV     = Path(__file__).parent / "csv" / _csv_file
+SEEN_LOG       = Path(__file__).parent / "json" / _seen_file
+COMPANIES_FILE = Path(__file__).parent / "json" / "workday_companies.json"
 
 # ── Email config ───────────────────────────────────────────────────────────────
 EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")

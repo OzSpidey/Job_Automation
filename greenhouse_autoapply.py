@@ -75,10 +75,10 @@ SEARCH_QUERIES = [
     {"url": _GH.format(query="query=software%20developer"),     "type": "software_developer"},
     {"url": _GH.format(query="query=devops"),                   "type": "devops"},
 ]
-SESSION_FILE  = Path(__file__).parent / "greenhouse_session.json"
-OUTPUT_CSV    = Path(__file__).parent / "greenhouse_applied.csv"
-APPLIED_LOG   = Path(__file__).parent / "greenhouse_applied_ids.json"
-LAST_RUN_FILE = Path(__file__).parent / "greenhouse_last_run_jobs.json"
+SESSION_FILE  = Path(__file__).parent / "json" / "greenhouse_session.json"
+OUTPUT_CSV    = Path(__file__).parent / "csv" / "greenhouse_applied.csv"
+APPLIED_LOG   = Path(__file__).parent / "json" / "greenhouse_applied_ids.json"
+LAST_RUN_FILE = Path(__file__).parent / "json" / "greenhouse_last_run_jobs.json"
 DELAY_BETWEEN = 5   # seconds between applications
 PAGE_TIMEOUT  = 30_000
 

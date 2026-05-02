@@ -37,7 +37,7 @@ _applicant_json = os.environ.get("APPLICANT_INFO_JSON", "")
 if _applicant_json:
     YOUR_INFO = json.loads(_applicant_json)
 else:
-    _local = Path(__file__).parent / "applicant_info_secret.txt"
+    _local = Path(__file__).parent / "txt" / "applicant_info_secret.txt"
     YOUR_INFO = json.loads(_local.read_text(encoding="utf-8")) if _local.exists() else {}
 
 DE_RESUME_PATH = os.environ.get("DE_RESUME_PATH", "")
@@ -56,8 +56,8 @@ PORTAL_URL = (
 SEARCH_TERMS = ["Data Engineer", "Data Analyst"]
 MAX_AGE_DAYS = 1
 
-OUTPUT_CSV  = Path(__file__).parent / "jobdiva_applied.csv"
-APPLIED_LOG = Path(__file__).parent / "jobdiva_applied_ids.json"
+OUTPUT_CSV  = Path(__file__).parent / "csv" / "jobdiva_applied.csv"
+APPLIED_LOG = Path(__file__).parent / "json" / "jobdiva_applied_ids.json"
 
 # Exact allowed titles (case-insensitive full match), no senior/sr variants
 ALLOWED_TITLES = re.compile(r"^(python\s+data\s+engineer|data\s+engineer|data\s+analyst)$", re.I)

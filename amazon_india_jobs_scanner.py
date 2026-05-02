@@ -40,7 +40,7 @@ SMTP_PORT       = 465
 
 UNIVERSITY_URL  = "https://www.amazon.jobs/content/en/career-programs/university?country%5B%5D=IN"
 PAGES_TO_SCRAPE = 20
-SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "amazon_seen_jobs_india.json")
+SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "amazon_seen_jobs_india.json")
 
 TARGET_ROLES = [
     "software engineer",

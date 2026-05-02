@@ -37,7 +37,7 @@ SENDER_EMAIL    = os.environ.get("EMAIL_SENDER", "")
 SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 RECIPIENTS      = [e.strip() for e in os.environ.get("EMAIL_TO", "").split(",") if e.strip()]
 
-SEEN_FILE    = Path(__file__).parent / "lever_seen_jobs.json"
+SEEN_FILE    = Path(__file__).parent / "json" / "lever_seen_jobs.json"
 CONCURRENCY  = 15
 MAX_AGE_DAYS = 7
 
