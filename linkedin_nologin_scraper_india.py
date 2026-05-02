@@ -242,7 +242,7 @@ def send_email(new_jobs: list[dict]) -> None:
 
     rows    = "".join(job_row(j) for j in new_jobs)
     subject = (
-        f"LinkedIn India Roles: {len(new_jobs)} new role(s) — "
+        f"[Cron Job] Linkedin India Jobs Scraper: {len(new_jobs)} new role(s) — "
         f"{datetime.now().strftime('%b %d %I:%M %p')}"
     )
     body = f"""
