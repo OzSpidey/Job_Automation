@@ -473,9 +473,9 @@ def main() -> None:
     seen_ids  = load_seen_ids()
     all_companies = load_companies()
     if BATCH == 1:
-        companies = all_companies[:100]
+        companies = all_companies[:200]
     elif BATCH == 2:
-        companies = all_companies[100:]
+        companies = all_companies[200:]
     else:
         companies = all_companies
     all_current_jobs: list[dict] = []
