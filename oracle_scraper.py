@@ -206,11 +206,13 @@ def load_seen_ids() -> set:
 
 
 def save_seen_ids(ids: set) -> None:
+    SEEN_LOG.parent.mkdir(parents=True, exist_ok=True)
     SEEN_LOG.write_text(json.dumps(sorted(ids), indent=2), encoding="utf-8")
 
 
 def append_csv(row: dict) -> None:
     fieldnames = ["title", "company", "location", "posted", "link", "found_on"]
+    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     write_header = not OUTPUT_CSV.exists() or OUTPUT_CSV.stat().st_size == 0
     with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
