@@ -18,6 +18,7 @@ Run: python amazon_india_jobs_scanner.py
 import asyncio
 import json
 import os
+import re
 import smtplib
 import sys
 import urllib.parse
@@ -81,6 +82,25 @@ def is_india_location(location: str) -> bool:
     return any(kw in loc for kw in INDIA_LOCATIONS)
 
 
+def _date_sort_key(date_str: str) -> int:
+    """Convert Amazon relative date string to days-ago integer (lower = more recent)."""
+    d = (date_str or "").lower().strip()
+    if not d or d in ("date unknown", "n/a"):
+        return 9999
+    if "today" in d or "just posted" in d or "less than a day" in d:
+        return 0
+    m = re.search(r'(\d+)\s*day', d)
+    if m:
+        return int(m.group(1))
+    m = re.search(r'(\d+)\s*week', d)
+    if m:
+        return int(m.group(1)) * 7
+    m = re.search(r'(\d+)\s*month', d)
+    if m:
+        return int(m.group(1)) * 30
+    return 9999
+
+
 def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
     new_count = sum(1 for j in jobs if j["url"] not in previously_seen)
     count     = len(jobs)
@@ -90,6 +110,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         plain = "No matching jobs found (Software Engineer / Software Developer, India)."
         html  = "<p>No matching jobs found.</p>"
     else:
+        jobs = sorted(jobs, key=lambda j: _date_sort_key(j.get("date", "")))
         NEW_BADGE = '<span style="background:#e47911;color:#fff;font-size:11px;font-weight:bold;padding:2px 6px;border-radius:3px;margin-right:6px;">NEW</span>'
         rows_list = []
         for j in jobs:
