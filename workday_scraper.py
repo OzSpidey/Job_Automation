@@ -551,8 +551,9 @@ def main() -> None:
         print(f"    Saved → {OUTPUT_CSV.name}")
 
     if new_count:
-        # Sort: new+entry-level first, then new, then seen
+        # Sort: most recent first, then new+entry-level, then new, then seen
         all_current_jobs.sort(key=lambda j: (
+            posted_days_ago(j["posted"]),
             0 if (j["is_new"] and j["entry_level"]) else
             1 if j["is_new"] else 2
         ))
