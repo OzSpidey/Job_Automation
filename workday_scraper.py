@@ -468,9 +468,9 @@ def main() -> None:
     seen_ids  = load_seen_ids()
     companies = load_companies()
     if _args.batch == "1":
-        companies = companies[:300]
+        companies = companies[:400]
     elif _args.batch == "2":
-        companies = companies[300:]
+        companies = companies[400:]
     all_current_jobs: list[dict] = []  # all matching jobs within age window
     new_count = 0                      # how many are genuinely new this run
 
