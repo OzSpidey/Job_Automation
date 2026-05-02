@@ -141,7 +141,6 @@ BATCH = _args.batch  # None = all companies, 1 = first 100, 2 = last 100
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 MAX_AGE_DAYS   = 1
-MAX_JOBS       = 10
 REQUEST_DELAY  = 2.0
 RESULTS_LIMIT  = 25
 
@@ -545,15 +544,9 @@ def main() -> None:
                 matched_new += 1
                 new_count   += 1
                 print(f"    [+] NEW: {title} | {location} | {posted_text}")
-                if new_count >= MAX_JOBS:
-                    print(f"\n[!] Reached MAX_JOBS={MAX_JOBS} cap — stopping early.")
-                    break
 
         if matched_new == 0:
             print(f"    [–] No new matches")
-
-        if new_count >= MAX_JOBS:
-            break
 
         time.sleep(REQUEST_DELAY)
 
