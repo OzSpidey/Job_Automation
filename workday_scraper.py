@@ -313,10 +313,28 @@ def build_job_url(company: dict, external_path: str) -> str:
     return f"https://{t}.{i}.myworkdayjobs.com/en-US/{c}{external_path}"
 
 
+# Headings that signal the required qualifications section
+_REQ_SECTION_RE = re.compile(
+    r'(basic|minimum|required|minimum required)\s+qualifications?|'
+    r'requirements?(?:\s+&amp;\s+skills?)?|'
+    r'what\s+you(?:\'ll|\'re|\s+will)\s+(?:need|bring|require)',
+    re.I,
+)
+
+# Headings that signal we've left the required section (preferred, nice-to-have, etc.)
+_PREF_SECTION_RE = re.compile(
+    r'preferred\s+qualifications?|nice.to.have|bonus|additional\s+qualifications?|'
+    r'what\s+you(?:\'ll|\'re|\s+will)\s+(?:learn|gain|get|do)',
+    re.I,
+)
+
+# Patterns for years of experience — ordered most specific → least specific
 _EXP_RE = re.compile(
-    r'(\d+)\s*\+?\s*(?:to|-)\s*(\d+)\s*\+?\s*years?|'  # 2-4 years / 2 to 4 years
-    r'(\d+)\s*\+\s*years?|'                              # 3+ years
-    r'(\d+)\s*years?\s*(?:of\s*)?(?:experience|exp)',    # 3 years experience
+    r'(\d+)\s*\+?\s*(?:to|[-–])\s*(\d+)\s*\+?\s*years?|'           # 2-4 yrs / 2 to 4 yrs
+    r'(\d+)\s*\+\s*years?\s*(?:of\s+)?(?:\w+\s+){0,4}(?:experience|exp)|'  # 3+ years of relevant exp
+    r'(\d+)\s*\+\s*years?|'                                          # 3+ years (standalone)
+    r'(?:at\s+least|minimum\s+of?|minimum)\s+(\d+)\s*years?|'       # at least 3 years / minimum 3 years
+    r'(\d+)\s*years?\s*(?:of\s+)?(?:\w+\s+){0,3}(?:experience|exp)', # 3 years of professional experience
     re.I,
 )
 
@@ -336,18 +354,51 @@ def fetch_job_detail(company: dict, external_path: str) -> str:
     return ""
 
 
-def extract_experience(html: str) -> str:
-    """Parse years of experience from job description HTML. Returns e.g. '3+ yrs', '2-4 yrs', or '—'."""
-    text = re.sub("<[^>]+>", " ", html)
-    m = _EXP_RE.search(text)
-    if not m:
-        return "—"
+def _parse_exp_match(m) -> str:
     if m.group(1) and m.group(2):
         return f"{m.group(1)}-{m.group(2)} yrs"
-    if m.group(3):
-        return f"{m.group(3)}+ yrs"
-    if m.group(4):
-        return f"{m.group(4)} yrs"
+    for g in (3, 4, 5, 6):
+        if m.group(g):
+            suffix = "+" if g in (3, 4) else ""
+            return f"{m.group(g)}{suffix} yrs"
+    return "—"
+
+
+def extract_experience(html: str) -> str:
+    """
+    Parse minimum years of experience from job description HTML.
+    Targets the Basic/Minimum Qualifications section first, falls back to full text.
+    Returns e.g. '3+ yrs', '2-4 yrs', or '—'.
+    """
+    import html as html_lib
+    # Decode HTML entities (&#43; → +, &amp; → &, etc.) then strip tags
+    text = re.sub("<[^>]+>", "\n", html_lib.unescape(html))
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+
+    # Try to isolate the required qualifications section
+    in_req = False
+    req_lines = []
+    for line in lines:
+        if _REQ_SECTION_RE.search(line):
+            in_req = True
+            continue
+        if in_req:
+            if _PREF_SECTION_RE.search(line):
+                break  # stop before preferred section
+            req_lines.append(line)
+
+    # Search requirements section first, fall back to full text
+    for search_text in (
+        " ".join(req_lines) if req_lines else None,
+        " ".join(lines),
+    ):
+        if not search_text:
+            continue
+        m = _EXP_RE.search(search_text)
+        if m:
+            return _parse_exp_match(m)
+
+    return "—"
     return "—"
 
 
