@@ -49,5 +49,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add json/amazon_seen_jobs.json
           git diff --staged --quiet || git commit -m "chore: update seen jobs [skip ci]"
-          git pull --rebase origin main
-          git push
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $i failed, retrying in $((i * 3))s..."
+            sleep $((i * 3))
+          done
