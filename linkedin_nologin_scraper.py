@@ -54,8 +54,10 @@ FETCH_DETAILS = True         # fetch job description to check experience require
 
 SKIP_COMPANIES = {
     "aaratech",
+    "bcforward",
     "beaconfire inc.",
     "fetchjobs.co",
+    "fusion it",
     "haystack",
     "insight global",
     "rk infotech llc",
