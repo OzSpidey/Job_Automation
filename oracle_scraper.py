@@ -52,7 +52,7 @@ _ROLES = {
     "da": {
         "label":        "Data Analyst",
         "search_terms": ["Data Analyst"],
-        "allow_re":     re.compile(r"\bdata\s+analyst\b", re.I),
+        "allow_re":     re.compile(r"\bdata\b.{0,30}\banalyst\b", re.I),
         "seen_log":     "oracle_seen_da.json",
         "output_csv":   "oracle_jobs_da.csv",
     },
