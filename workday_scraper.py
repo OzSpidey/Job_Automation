@@ -364,42 +364,33 @@ def _parse_exp_match(m) -> str:
     return "—"
 
 
+def _match_to_num(m) -> int:
+    """Return the highest numeric value from a regex match for comparison."""
+    if m.group(1) and m.group(2):
+        return int(m.group(2))   # upper bound of range e.g. 2-4 → 4
+    for g in (3, 4, 5, 6):
+        if m.group(g):
+            return int(m.group(g))
+    return 0
+
+
 def extract_experience(html: str) -> str:
     """
-    Parse minimum years of experience from job description HTML.
-    Targets the Basic/Minimum Qualifications section first, falls back to full text.
-    Returns e.g. '3+ yrs', '2-4 yrs', or '—'.
+    Find ALL years-of-experience mentions across the full description
+    (required + preferred sections) and return the one with the highest
+    number. e.g. Basic says '1+ yrs', Preferred says '3+ yrs' → '3+ yrs'.
+    Returns '—' if nothing found.
     """
     import html as html_lib
-    # Decode HTML entities (&#43; → +, &amp; → &, etc.) then strip tags
     text = re.sub("<[^>]+>", "\n", html_lib.unescape(html))
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    full_text = " ".join(l.strip() for l in text.splitlines() if l.strip())
 
-    # Try to isolate the required qualifications section
-    in_req = False
-    req_lines = []
-    for line in lines:
-        if _REQ_SECTION_RE.search(line):
-            in_req = True
-            continue
-        if in_req:
-            if _PREF_SECTION_RE.search(line):
-                break  # stop before preferred section
-            req_lines.append(line)
+    matches = list(_EXP_RE.finditer(full_text))
+    if not matches:
+        return "—"
 
-    # Search requirements section first, fall back to full text
-    for search_text in (
-        " ".join(req_lines) if req_lines else None,
-        " ".join(lines),
-    ):
-        if not search_text:
-            continue
-        m = _EXP_RE.search(search_text)
-        if m:
-            return _parse_exp_match(m)
-
-    return "—"
-    return "—"
+    best = max(matches, key=_match_to_num)
+    return _parse_exp_match(best)
 
 
 def _post(url: str, search: str, offset: int) -> tuple[int, list, int]:
