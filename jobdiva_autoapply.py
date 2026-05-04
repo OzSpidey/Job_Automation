@@ -4,7 +4,7 @@ JobDiva_Auto_apply.py
 JobDiva portal auto-apply bot.
 - Searches "Data Engineer", sorts newest-to-oldest
 - Only applies to exact "Data Engineer" or "Python Data Engineer" (no senior/sr/lead)
-- Skips jobs posted more than 1 day ago
+- Skips jobs posted more than 2 days ago
 - Applies via Quick Apply (No Account) with DE resume
 - Logs results to jobdiva_applied.csv
 - Email functionality not yet enabled — test locally first
@@ -54,7 +54,7 @@ PORTAL_URL = (
     "&jr_id=69f1011eecbc8c2f73203108#/"
 )
 SEARCH_TERMS = ["Data Engineer", "Data Analyst"]
-MAX_AGE_DAYS = 1
+MAX_AGE_DAYS = 2
 
 OUTPUT_CSV  = Path(__file__).parent / "csv" / "jobdiva_applied.csv"
 APPLIED_LOG = Path(__file__).parent / "json" / "jobdiva_applied_ids.json"
