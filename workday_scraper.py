@@ -261,10 +261,6 @@ def is_entry_level(title: str) -> bool:
 def is_us_location(location: str) -> bool:
     if not location.strip():
         return True  # blank = don't filter out
-    # "3 Locations", "4 Locations" etc. — Workday hides the actual cities;
-    # let these through since our company list is US-focused
-    if re.search(r'^\d+\s+locations?$', location.strip(), re.I):
-        return True
     return bool(US_LOCATION_RE.search(location))
 
 
@@ -343,8 +339,8 @@ _EXP_RE = re.compile(
 )
 
 
-def fetch_job_detail(company: dict, external_path: str) -> str:
-    """Return raw job description HTML from the detail API, or empty string on failure."""
+def fetch_posting_info(company: dict, external_path: str) -> dict:
+    """Return jobPostingInfo dict from the detail API, or {} on failure."""
     t = company["tenant"]
     i = company["instance"]
     c = company["career"]
@@ -352,10 +348,31 @@ def fetch_job_detail(company: dict, external_path: str) -> str:
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
         if r.status_code == 200:
-            return r.json().get("jobPostingInfo", {}).get("jobDescription", "")
+            return r.json().get("jobPostingInfo", {})
     except Exception:
         pass
-    return ""
+    return {}
+
+
+def get_locations_from_info(info: dict) -> list:
+    """Extract location descriptor strings from jobPostingInfo."""
+    locs = []
+    for loc in info.get("jobPostingLocations", []):
+        desc = loc.get("descriptor", "")
+        if desc:
+            locs.append(desc)
+            continue
+        addr = loc.get("address", {})
+        parts = []
+        for field in ("city", "countryRegion", "country"):
+            val = addr.get(field, "")
+            if isinstance(val, dict):
+                val = val.get("descriptor", "")
+            if val:
+                parts.append(val)
+        if parts:
+            locs.append(", ".join(parts))
+    return locs
 
 
 def _parse_exp_match(m) -> str:
@@ -586,9 +603,22 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
 
         if not is_allowed_title(title):
             continue
-        if not is_us_location(location):
-            continue
         if posted_days_ago(posted_text) > MAX_AGE_DAYS:
+            continue
+
+        # "N Locations" — fetch detail to resolve actual locations
+        posting_info = {}
+        is_multi = bool(re.search(r'^\d+\s+locations?$', location.strip(), re.I))
+        if is_multi:
+            posting_info = fetch_posting_info(company, external_path)
+            actual_locs = get_locations_from_info(posting_info)
+            if actual_locs:
+                us_locs = [l for l in actual_locs if is_us_location(l)]
+                if not us_locs:
+                    continue  # no US location among the N
+                location = ", ".join(us_locs)
+            # if detail returned no location data, fall through (keep "N Locations")
+        elif not is_us_location(location):
             continue
 
         job_url = build_job_url(company, external_path)
@@ -598,11 +628,12 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             if is_new:
                 seen_ids.add(job_id)
 
-        # Fetch experience only for new jobs to minimise extra requests
+        # Fetch experience only for new jobs; reuse posting_info if already fetched
         experience = "—"
         if is_new:
-            detail_html = fetch_job_detail(company, external_path)
-            experience  = extract_experience(detail_html)
+            if not posting_info:
+                posting_info = fetch_posting_info(company, external_path)
+            experience = extract_experience(posting_info.get("jobDescription", ""))
 
         row = {
             "title":       title,
