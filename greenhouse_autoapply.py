@@ -80,7 +80,7 @@ OUTPUT_CSV    = Path(__file__).parent / "csv" / "greenhouse_applied.csv"
 APPLIED_LOG   = Path(__file__).parent / "json" / "greenhouse_applied_ids.json"
 LAST_RUN_FILE = Path(__file__).parent / "json" / "greenhouse_last_run_jobs.json"
 DELAY_BETWEEN = 5   # seconds between applications
-PAGE_TIMEOUT  = 30_000
+PAGE_TIMEOUT  = 60_000
 
 # Company URL slugs to skip (non-US offices, custom widgets that can't be automated, etc.)
 SKIP_COMPANY_SLUGS = ["yipitdatajobs"]
@@ -258,7 +258,15 @@ async def ensure_logged_in(page: Page, email: str) -> None:
       2. User types the code they received → script detects success
     If already logged in (session cookie), skips the whole flow.
     """
-    await page.goto(SEARCH_QUERIES[0]["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+    for attempt in range(3):
+        try:
+            await page.goto(SEARCH_QUERIES[0]["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+            break
+        except Exception as e:
+            if attempt == 2:
+                raise
+            print(f"[!] Navigation timeout (attempt {attempt + 1}/3), retrying...")
+            await page.wait_for_timeout(5000)
     await page.wait_for_timeout(2000)
 
     # Already logged in if jobs page is showing
