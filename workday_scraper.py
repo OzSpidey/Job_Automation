@@ -228,7 +228,7 @@ def save_seen_ids(ids: set) -> None:
 
 def append_csv(row: dict) -> None:
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ["title", "company", "location", "posted", "link", "found_on"]
+    fieldnames = ["title", "company", "location", "posted", "experience", "link", "found_on"]
     write_header = not OUTPUT_CSV.exists() or OUTPUT_CSV.stat().st_size == 0
     with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
@@ -311,6 +311,44 @@ def build_job_url(company: dict, external_path: str) -> str:
     i = company["instance"]
     c = company["career"]
     return f"https://{t}.{i}.myworkdayjobs.com/en-US/{c}{external_path}"
+
+
+_EXP_RE = re.compile(
+    r'(\d+)\s*\+?\s*(?:to|-)\s*(\d+)\s*\+?\s*years?|'  # 2-4 years / 2 to 4 years
+    r'(\d+)\s*\+\s*years?|'                              # 3+ years
+    r'(\d+)\s*years?\s*(?:of\s*)?(?:experience|exp)',    # 3 years experience
+    re.I,
+)
+
+
+def fetch_job_detail(company: dict, external_path: str) -> str:
+    """Return raw job description HTML from the detail API, or empty string on failure."""
+    t = company["tenant"]
+    i = company["instance"]
+    c = company["career"]
+    url = f"https://{t}.{i}.myworkdayjobs.com/wday/cxs/{t}/{c}{external_path}"
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        if r.status_code == 200:
+            return r.json().get("jobPostingInfo", {}).get("jobDescription", "")
+    except Exception:
+        pass
+    return ""
+
+
+def extract_experience(html: str) -> str:
+    """Parse years of experience from job description HTML. Returns e.g. '3+ yrs', '2-4 yrs', or '—'."""
+    text = re.sub("<[^>]+>", " ", html)
+    m = _EXP_RE.search(text)
+    if not m:
+        return "—"
+    if m.group(1) and m.group(2):
+        return f"{m.group(1)}-{m.group(2)} yrs"
+    if m.group(3):
+        return f"{m.group(3)}+ yrs"
+    if m.group(4):
+        return f"{m.group(4)} yrs"
+    return "—"
 
 
 def _post(url: str, search: str, offset: int) -> tuple[int, list, int]:
@@ -430,6 +468,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
             f"<td>{j['posted']}</td>"
+            f"<td>{j.get('experience', '—')}</td>"
             f"<td><a href='{j['link']}'>Apply</a></td>"
             f"</tr>"
         )
@@ -445,7 +484,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#e0e0e0">
-        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Link</th>
+        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Experience</th><th>Link</th>
       </tr>
       {rows}
     </table>
@@ -513,11 +552,18 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             if is_new:
                 seen_ids.add(job_id)
 
+        # Fetch experience only for new jobs to minimise extra requests
+        experience = "—"
+        if is_new:
+            detail_html = fetch_job_detail(company, external_path)
+            experience  = extract_experience(detail_html)
+
         row = {
             "title":       title,
             "company":     company["name"],
             "location":    location,
             "posted":      posted_text,
+            "experience":  experience,
             "link":        job_url,
             "found_on":    datetime.now().strftime("%Y-%m-%d %H:%M"),
             "is_new":      is_new,
@@ -533,7 +579,7 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             with lock:
                 counter[0] += 1
             matched_new += 1
-            print(f"    [+] NEW: {title} | {location} | {posted_text}")
+            print(f"    [+] NEW: {title} | {location} | {posted_text} | exp: {experience}")
 
     if matched_new == 0:
         print(f"    [–] {company['name']} — no new matches")
