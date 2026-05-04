@@ -335,7 +335,9 @@ async def ensure_logged_in(page: Page, email: str) -> None:
         raise TimeoutError("Login failed — OTP may have been incorrect or expired.")
 
     print("[+] Login successful — saving session.")
-    await page.context.storage_state(path=str(SESSION_FILE))
+    _state = await page.context.storage_state()
+    _state["origins"] = []
+    SESSION_FILE.write_text(json.dumps(_state))
 
     # Reload the actual search URL after login
     await page.goto(SEARCH_QUERIES[0]["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
@@ -2141,8 +2143,10 @@ async def main() -> None:
             if idx < len(jobs):
                 await asyncio.sleep(DELAY_BETWEEN)
 
-        # Save session for next run
-        await context.storage_state(path=str(SESSION_FILE))
+        # Save session for next run (strip localStorage to stay under GH secret 48KB limit)
+        _state = await context.storage_state()
+        _state["origins"] = []
+        SESSION_FILE.write_text(json.dumps(_state))
 
         save_last_run_jobs({(j.get("job_id") or j["apply_url"]) for j in jobs})
 

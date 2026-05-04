@@ -66,8 +66,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           if [ -f json/greenhouse_session.json ] && [ -n "$GH_TOKEN" ]; then
+            jq '{cookies: .cookies, origins: []}' json/greenhouse_session.json > json/greenhouse_session_clean.json
             gh secret set GREENHOUSE_SESSION_B64 \
-              --body "$(base64 -w 0 json/greenhouse_session.json)" \
+              --body "$(base64 -w 0 json/greenhouse_session_clean.json)" \
               --repo OzSpidey/Job_Automation
             echo "Session secret updated."
           fi
