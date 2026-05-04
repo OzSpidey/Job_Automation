@@ -38,7 +38,7 @@ jobs:
           done
 
   scrape-de-2:
-    name: Data Engineer (601-1310)
+    name: Data Engineer (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,7 +98,7 @@ jobs:
           done
 
   scrape-da-2:
-    name: Data Analyst (601-1310)
+    name: Data Analyst (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -158,7 +158,7 @@ jobs:
           done
 
   scrape-bi-2:
-    name: Business Intelligence (601-1310)
+    name: Business Intelligence (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -218,7 +218,7 @@ jobs:
           done
 
   scrape-bia-2:
-    name: BI Analyst (601-1310)
+    name: BI Analyst (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -278,7 +278,7 @@ jobs:
           done
 
   scrape-ra-2:
-    name: Reporting Analyst (601-1310)
+    name: Reporting Analyst (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -338,7 +338,7 @@ jobs:
           done
 
   scrape-aa-2:
-    name: Analytics Analyst (601-1310)
+    name: Analytics Analyst (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -398,7 +398,7 @@ jobs:
           done
 
   scrape-ds-2:
-    name: Data Scientist (601-1310)
+    name: Data Scientist (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -458,7 +458,7 @@ jobs:
           done
 
   scrape-sd-2:
-    name: Software Developer (601-1310)
+    name: Software Developer (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -518,7 +518,7 @@ jobs:
           done
 
   scrape-se-2:
-    name: Software Engineer (601-1310)
+    name: Software Engineer (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -578,7 +578,7 @@ jobs:
           done
 
   scrape-aie-2:
-    name: AI Engineer (601-1310)
+    name: AI Engineer (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
