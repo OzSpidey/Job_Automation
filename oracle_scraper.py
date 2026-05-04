@@ -22,7 +22,9 @@ import re
 import smtplib
 import sys
 import time
+import threading
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -196,6 +198,8 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
 }
+
+WORKERS = 10  # parallel company threads
 
 
 # ── Persistence ────────────────────────────────────────────────────────────────
@@ -466,6 +470,83 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
         print(f"[!] Email failed: {e}")
 
 
+# ── Per-company worker ─────────────────────────────────────────────────────────
+
+def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter):
+    """Fetch and process one company. Thread-safe via locks."""
+    print(f"[→] {company['name']}")
+    all_postings: list[dict] = []
+    seen_req_ids: set = set()
+
+    try:
+        for term in SEARCH_TERMS:
+            for job in fetch_jobs(company, term):
+                job_id = str(job.get("Id") or job.get("RequisitionNumber", ""))
+                if job_id not in seen_req_ids:
+                    seen_req_ids.add(job_id)
+                    all_postings.append(job)
+            time.sleep(0.5)
+    except Exception as e:
+        print(f"  [!] {company['name']} — error: {e}")
+        return
+
+    if not all_postings:
+        return
+
+    matched_new = 0
+    for job in all_postings:
+        title       = str(job.get("Title", "")).strip()
+        location    = str(job.get("PrimaryLocation", "")).strip()
+        posted_date = str(job.get("PostedDate", "")).strip()
+        job_id      = job.get("Id") or job.get("RequisitionNumber", "")
+        ext_desc_id = str(job.get("ExternalDescriptionId", ""))
+
+        unique_id = f"{company['pod']}_{job_id}"
+
+        if not is_allowed_title(title):
+            continue
+        if not is_us_location(location):
+            continue
+
+        age = posted_days_ago(posted_date)
+        if age > MAX_AGE_DAYS:
+            continue
+
+        posted_text = format_posted_text(posted_date)
+        job_url     = build_job_url(company, job_id, ext_desc_id)
+
+        with lock:
+            is_new = unique_id not in seen_ids
+            if is_new:
+                seen_ids.add(unique_id)
+
+        row = {
+            "title":       title,
+            "company":     company["name"],
+            "location":    location,
+            "posted":      posted_text,
+            "link":        job_url,
+            "found_on":    datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "is_new":      is_new,
+            "entry_level": is_entry_level(title),
+            "age_days":    age,
+        }
+
+        with lock:
+            all_current_jobs.append(row)
+
+        if is_new:
+            with csv_lock:
+                append_csv(row)
+            with lock:
+                counter[0] += 1
+            matched_new += 1
+            print(f"    [+] NEW: {title} | {location} | {posted_text}")
+
+    if matched_new == 0:
+        print(f"    [–] {company['name']} — no new matches")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -478,78 +559,26 @@ def main() -> None:
     else:
         companies = all_companies
     all_current_jobs: list[dict] = []
-    new_count = 0
+    counter  = [0]
+    lock     = threading.Lock()
+    csv_lock = threading.Lock()
 
     batch_label = f" | batch {BATCH}/2" if BATCH else ""
     print(f"[+] Oracle scraper started — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print(f"    Searching: {SEARCH_TERMS} | max age: {MAX_AGE_DAYS}d | companies: {len(companies)}{batch_label}\n")
+    print(f"    Searching: {SEARCH_TERMS} | max age: {MAX_AGE_DAYS}d | companies: {len(companies)} | workers: {WORKERS}{batch_label}\n")
 
-    for company in companies:
-        print(f"[→] {company['name']}")
+    with ThreadPoolExecutor(max_workers=WORKERS) as executor:
+        futures = {
+            executor.submit(process_company, company, seen_ids, all_current_jobs, lock, csv_lock, counter): company
+            for company in companies
+        }
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"  [!] Unhandled error: {e}")
 
-        all_postings: list[dict] = []
-        seen_req_ids: set        = set()
-
-        for term in SEARCH_TERMS:
-            for job in fetch_jobs(company, term):
-                job_id = str(job.get("Id") or job.get("RequisitionNumber", ""))
-                if job_id not in seen_req_ids:
-                    seen_req_ids.add(job_id)
-                    all_postings.append(job)
-            time.sleep(0.5)
-
-        if not all_postings:
-            time.sleep(REQUEST_DELAY)
-            continue
-
-        matched_new = 0
-        for job in all_postings:
-            title       = str(job.get("Title", "")).strip()
-            location    = str(job.get("PrimaryLocation", "")).strip()
-            posted_date = str(job.get("PostedDate", "")).strip()
-            job_id      = job.get("Id") or job.get("RequisitionNumber", "")
-            ext_desc_id = str(job.get("ExternalDescriptionId", ""))
-
-            unique_id = f"{company['pod']}_{job_id}"
-
-            if not is_allowed_title(title):
-                continue
-            if not is_us_location(location):
-                continue
-
-            age = posted_days_ago(posted_date)
-            if age > MAX_AGE_DAYS:
-                continue
-
-            posted_text = format_posted_text(posted_date)
-            job_url     = build_job_url(company, job_id, ext_desc_id)
-            is_new      = unique_id not in seen_ids
-
-            row = {
-                "title":       title,
-                "company":     company["name"],
-                "location":    location,
-                "posted":      posted_text,
-                "link":        job_url,
-                "found_on":    datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "is_new":      is_new,
-                "entry_level": is_entry_level(title),
-                "age_days":    age,
-            }
-            all_current_jobs.append(row)
-
-            if is_new:
-                append_csv(row)
-                seen_ids.add(unique_id)
-                matched_new += 1
-                new_count   += 1
-                print(f"    [+] NEW: {title} | {location} | {posted_text}")
-
-        if matched_new == 0:
-            print(f"    [–] No new matches")
-
-        time.sleep(REQUEST_DELAY)
-
+    new_count = counter[0]
     save_seen_ids(seen_ids)
     # Persist any site_numbers discovered during this run
     COMPANIES_FILE.write_text(json.dumps(companies, indent=2), encoding="utf-8")
@@ -560,8 +589,10 @@ def main() -> None:
         print(f"    Saved → {OUTPUT_CSV.name}")
 
     if new_count:
-        all_current_jobs.sort(key=lambda j: j["age_days"])
-        send_summary_email(all_current_jobs, new_count)
+        with lock:
+            jobs_to_send = list(all_current_jobs)
+        jobs_to_send.sort(key=lambda j: j["age_days"])
+        send_summary_email(jobs_to_send, new_count)
     else:
         print("[i] No new jobs — skipping email.")
 
