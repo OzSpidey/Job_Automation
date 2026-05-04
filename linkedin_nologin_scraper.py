@@ -50,7 +50,6 @@ ROLES = [
 GEO_ID        = "103644278"  # United States
 TIME_WINDOW   = "r3600"      # jobs posted in last 1 hour
 MAX_PAGES     = 3            # pages per role (25 jobs per page)
-MAX_EXP_YEARS = 2            # skip jobs requiring more than this many years
 FETCH_DETAILS = True         # fetch job description to check experience requirements
 
 SKIP_COMPANIES = {
@@ -76,7 +75,7 @@ EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD",  "")
 EMAIL_TO       = os.environ.get("EMAIL_TO",            "")
 
 SENIOR_RE = re.compile(
-    r'\b(senior|sr\.?|lead|manager|director|principal|staff|head of|avp|vp|vice president)\b',
+    r'\b(senior|sr\.?|lead|manager|director|principal|staff|head of|avp|vp|vice president|architect)\b',
     re.I,
 )
 
@@ -328,10 +327,6 @@ def main():
                     detail = fetch_job_detail(jid)
                     job.update(detail)
 
-                    min_exp = job.get("min_exp_years")
-                    if min_exp is not None and min_exp > MAX_EXP_YEARS:
-                        print(f"    SKIP exp ({min_exp}yr): {job['title']} @ {job['company']}")
-                        continue
 
                 if jid not in seen:
                     all_jobs.append(job)
