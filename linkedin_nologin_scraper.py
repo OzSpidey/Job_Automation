@@ -58,6 +58,7 @@ SKIP_COMPANIES = {
     "beaconfire inc.",
     "fetchjobs.co",
     "fusion it",
+    "jobs via dice",
     "haystack",
     "insight global",
     "rk infotech llc",
