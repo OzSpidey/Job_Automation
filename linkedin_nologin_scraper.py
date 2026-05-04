@@ -59,6 +59,7 @@ SKIP_COMPANIES = {
     "fetchjobs.co",
     "haystack",
     "insight global",
+    "rk infotech llc",
     "robert half",
     "sundayy",
     "talent ally",
