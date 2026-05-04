@@ -52,7 +52,7 @@ _ROLES = {
     "da": {
         "label":        "Data Analyst",
         "search_terms": ["Data Analyst"],
-        "allow_re":     re.compile(r"\bdata\b.{0,30}\banalyst\b", re.I),
+        "allow_re":     re.compile(r"\b(data\b.{0,30}\banalyst|analyst\b.{0,30}\bdata\b)", re.I),
         "seen_log":     "oracle_seen_da.json",
         "output_csv":   "oracle_jobs_da.csv",
     },
@@ -580,8 +580,8 @@ def main() -> None:
 
     new_count = counter[0]
     save_seen_ids(seen_ids)
-    # Persist any site_numbers discovered during this run
-    COMPANIES_FILE.write_text(json.dumps(companies, indent=2), encoding="utf-8")
+    # Persist any site_numbers discovered during this run — always write the full list
+    COMPANIES_FILE.write_text(json.dumps(all_companies, indent=2), encoding="utf-8")
 
     print(f"\n{'='*65}")
     print(f"[+] Done — {new_count} new job(s) found across {len(companies)} companies")
