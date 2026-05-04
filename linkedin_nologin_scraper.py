@@ -18,6 +18,9 @@ import smtplib
 import sys
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+ET = ZoneInfo("America/New_York")
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -252,7 +255,7 @@ def send_email(new_jobs: list[dict]) -> None:
     rows    = "".join(job_row(j) for j in new_jobs)
     subject = (
         f"LinkedIn (No-Login): {len(new_jobs)} new role(s) — "
-        f"{datetime.now().strftime('%b %d %I:%M %p')}"
+        f"{datetime.now(ET).strftime('%b %d %I:%M %p ET')}"
     )
     body = f"""
     <h2 style="color:#0a66c2">LinkedIn Job Alert — Public API</h2>
@@ -266,7 +269,7 @@ def send_email(new_jobs: list[dict]) -> None:
     </table>
     <p style="font-size:12px;color:#888;margin-top:16px">
       Scraped via LinkedIn public guest API — no login, no account risk.<br>
-      Generated {datetime.now().strftime("%Y-%m-%d %H:%M")}
+      Generated {datetime.now(ET).strftime("%Y-%m-%d %H:%M ET")}
     </p>
     """
 
