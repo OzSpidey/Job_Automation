@@ -466,7 +466,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
-WORKERS = 10  # parallel company threads
+WORKERS = 25  # parallel company threads
 
 
 def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter):
@@ -543,9 +543,9 @@ def main() -> None:
     seen_ids  = load_seen_ids()
     companies = load_companies()
     if _args.batch == "1":
-        companies = companies[:500]
+        companies = companies[:600]
     elif _args.batch == "2":
-        companies = companies[500:]
+        companies = companies[600:]
     all_current_jobs: list[dict] = []
     counter  = [0]   # mutable int for thread-safe increment
     lock     = threading.Lock()
