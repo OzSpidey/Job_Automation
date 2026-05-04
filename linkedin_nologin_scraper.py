@@ -53,13 +53,17 @@ FETCH_DETAILS = True         # fetch job description to check experience require
 SKIP_COMPANIES = {
     "aaratech",
     "beaconfire inc.",
+    "fetchjobs.co",
     "haystack",
     "insight global",
     "robert half",
+    "sundayy",
     "talent ally",
     "talentally",
+    "tech consulting",
     "winaxis llc",
 }
+
 
 SEEN_FILE = Path(__file__).parent / "json" / "linkedin_nologin_seen.json"
 
