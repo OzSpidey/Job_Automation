@@ -17,7 +17,7 @@ import re
 import smtplib
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
@@ -92,17 +92,27 @@ DETAIL_URL = "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{}"
 
 # ── STATE ─────────────────────────────────────────────────────────────────────
 
-def load_seen() -> set:
+def load_seen() -> dict:
+    """Returns {job_id: iso_timestamp}. Drops entries older than 7 days."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
     if not SEEN_FILE.exists():
-        return set()
+        return {}
     raw = json.loads(SEEN_FILE.read_text(encoding="utf-8"))
     if isinstance(raw, list):
-        return set(raw)
-    return set(raw.keys())  # handle old dict format if present
+        # migrate old flat list — assign current time so they expire in 7 days
+        return {jid: datetime.now(timezone.utc).isoformat() for jid in raw}
+    result = {}
+    for jid, ts in raw.items():
+        try:
+            if datetime.fromisoformat(ts) > cutoff:
+                result[jid] = ts
+        except (ValueError, TypeError):
+            pass
+    return result
 
-def save_seen(seen: set) -> None:
+def save_seen(seen: dict) -> None:
     SEEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SEEN_FILE.write_text(json.dumps(sorted(seen), indent=2), encoding="utf-8")
+    SEEN_FILE.write_text(json.dumps(seen, indent=2), encoding="utf-8")
 
 # ── HTTP ──────────────────────────────────────────────────────────────────────
 
@@ -341,7 +351,10 @@ def main():
 
         time.sleep(random.uniform(4, 8))
 
-    seen.update(seen_ids)
+    now = datetime.now(timezone.utc).isoformat()
+    for jid in seen_ids:
+        if jid not in seen:
+            seen[jid] = now
     save_seen(seen)
 
     target = sorted(
