@@ -261,6 +261,10 @@ def is_entry_level(title: str) -> bool:
 def is_us_location(location: str) -> bool:
     if not location.strip():
         return True  # blank = don't filter out
+    # "3 Locations", "4 Locations" etc. — Workday hides the actual cities;
+    # let these through since our company list is US-focused
+    if re.search(r'^\d+\s+locations?$', location.strip(), re.I):
+        return True
     return bool(US_LOCATION_RE.search(location))
 
 
