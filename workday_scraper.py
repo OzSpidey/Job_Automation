@@ -174,6 +174,18 @@ _US_STATES = (
 US_LOCATION_RE = re.compile(
     rf"\b(united\s+states|usa|u\.s\.a?\.?|remote|{_US_STATES})\b", re.I
 )
+# State abbreviations like DE/IN/ME/CO are ambiguous — "de" is a Spanish preposition,
+# "IN" appears in Indian city names, etc. Explicitly exclude known foreign countries
+# before running the regex, but allow "New Mexico" through.
+_FOREIGN_COUNTRY_RE = re.compile(
+    r"\b(mexico|canada|india|united\s+kingdom|uk|england|scotland|wales|ireland|"
+    r"australia|germany|france|italy|spain|brazil|china|japan|singapore|philippines|"
+    r"netherlands|new\s+zealand|south\s+africa|poland|sweden|norway|denmark|"
+    r"switzerland|austria|belgium|portugal|argentina|colombia|chile|peru|venezuela|"
+    r"israel|uae|saudi\s+arabia|hong\s+kong|taiwan|south\s+korea|malaysia|"
+    r"indonesia|thailand|vietnam)\b",
+    re.I,
+)
 
 # ── Age parser — "Posted 3 Days Ago" / "Posted Today" / "Posted 30+ Days Ago" ──
 POSTED_DAYS_RE = re.compile(r"(\d+)\+?\s+day", re.I)
@@ -261,6 +273,10 @@ def is_entry_level(title: str) -> bool:
 def is_us_location(location: str) -> bool:
     if not location.strip():
         return True  # blank = don't filter out
+    # Reject known foreign countries; "New Mexico" is exempt
+    if _FOREIGN_COUNTRY_RE.search(location):
+        if not re.search(r"\bnew\s+mexico\b", location, re.I):
+            return False
     return bool(US_LOCATION_RE.search(location))
 
 
