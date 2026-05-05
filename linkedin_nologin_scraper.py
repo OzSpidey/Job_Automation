@@ -67,6 +67,7 @@ SKIP_COMPANIES = {
     "talent ally",
     "talentally",
     "tech consulting",
+    "smart it frame llc",
     "winaxis llc",
 }
 
