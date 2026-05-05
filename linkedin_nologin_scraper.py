@@ -266,8 +266,8 @@ def fetch_job_detail(job_id: str) -> dict:
     if not resp:
         return {"description": "", "min_exp_years": None, "sponsorship": None, "easy_apply": False}
 
-    # search raw HTML — LinkedIn embeds EASY_APPLY / easyApply in JSON blocks
-    easy_apply = bool(re.search(r"easy.?apply|EASY_APPLY|easyApply", resp.text, re.I))
+    # onsite = Easy Apply (LinkedIn-hosted), offsite = external application
+    easy_apply = "apply-link-simple_onsite" in resp.text
 
     soup    = BeautifulSoup(resp.text, "html.parser")
     desc_el = soup.find("div", class_=re.compile(r"show-more-less-html__markup|description__text"))
