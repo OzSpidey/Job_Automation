@@ -83,7 +83,7 @@ DELAY_BETWEEN = 5   # seconds between applications
 PAGE_TIMEOUT  = 60_000
 
 # Company URL slugs to skip (non-US offices, custom widgets that can't be automated, etc.)
-SKIP_COMPANY_SLUGS = ["yipitdatajobs"]
+SKIP_COMPANY_SLUGS = ["yipitdatajobs", "launch2"]
 
 # Job title keywords that indicate a role above target level — skip these
 SENIOR_TITLE_RE = re.compile(r'\b(senior|lead|manager)\b', re.I)
