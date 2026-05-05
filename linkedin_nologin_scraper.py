@@ -324,9 +324,11 @@ def send_email(new_jobs: list[dict]) -> None:
         )
         repost_cell  = "<span style='color:#e67e22;font-weight:bold'>⚠ Yes</span>" if j.get("reposted") else "No"
         wt           = j.get("work_type", "—")
+        row_bg       = "#27ae60" if (j.get("easy_apply") and sponsor_val == "yes") else "#d4edda"
+        row_color    = "color:white;font-weight:bold" if row_bg == "#27ae60" else ""
         return (
-            f"<tr style='background:#d4edda'>"
-            f"<td><a href='{j['apply_url']}' style='font-weight:bold;color:#0a66c2'>"
+            f"<tr style='background:{row_bg};{row_color}'>"
+            f"<td><a href='{j['apply_url']}' style='font-weight:bold;color:{'white' if row_bg == '#27ae60' else '#0a66c2'}'>"
             f"{j['title']}</a></td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
