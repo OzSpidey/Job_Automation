@@ -57,6 +57,7 @@ SKIP_COMPANIES = {
     "aaratech",
     "bcforward",
     "beaconfire inc.",
+    "enhance it",
     "fetchjobs.co",
     "fusion it",
     "jobs via dice",
