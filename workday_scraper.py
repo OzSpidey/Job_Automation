@@ -22,6 +22,9 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+_EST = ZoneInfo("America/New_York")
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -54,8 +57,8 @@ _ROLES = {
     },
     "bi": {
         "label":        "Business Intelligence",
-        "search_terms": ["Business Intelligence", "Business Insights Analyst"],
-        "allow_re":     re.compile(r"\b(business\s+intelligence|business\s+insights\s+analyst)\b", re.I),
+        "search_terms": ["Business Intelligence", "Business Insights Analyst", "BI Analyst"],
+        "allow_re":     re.compile(r"\b(business\s+intelligence|business\s+insights\s+analyst|bi\s+analyst)\b", re.I),
         "seen_log":     "workday_seen_bi.json",
         "output_csv":   "workday_jobs_bi.csv",
     },
@@ -169,11 +172,13 @@ ENTRY_LEVEL_RE = re.compile(
 # ── Location filter ────────────────────────────────────────────────────────────
 _US_STATES = (
     r"AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|"
-    r"MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC"
+    r"MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|PR|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC"
 )
-US_LOCATION_RE = re.compile(
-    rf"\b(united\s+states|usa|u\.s\.a?\.?|remote|{_US_STATES})\b", re.I
-)
+# Split into two regexes: keywords are case-insensitive, but state abbreviations must
+# be uppercase — "Al" (Arabic definite article) and "IN" (Indian state codes) are
+# common in foreign addresses and were falsely matching AL/IN with re.I.
+_US_KEYWORDS_RE = re.compile(r"\b(united\s+states|usa|u\.s\.a?\.?|remote)\b", re.I)
+_US_STATE_ABBR_RE = re.compile(rf"\b({_US_STATES})\b")  # case-sensitive — uppercase only
 # State abbreviations like DE/IN/ME/CO are ambiguous — "de" is a Spanish preposition,
 # "IN" appears in Indian city names, etc. Explicitly exclude known foreign countries
 # before running the regex, but allow "New Mexico" through.
@@ -183,7 +188,11 @@ _FOREIGN_COUNTRY_RE = re.compile(
     r"netherlands|new\s+zealand|south\s+africa|poland|sweden|norway|denmark|"
     r"switzerland|austria|belgium|portugal|argentina|colombia|chile|peru|venezuela|"
     r"israel|uae|saudi\s+arabia|hong\s+kong|taiwan|south\s+korea|malaysia|"
-    r"indonesia|thailand|vietnam)\b",
+    r"indonesia|thailand|vietnam|egypt|turkey|kenya|nigeria|pakistan|bangladesh|"
+    r"morocco|tunisia|algeria|ghana|ethiopia|russia|ukraine|romania|hungary|"
+    r"greece|czech\s+republic|czech|slovakia|croatia|serbia|bulgaria|"
+    r"estonia|latvia|lithuania|finland|jordan|lebanon|iraq|iran|qatar|kuwait|"
+    r"oman|bahrain|myanmar|cambodia|sri\s+lanka|nepal|afghanistan)\b",
     re.I,
 )
 
@@ -277,7 +286,7 @@ def is_us_location(location: str) -> bool:
     if _FOREIGN_COUNTRY_RE.search(location):
         if not re.search(r"\bnew\s+mexico\b", location, re.I):
             return False
-    return bool(US_LOCATION_RE.search(location))
+    return bool(_US_KEYWORDS_RE.search(location) or _US_STATE_ABBR_RE.search(location))
 
 
 def posted_days_ago(posted_text: str) -> int:
@@ -555,7 +564,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     rows    = "".join(_row(j) for j in all_jobs)
     subject = (
         f"[Workday] {new_count} new {_role_label} role(s) — "
-        f"{datetime.now().strftime('%b %d, %Y %H:%M')}"
+        f"{datetime.now(_EST).strftime('%b %d, %Y %H:%M')}"
     )
     body_html = f"""
     <h2>Workday — {_role_label} Jobs (Last {MAX_AGE_DAYS} Day)</h2>
@@ -658,7 +667,7 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             "posted":      posted_text,
             "experience":  experience,
             "link":        job_url,
-            "found_on":    datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "found_on":    datetime.now(_EST).strftime("%Y-%m-%d %H:%M"),
             "is_new":      is_new,
             "entry_level": is_entry_level(title),
         }
@@ -690,7 +699,7 @@ def main() -> None:
     lock     = threading.Lock()
     csv_lock = threading.Lock()
 
-    print(f"[+] Workday scraper started — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"[+] Workday scraper started — {datetime.now(_EST).strftime('%Y-%m-%d %H:%M')}")
     print(f"    Searching: {SEARCH_TERMS} | max age: {MAX_AGE_DAYS}d | companies: {len(companies)} | workers: {WORKERS}\n")
 
     with ThreadPoolExecutor(max_workers=WORKERS) as executor:
