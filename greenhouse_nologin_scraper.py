@@ -534,7 +534,7 @@ def main() -> None:
     if new_jobs:
         CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
         write_header = not CSV_FILE.exists() or CSV_FILE.stat().st_size == 0
-        fieldnames = ["job_id", "title", "company", "location", "role", "posted", "url", "found_at"]
+        fieldnames = ["job_id", "title", "company", "location", "role", "posted", "url", "found_at", "is_new"]
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         new_jobs_sorted = sorted(new_jobs, key=lambda j: j.get("posted") or "", reverse=True)
         with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
