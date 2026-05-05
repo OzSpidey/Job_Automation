@@ -53,6 +53,8 @@ MAX_PAGES     = 5            # pages per role (25 jobs per page)
 FETCH_DETAILS = True         # fetch job description to check experience requirements
 REPOST_ID_GAP = 5_000_000   # job IDs this far below the run's max are flagged as reposts
 
+SKIP_COMPANY_KEYWORDS = {"rotaract"}
+
 SKIP_COMPANIES = {
     "aaratech",
     "bcforward",
@@ -407,7 +409,8 @@ def main():
                     continue
                 seen_ids.add(jid)
 
-                if job["company"].lower().strip() in SKIP_COMPANIES:
+                company_lower = job["company"].lower().strip()
+                if company_lower in SKIP_COMPANIES or any(kw in company_lower for kw in SKIP_COMPANY_KEYWORDS):
                     print(f"    SKIP company: {job['company']}")
                     continue
 
