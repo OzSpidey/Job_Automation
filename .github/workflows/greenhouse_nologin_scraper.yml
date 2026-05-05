@@ -32,7 +32,7 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/greenhouse_nologin_seen.json csv/greenhouse_nologin_jobs.csv 2>/dev/null || true
+          git add json/greenhouse_nologin_seen.json csv/greenhouse_nologin_jobs.csv greenhouse_last_run_jobs.json 2>/dev/null || true
           git diff --staged --quiet || git commit -m "chore: update greenhouse nologin seen jobs [skip ci]"
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push && break

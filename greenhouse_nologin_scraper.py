@@ -36,8 +36,9 @@ EMAIL_TO       = os.environ.get("EMAIL_TO", "")
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR  = Path(__file__).parent
-SEEN_FILE = BASE_DIR / "json" / "greenhouse_nologin_seen.json"
-CSV_FILE  = BASE_DIR / "csv"  / "greenhouse_nologin_jobs.csv"
+SEEN_FILE      = BASE_DIR / "json" / "greenhouse_nologin_seen.json"
+CSV_FILE       = BASE_DIR / "csv"  / "greenhouse_nologin_jobs.csv"
+LAST_RUN_FILE  = BASE_DIR / "greenhouse_last_run_jobs.json"
 
 API_URL        = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
 MAX_CONCURRENT = 20
@@ -595,9 +596,14 @@ def _send_email(jobs: list[dict]) -> None:
     sorted_jobs = sorted(jobs, key=lambda j: j.get("posted") or "", reverse=True)
     rows = ""
     for j in sorted_jobs:
+        new_badge = (
+            "<span style='background:#22c55e;color:#fff;font-size:10px;"
+            "font-weight:bold;padding:2px 5px;border-radius:3px;margin-left:5px'>NEW</span>"
+            if j.get("is_new") else ""
+        )
         rows += (
             f"<tr>"
-            f"<td>{j['title']}</td>"
+            f"<td>{j['title']}{new_badge}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location'] or '—'}</td>"
             f"<td>{j['role']}</td>"
@@ -639,9 +645,16 @@ def main() -> None:
     seen: set[str] = set()
     if SEEN_FILE.exists():
         seen = set(json.loads(SEEN_FILE.read_text(encoding="utf-8")))
+
+    last_run_ids: set[str] = set()
+    if LAST_RUN_FILE.exists():
+        last_run_ids = set(json.loads(LAST_RUN_FILE.read_text(encoding="utf-8")))
+
     print(f"[i] {len(seen)} previously seen IDs | scraping {len(COMPANIES)} boards...")
 
     all_jobs = asyncio.run(_scrape_all())
+    for job in all_jobs:
+        job["is_new"] = job["job_id"] not in last_run_ids
     print(f"[i] Total matching: {len(all_jobs)}")
 
     new_jobs = [j for j in all_jobs if j["job_id"] not in seen]
@@ -669,6 +682,8 @@ def main() -> None:
     updated_seen = seen | {j["job_id"] for j in all_jobs}
     SEEN_FILE.parent.mkdir(parents=True, exist_ok=True)
     SEEN_FILE.write_text(json.dumps(sorted(updated_seen)), encoding="utf-8")
+
+    LAST_RUN_FILE.write_text(json.dumps(sorted({j["job_id"] for j in all_jobs})), encoding="utf-8")
 
     if recent_jobs:
         _send_email(recent_jobs)
