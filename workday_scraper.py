@@ -78,8 +78,14 @@ _ROLES = {
     },
     "aa": {
         "label":        "Analytics Analyst",
-        "search_terms": ["Analytics Analyst"],
-        "allow_re":     re.compile(r"\banalytics\s+analyst\b", re.I),
+        "search_terms": ["Analytics Analyst", "Advanced Analytics"],
+        "allow_re":     re.compile(
+            r"\banalytics\s+analyst\b"
+            r"|\badvanced\s+analytics\b"
+            r"|\banalyst\b.{0,40}\banalytics\b"
+            r"|\banalytics\b.{0,40}\banalyst\b",
+            re.I
+        ),
         "seen_log":     "workday_seen_aa.json",
         "output_csv":   "workday_jobs_aa.csv",
     },
