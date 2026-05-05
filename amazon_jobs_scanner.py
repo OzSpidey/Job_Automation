@@ -40,6 +40,7 @@ SMTP_PORT       = 465
 
 UNIVERSITY_URL  = "https://www.amazon.jobs/content/en/career-programs/university?country%5B%5D=US"
 PAGES_TO_SCRAPE = 40
+WORKERS         = 5   # parallel browser pages for page scraping
 SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "amazon_seen_jobs.json")
 
 TARGET_ROLES = [
@@ -418,56 +419,84 @@ async def scrape_jobs() -> list[dict]:
         except Exception as e:
             print(f"  [sort] Skipped: {e}")
 
-        # ── 6. Scrape 5 pages via URL pagination ─────────────────────────────
-        # Capture the base results URL (after radius strip + sort) for page navigation.
+        # ── 6. Scrape pages in parallel via URL pagination ────────────────────
+        # Once we have the base URL, each offset page is independent.
+        # Split PAGES_TO_SCRAPE across WORKERS concurrent browser pages.
         base_results_url = page.url
 
-        for page_num in range(1, PAGES_TO_SCRAPE + 1):
-            print(f"\n[page {page_num} of {PAGES_TO_SCRAPE}]")
+        # Page 1 is already loaded — collect it before spawning workers
+        print(f"\n[page 1 of {PAGES_TO_SCRAPE}] (already loaded)")
+        await page.wait_for_timeout(1_500)
+        first_page_jobs = await collect_page_jobs(page)
+        print(f"  Links found: {len(first_page_jobs)}")
 
-            # Navigate using offset-based pagination (Amazon uses offset= not page=)
-            if page_num > 1:
-                offset = (page_num - 1) * 10
-                parsed  = urllib.parse.urlparse(base_results_url)
-                params  = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-                params["offset"] = [str(offset)]
-                params.pop("page", None)
-                paged_url = urllib.parse.urlunparse(
-                    parsed._replace(query=urllib.parse.urlencode(params, doseq=True))
-                )
-                print(f"  URL (offset={offset}): {paged_url}")
-                try:
-                    await page.goto(paged_url, wait_until="domcontentloaded", timeout=30_000)
-                    await page.wait_for_timeout(2_000)
+        async def scrape_page_range(worker_id: int, page_nums: list) -> list:
+            """Scrape a slice of pages in a dedicated browser page."""
+            worker_page = await ctx.new_page()
+            results: list = []
+            seen_local: set = set()
+            try:
+                for page_num in page_nums:
+                    offset = (page_num - 1) * 10
+                    parsed = urllib.parse.urlparse(base_results_url)
+                    params = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+                    params["offset"] = [str(offset)]
+                    params.pop("page", None)
+                    paged_url = urllib.parse.urlunparse(
+                        parsed._replace(query=urllib.parse.urlencode(params, doseq=True))
+                    )
+                    print(f"  [worker {worker_id}] page {page_num} (offset={offset})")
                     try:
-                        await page.wait_for_selector('a[href*="/jobs/"]', timeout=8_000)
-                    except PlaywrightTimeout:
-                        print("  No jobs on this page — stopping pagination.")
+                        await worker_page.goto(paged_url, wait_until="domcontentloaded", timeout=30_000)
+                        await worker_page.wait_for_timeout(2_000)
+                        try:
+                            await worker_page.wait_for_selector('a[href*="/jobs/"]', timeout=8_000)
+                        except PlaywrightTimeout:
+                            print(f"  [worker {worker_id}] page {page_num} — no jobs, stopping.")
+                            break
+                    except Exception as e:
+                        print(f"  [worker {worker_id}] page {page_num} load error: {e}")
                         break
-                except Exception as e:
-                    print(f"  Could not load page {page_num}: {e}")
-                    break
-            else:
-                await page.wait_for_timeout(1_500)
 
-            jobs_on_page = await collect_page_jobs(page)
-            print(f"  Links found: {len(jobs_on_page)}")
+                    jobs_on_page = await collect_page_jobs(worker_page)
+                    print(f"  [worker {worker_id}] page {page_num} — {len(jobs_on_page)} links")
+                    if not jobs_on_page:
+                        print(f"  [worker {worker_id}] empty page — stopping.")
+                        break
+                    for job in jobs_on_page:
+                        if job["url"] not in seen_local:
+                            seen_local.add(job["url"])
+                            results.append(job)
+            finally:
+                await worker_page.close()
+            return results
 
-            if not jobs_on_page:
-                print("  Empty page — stopping.")
-                break
+        # Distribute pages 2..N across workers (round-robin so each worker
+        # gets consecutive offsets for predictable server-side behavior)
+        remaining_pages = list(range(2, PAGES_TO_SCRAPE + 1))
+        chunks: list = [[] for _ in range(WORKERS)]
+        for i, pg in enumerate(remaining_pages):
+            chunks[i % WORKERS].append(pg)
 
-            page_matches = 0
-            for job in jobs_on_page:
-                if job["url"] in seen_urls:
-                    continue
-                seen_urls.add(job["url"])
-                if is_target_role(job["title"]):
-                    matched.append(job)
-                    page_matches += 1
-                    print(f"  MATCH: {job['title']}")
+        print(f"\n[6] Scraping {len(remaining_pages)} remaining pages across {WORKERS} parallel workers...")
+        worker_results = await asyncio.gather(
+            *[scrape_page_range(i + 1, chunk) for i, chunk in enumerate(chunks) if chunk]
+        )
 
-            print(f"  Matches this page: {page_matches}")
+        # Merge page-1 + all worker results, deduplicate, filter
+        all_jobs: list = first_page_jobs[:]
+        for batch in worker_results:
+            all_jobs.extend(batch)
+
+        for job in all_jobs:
+            if job["url"] in seen_urls:
+                continue
+            seen_urls.add(job["url"])
+            if is_target_role(job["title"]):
+                matched.append(job)
+                print(f"  MATCH: {job['title']}")
+
+        print(f"\n  Total links collected: {len(all_jobs)} | Matches: {len(matched)}")
 
         await browser.close()
 
