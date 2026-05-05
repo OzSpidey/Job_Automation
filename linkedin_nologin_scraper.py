@@ -51,6 +51,7 @@ GEO_ID        = "103644278"  # United States
 TIME_WINDOW   = "r3600"      # jobs posted in last 1 hour
 MAX_PAGES     = 5            # pages per role (25 jobs per page)
 FETCH_DETAILS = True         # fetch job description to check experience requirements
+REPOST_ID_GAP = 2_000_000   # job IDs this far below the run's max are flagged as reposts
 
 SKIP_COMPANIES = {
     "aaratech",
@@ -298,6 +299,7 @@ def send_email(new_jobs: list[dict]) -> None:
             else "<span style='color:#c0392b'>No</span>"            if sponsor_val == "no"
             else "—"
         )
+        repost_cell  = "<span style='color:#e67e22;font-weight:bold'>⚠ Yes</span>" if j.get("reposted") else "No"
         return (
             f"<tr style='background:#d4edda'>"
             f"<td><a href='{j['apply_url']}' style='font-weight:bold;color:#0a66c2'>"
@@ -308,6 +310,7 @@ def send_email(new_jobs: list[dict]) -> None:
             f"<td>{exp_cell}</td>"
             f"<td>{ea_cell}</td>"
             f"<td>{sponsor_cell}</td>"
+            f"<td>{repost_cell}</td>"
             f"</tr>"
         )
 
@@ -322,7 +325,7 @@ def send_email(new_jobs: list[dict]) -> None:
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%">
       <tr style="background:#0a66c2;color:white">
-        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Exp</th><th>Easy Apply</th><th>Sponsorship</th>
+        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Exp</th><th>Easy Apply</th><th>Sponsorship</th><th>Reposted?</th>
       </tr>
       {rows}
     </table>
@@ -408,6 +411,11 @@ def main():
             seen[jid] = now
     save_seen(seen)
 
+    if all_jobs:
+        max_id = max(int(j["job_id"]) for j in all_jobs)
+        for j in all_jobs:
+            j["reposted"] = (max_id - int(j["job_id"])) > REPOST_ID_GAP
+
     target = sorted(
         [j for j in all_jobs if not SENIOR_RE.search(j["title"])],
         key=lambda j: parse_posted_minutes(j["posted"])
@@ -426,7 +434,8 @@ def main():
             ea       = " | Easy Apply" if j.get("easy_apply") else ""
             sponsor  = j.get("sponsorship")
             sp       = f" | sponsor: {sponsor}" if sponsor else ""
-            print(f"  [NEW]  {j['title']} @ {j['company']}{exp}{ea}{sp}")
+            rp       = " | REPOST" if j.get("reposted") else ""
+            print(f"  [NEW]  {j['title']} @ {j['company']}{exp}{ea}{sp}{rp}")
             print(f"         {j['location']} | {j['posted']}")
             print(f"         {j['apply_url']}")
             print()
