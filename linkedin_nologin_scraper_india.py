@@ -191,14 +191,16 @@ def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
         company_el = card.find("h4", class_=re.compile(r"base-search-card__subtitle"))
         loc_el     = card.find("span", class_=re.compile(r"job-search-card__location"))
         time_el    = card.find("time")
+        easy_apply = bool(re.search(r"easy.?apply", str(card), re.I))
 
         jobs.append({
-            "job_id":    job_id,
-            "title":     title_el.get_text(strip=True)   if title_el   else "",
-            "company":   company_el.get_text(strip=True) if company_el else "",
-            "location":  loc_el.get_text(strip=True)     if loc_el     else "",
-            "posted":    time_el.get_text(strip=True)    if time_el    else "",
-            "apply_url": f"https://www.linkedin.com/jobs/view/{job_id}/",
+            "job_id":     job_id,
+            "title":      title_el.get_text(strip=True)   if title_el   else "",
+            "company":    company_el.get_text(strip=True) if company_el else "",
+            "location":   loc_el.get_text(strip=True)     if loc_el     else "",
+            "posted":     time_el.get_text(strip=True)    if time_el    else "",
+            "apply_url":  f"https://www.linkedin.com/jobs/view/{job_id}/",
+            "easy_apply": easy_apply,
         })
 
     return jobs
@@ -208,7 +210,11 @@ def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
 def fetch_job_detail(job_id: str) -> dict:
     resp = _get(DETAIL_URL.format(job_id))
     if not resp:
-        return {"description": "", "min_exp_years": None}
+        return {"description": "", "min_exp_years": None, "easy_apply": False}
+
+    # onsite = Easy Apply (LinkedIn-hosted), offsite = external application
+    # covers both apply-link-onsite and apply-link-simple_onsite variants
+    easy_apply = "apply-link-onsite" in resp.text
 
     soup    = BeautifulSoup(resp.text, "html.parser")
     desc_el = soup.find("div", class_=re.compile(r"show-more-less-html__markup|description__text"))
@@ -217,6 +223,7 @@ def fetch_job_detail(job_id: str) -> dict:
     return {
         "description":   desc,
         "min_exp_years": parse_experience_years(desc),
+        "easy_apply":    easy_apply,
     }
 
 # ── EMAIL ─────────────────────────────────────────────────────────────────────
@@ -231,6 +238,7 @@ def send_email(new_jobs: list[dict]) -> None:
 
     def job_row(j):
         exp_cell = f"{j['min_exp_years']}yr" if j.get("min_exp_years") else "—"
+        ea_cell  = "✅ Yes" if j.get("easy_apply") else "No"
         return (
             f"<tr style='background:#d4edda'>"
             f"<td><a href='{j['apply_url']}' style='font-weight:bold;color:#0a66c2'>"
@@ -239,6 +247,7 @@ def send_email(new_jobs: list[dict]) -> None:
             f"<td>{j['location']}</td>"
             f"<td>{j['posted']}</td>"
             f"<td>{exp_cell}</td>"
+            f"<td>{ea_cell}</td>"
             f"</tr>"
         )
 
@@ -253,7 +262,7 @@ def send_email(new_jobs: list[dict]) -> None:
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%">
       <tr style="background:#0a66c2;color:white">
-        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Exp</th>
+        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Exp</th><th>Easy Apply</th>
       </tr>
       {rows}
     </table>
@@ -314,8 +323,10 @@ def main():
 
                 if FETCH_DETAILS:
                     time.sleep(random.uniform(1.5, 3.5))
-                    detail = fetch_job_detail(jid)
+                    card_ea = job.get("easy_apply", False)
+                    detail  = fetch_job_detail(jid)
                     job.update(detail)
+                    job["easy_apply"] = card_ea or job.get("easy_apply", False)
 
                     min_exp = job.get("min_exp_years")
                     if min_exp is not None and min_exp > MAX_EXP_YEARS:
@@ -353,7 +364,8 @@ def main():
         print("\n── New Jobs ─────────────────────────────────────────")
         for j in target:
             exp = f" | exp: {j['min_exp_years']}yr" if j.get("min_exp_years") else ""
-            print(f"  [NEW]  {j['title']} @ {j['company']}{exp}")
+            ea  = " | Easy Apply" if j.get("easy_apply") else ""
+            print(f"  [NEW]  {j['title']} @ {j['company']}{exp}{ea}")
             print(f"         {j['location']} | {j['posted']}")
             print(f"         {j['apply_url']}")
             print()
