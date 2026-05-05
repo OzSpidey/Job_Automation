@@ -355,7 +355,6 @@ COMPANIES: dict[str, str] = {
     "okx":                          "OKX",
     "blockchain":                   "Blockchain.com",
     "galaxydigitalservices":        "Galaxy Digital Services",
-    "uniswaplabs":                  "Uniswap Labs",
     "gemini":                       "Gemini",
     # Fintech / Payments / Banking
     "chime":                        "Chime",
@@ -397,7 +396,6 @@ COMPANIES: dict[str, str] = {
     # Biotech / Genomics
     "formationbio":                 "Formation Bio",
     "biohub":                       "Chan Zuckerberg Biohub",
-    "benchling":                    "Benchling",
     "flagshippioneeringinc":        "Flagship Pioneering",
     # Dev Tools / SaaS
     "datadog":                      "Datadog",
@@ -447,7 +445,6 @@ COMPANIES: dict[str, str] = {
     "diligentrobotics":             "Diligent Robotics",
     "archer56":                     "Archer Aviation",
     # Energy / Clean Tech
-    "helionenergy":                 "Helion Energy",
     "energyhub":                    "EnergyHub",
     "oklo":                         "Oklo",
     "clearwayjobs":                 "Clearway Energy",
