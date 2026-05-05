@@ -3954,6 +3954,12 @@
     "career": "wiley_careers"
   },
   {
+    "name": "Johnson & Johnson",
+    "tenant": "jj",
+    "instance": "wd5",
+    "career": "JJ"
+  },
+  {
     "name": "Johnson & Johnson MedTech (JRJ)",
     "tenant": "jrjnet",
     "instance": "wd5",
