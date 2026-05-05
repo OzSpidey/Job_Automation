@@ -48,6 +48,7 @@ TIME_WINDOW   = "r3600"      # jobs posted in last 1 hour
 MAX_PAGES     = 3            # pages per role (25 jobs per page)
 MAX_EXP_YEARS = 2            # skip jobs requiring more than this many years
 FETCH_DETAILS = True         # fetch job description to check experience requirements
+REPOST_ID_GAP = 2_000_000   # job IDs this far below the run's max are flagged as reposts
 
 SKIP_COMPANIES = {
     "aaratech",
@@ -236,8 +237,9 @@ def send_email(new_jobs: list[dict]) -> None:
         return
 
     def job_row(j):
-        exp_cell = f"{j['min_exp_years']}yr" if j.get("min_exp_years") else "—"
-        ea_cell  = "✅ Yes" if j.get("easy_apply") else "No"
+        exp_cell    = f"{j['min_exp_years']}yr" if j.get("min_exp_years") else "—"
+        ea_cell     = "✅ Yes" if j.get("easy_apply") else "No"
+        repost_cell = "<span style='color:#e67e22;font-weight:bold'>⚠ Yes</span>" if j.get("reposted") else "No"
         return (
             f"<tr style='background:#d4edda'>"
             f"<td><a href='{j['apply_url']}' style='font-weight:bold;color:#0a66c2'>"
@@ -247,6 +249,7 @@ def send_email(new_jobs: list[dict]) -> None:
             f"<td>{j['posted']}</td>"
             f"<td>{exp_cell}</td>"
             f"<td>{ea_cell}</td>"
+            f"<td>{repost_cell}</td>"
             f"</tr>"
         )
 
@@ -261,7 +264,7 @@ def send_email(new_jobs: list[dict]) -> None:
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%">
       <tr style="background:#0a66c2;color:white">
-        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Exp</th><th>Easy Apply</th>
+        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Exp</th><th>Easy Apply</th><th>Reposted?</th>
       </tr>
       {rows}
     </table>
@@ -348,6 +351,11 @@ def main():
     seen.update(seen_ids)
     save_seen(seen)
 
+    if all_jobs:
+        max_id = max(int(j["job_id"]) for j in all_jobs)
+        for j in all_jobs:
+            j["reposted"] = (max_id - int(j["job_id"])) > REPOST_ID_GAP
+
     target = sorted(
         [j for j in all_jobs if not SENIOR_RE.search(j["title"])],
         key=lambda j: parse_posted_minutes(j["posted"])
@@ -364,7 +372,8 @@ def main():
         for j in target:
             exp = f" | exp: {j['min_exp_years']}yr" if j.get("min_exp_years") else ""
             ea  = " | Easy Apply" if j.get("easy_apply") else ""
-            print(f"  [NEW]  {j['title']} @ {j['company']}{exp}{ea}")
+            rp  = " | REPOST" if j.get("reposted") else ""
+            print(f"  [NEW]  {j['title']} @ {j['company']}{exp}{ea}{rp}")
             print(f"         {j['location']} | {j['posted']}")
             print(f"         {j['apply_url']}")
             print()
