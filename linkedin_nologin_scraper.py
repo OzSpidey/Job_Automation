@@ -245,7 +245,7 @@ def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
         company_el = card.find("h4", class_=re.compile(r"base-search-card__subtitle"))
         loc_el     = card.find("span", class_=re.compile(r"job-search-card__location"))
         time_el    = card.find("time")
-        easy_apply = bool(card.find(string=re.compile(r"easy\s+apply", re.I)))
+        easy_apply = bool(re.search(r"easy.?apply", str(card), re.I))
 
         jobs.append({
             "job_id":     job_id,
