@@ -267,7 +267,8 @@ def fetch_job_detail(job_id: str) -> dict:
         return {"description": "", "min_exp_years": None, "sponsorship": None, "easy_apply": False}
 
     # onsite = Easy Apply (LinkedIn-hosted), offsite = external application
-    easy_apply = "apply-link-simple_onsite" in resp.text
+    # covers both apply-link-onsite and apply-link-simple_onsite variants
+    easy_apply = "apply-link-onsite" in resp.text
 
     soup    = BeautifulSoup(resp.text, "html.parser")
     desc_el = soup.find("div", class_=re.compile(r"show-more-less-html__markup|description__text"))
