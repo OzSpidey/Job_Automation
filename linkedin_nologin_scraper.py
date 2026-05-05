@@ -51,7 +51,7 @@ GEO_ID        = "103644278"  # United States
 TIME_WINDOW   = "r3600"      # jobs posted in last 1 hour
 MAX_PAGES     = 5            # pages per role (25 jobs per page)
 FETCH_DETAILS = True         # fetch job description to check experience requirements
-REPOST_ID_GAP = 2_000_000   # job IDs this far below the run's max are flagged as reposts
+REPOST_ID_GAP = 10_000_000  # job IDs this far below the run's max are flagged as reposts
 
 SKIP_COMPANIES = {
     "aaratech",
