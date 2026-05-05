@@ -276,6 +276,12 @@
     "career": "Careers"
   },
   {
+    "name": "Alteryx",
+    "tenant": "alteryx",
+    "instance": "wd108",
+    "career": "AlteryxCareers"
+  },
+  {
     "name": "Alcon",
     "tenant": "alcon",
     "instance": "wd5",
@@ -1534,6 +1540,12 @@
     "tenant": "christianacare",
     "instance": "wd5",
     "career": "CCHS"
+  },
+  {
+    "name": "Chipotle",
+    "tenant": "chipotle",
+    "instance": "wd5",
+    "career": "ChipotleCareers"
   },
   {
     "name": "Church & Dwight",
