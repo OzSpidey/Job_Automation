@@ -212,6 +212,28 @@ def parse_sponsorship(text: str) -> str | None:
         return "yes"
     return None
 
+_WORK_REMOTE = re.compile(
+    r'\b(fully\s+remote|100\s*%\s+remote|remote\s+(?:first|only|position|role|work|job)'
+    r'|work(?:ing)?\s+(?:fully\s+)?remote(?:ly)?'
+    r'|work\s+from\s+(?:home|anywhere)|wfh)\b',
+    re.I,
+)
+_WORK_HYBRID = re.compile(r'\bhybrid\b', re.I)
+_WORK_ONSITE = re.compile(
+    r'\b(on[\s-]?site|in[\s-]office|in[\s-]person|fully\s+in[\s-]office)\b', re.I
+)
+
+def parse_work_type(text: str) -> str:
+    if not text:
+        return "—"
+    if _WORK_REMOTE.search(text):
+        return "Remote"
+    if _WORK_HYBRID.search(text):
+        return "Hybrid"
+    if _WORK_ONSITE.search(text):
+        return "On-site"
+    return "—"
+
 # ── FETCH SEARCH PAGE ─────────────────────────────────────────────────────────
 
 def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
@@ -266,7 +288,7 @@ def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
 def fetch_job_detail(job_id: str) -> dict:
     resp = _get(DETAIL_URL.format(job_id))
     if not resp:
-        return {"description": "", "min_exp_years": None, "sponsorship": None, "easy_apply": False}
+        return {"description": "", "min_exp_years": None, "sponsorship": None, "work_type": "—", "easy_apply": False}
 
     # covers apply-link-onsite and apply-link-simple_onsite variants
     easy_apply = bool(re.search(r'apply-link[^"\'<>]*onsite', resp.text))
@@ -279,6 +301,7 @@ def fetch_job_detail(job_id: str) -> dict:
         "description":   desc,
         "min_exp_years": parse_experience_years(desc),
         "sponsorship":   parse_sponsorship(desc),
+        "work_type":     parse_work_type(desc),
         "easy_apply":    easy_apply,
     }
 
@@ -299,17 +322,19 @@ def send_email(new_jobs: list[dict]) -> None:
             else "—"
         )
         repost_cell  = "<span style='color:#e67e22;font-weight:bold'>⚠ Yes</span>" if j.get("reposted") else "No"
+        wt           = j.get("work_type", "—")
         return (
             f"<tr style='background:#d4edda'>"
             f"<td><a href='{j['apply_url']}' style='font-weight:bold;color:#0a66c2'>"
             f"{j['title']}</a></td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
-            f"<td>{j['posted']}</td>"
             f"<td>{exp_cell}</td>"
             f"<td>{ea_cell}</td>"
             f"<td>{sponsor_cell}</td>"
             f"<td>{repost_cell}</td>"
+            f"<td>{wt}</td>"
+            f"<td>{j['posted']}</td>"
             f"</tr>"
         )
 
@@ -324,7 +349,7 @@ def send_email(new_jobs: list[dict]) -> None:
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%">
       <tr style="background:#0a66c2;color:white">
-        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Exp</th><th>Easy Apply</th><th>Sponsorship</th><th>Reposted?</th>
+        <th>Title</th><th>Company</th><th>Location</th><th>Exp</th><th>Easy Apply</th><th>Sponsorship</th><th>Reposted?</th><th>Work Type</th><th>Posted</th>
       </tr>
       {rows}
     </table>
@@ -434,7 +459,8 @@ def main():
             sponsor  = j.get("sponsorship")
             sp       = f" | sponsor: {sponsor}" if sponsor else ""
             rp       = " | REPOST" if j.get("reposted") else ""
-            print(f"  [NEW]  {j['title']} @ {j['company']}{exp}{ea}{sp}{rp}")
+            wt       = f" | {j['work_type']}" if j.get("work_type") and j["work_type"] != "—" else ""
+            print(f"  [NEW]  {j['title']} @ {j['company']}{exp}{ea}{sp}{rp}{wt}")
             print(f"         {j['location']} | {j['posted']}")
             print(f"         {j['apply_url']}")
             print()
