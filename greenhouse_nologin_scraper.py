@@ -1,7 +1,7 @@
 """
 greenhouse_nologin_scraper.py
 ------------------------------
-Scrapes active jobs from 200+ companies' public Greenhouse boards
+Scrapes active jobs from 177 verified companies' public Greenhouse boards
 using the Greenhouse public API (no auth or browser required).
 
 API: https://boards-api.greenhouse.io/v1/boards/{slug}/jobs
@@ -29,13 +29,13 @@ try:
 except ImportError:
     pass
 
-# ── Email ──────────────────────────────────────────────────────────────────────
+# -- Email ---------------------------------------------------------------------
 EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 EMAIL_TO       = os.environ.get("EMAIL_TO", "")
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
-BASE_DIR  = Path(__file__).parent
+# -- Paths ---------------------------------------------------------------------
+BASE_DIR       = Path(__file__).parent
 SEEN_FILE      = BASE_DIR / "json" / "greenhouse_nologin_seen.json"
 CSV_FILE       = BASE_DIR / "csv"  / "greenhouse_nologin_jobs.csv"
 LAST_RUN_FILE  = BASE_DIR / "greenhouse_last_run_jobs.json"
@@ -44,7 +44,7 @@ API_URL        = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
 MAX_CONCURRENT = 20
 TIMEOUT        = 20.0
 
-# ── Role matching ──────────────────────────────────────────────────────────────
+# -- Role matching -------------------------------------------------------------
 ROLE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r'\bdata\s+analyst\b',                        re.I), "Data Analyst"),
     (re.compile(r'\banalytics?\s+engineer\b',                 re.I), "Analytics Engineer"),
@@ -67,7 +67,7 @@ SENIOR_RE = re.compile(
     re.I,
 )
 
-# ── US location check ──────────────────────────────────────────────────────────
+# -- US location check ---------------------------------------------------------
 _US_ST = (
     "AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|"
     "MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|"
@@ -102,7 +102,7 @@ _NON_US_RE = re.compile(
     r'mumbai|bombay|bangalore|bengaluru|delhi|hyderabad|chennai|pune|'
     r'tel\s+aviv|warsaw|dublin|stockholm|copenhagen|oslo|helsinki|'
     r'vienna|zurich|madrid|barcelona|rome|prague|bucharest|lisbon|'
-    r'shanghai|beijing|shenzhen|guangzhou|s[aã]o\s+paulo|bogot[aá]|'
+    r'shanghai|beijing|shenzhen|guangzhou|s[ao]\s+paulo|bogot[a]|'
     r'lima|santiago|buenos\s+aires|cape\s+town|johannesburg|nairobi|'
     r'karachi|lahore|dhaka|colombo|kuala\s+lumpur|jakarta|bangkok|'
     r'ho\s+chi\s+minh|manila|taipei|seoul|osaka|auckland|abu\s+dhabi|'
@@ -134,238 +134,122 @@ def _classify(title: str) -> str | None:
     return None
 
 
-# ── 309 Greenhouse board slugs ─────────────────────────────────────────────────
+# -- 177 verified Greenhouse board slugs ---------------------------------------
 COMPANIES: dict[str, str] = {
     # Analytics / Data Tooling
-    "amplitude":        "Amplitude",
-    "mixpanel":         "Mixpanel",
-    "fullstory":        "FullStory",
-    "heap":             "Heap",
-    "dataiku":          "Dataiku",
-    "wandb":            "Weights & Biases",
-    "labelbox":         "Labelbox",
-    "montecarlodata":   "Monte Carlo",
-    "fivetran":         "Fivetran",
-    "alation":          "Alation",
-    "starburst":        "Starburst",
-    "hex":              "Hex",
-    "atlan":            "Atlan",
-    "anomalo":          "Anomalo",
-    "datafold":         "Datafold",
-    "assemblyai":       "AssemblyAI",
+    "amplitude":          "Amplitude",
+    "mixpanel":           "Mixpanel",
+    "dataiku":            "Dataiku",
+    "labelbox":           "Labelbox",
+    "fivetran":           "Fivetran",
+    "starburst":          "Starburst",
+    "assemblyai":         "AssemblyAI",
     # Cloud / Infrastructure / Security
-    "fastly":           "Fastly",
-    "hashicorp":        "HashiCorp",
-    "pagerduty":        "PagerDuty",
-    "sentry":           "Sentry",
-    "snyk":             "Snyk",
-    "vanta":            "Vanta",
-    "sysdig":           "Sysdig",
-    "wizinc":           "Wiz",
-    "abnormalsecurity": "Abnormal Security",
-    "axonius":          "Axonius",
-    "netlify":          "Netlify",
-    "doppler":          "Doppler",
-    "retool":           "Retool",
-    "sourcegraph91":    "Sourcegraph",
-    "tanium":           "Tanium",
-    "ngrok":            "Ngrok",
-    "drata":            "Drata",
-    "cylera":           "Cylera",
-    "digitalocean":     "DigitalOcean",
+    "fastly":             "Fastly",
+    "pagerduty":          "PagerDuty",
+    "wizinc":             "Wiz",
+    "abnormalsecurity":   "Abnormal Security",
+    "axonius":            "Axonius",
+    "netlify":            "Netlify",
+    "sourcegraph91":      "Sourcegraph",
+    "tanium":             "Tanium",
     # Enterprise SaaS / CRM / Marketing
-    "zendesk":          "Zendesk",
-    "hubspot":          "HubSpot",
-    "intercom":         "Intercom",
-    "outreach":         "Outreach",
-    "gongio":           "Gong",
-    "seismic":          "Seismic",
-    "sprinklr":         "Sprinklr",
-    "salesloft":        "SalesLoft",
-    "iterable":         "Iterable",
-    "attentive":        "Attentive",
-    "klaviyo":          "Klaviyo",
-    "typeform":         "Typeform",
-    "contentful":       "Contentful",
-    "movableink":       "Movable Ink",
-    "talkdesk":         "TalkDesk",
-    "gladly":           "Gladly",
-    "yotpo":            "Yotpo",
-    "bazaarvoice":      "Bazaarvoice",
-    "domo":             "Domo",
-    "impact":           "Impact.com",
-    "appian":           "Appian",
-    "smartsheet":       "Smartsheet",
-    "monday":           "Monday.com",
+    "hubspot":            "HubSpot",
+    "intercom":           "Intercom",
+    "gongio":             "Gong",
+    "salesloft":          "SalesLoft",
+    "iterable":           "Iterable",
+    "attentive":          "Attentive",
+    "klaviyo":            "Klaviyo",
+    "typeform":           "Typeform",
+    "contentful":         "Contentful",
+    "movableink":         "Movable Ink",
+    "yotpo":              "Yotpo",
+    "impact":             "Impact.com",
+    "appian":             "Appian",
+    "smartsheet":         "Smartsheet",
     # Productivity / Collaboration
-    "asana":            "Asana",
-    "notion":           "Notion",
-    "airtable":         "Airtable",
-    "mural":            "Mural",
-    "superhuman":       "Superhuman",
-    "frontapp":         "Front",
-    "productboard":     "Productboard",
-    "clickup":          "ClickUp",
-    "lattice":          "Lattice",
-    "leapsome":         "Leapsome",
-    "shortcut":         "Shortcut",
-    "gleanwork":        "Glean",
-    "moveworks":        "Moveworks",
+    "asana":              "Asana",
+    "airtable":           "Airtable",
+    "lattice":            "Lattice",
+    "gleanwork":          "Glean",
+    "moveworks":          "Moveworks",
     # Fintech / Payments / Insurance
-    "affirm":           "Affirm",
-    "brex":             "Brex",
-    "chimebank":        "Chime",
-    "robinhood":        "Robinhood",
-    "coinbase":         "Coinbase",
-    "carta":            "Carta",
-    "addepar":          "Addepar",
-    "marqeta":          "Marqeta",
-    "betterment":       "Betterment",
-    "acorns":           "Acorns",
-    "moderntreasury":   "Modern Treasury",
-    "fundrise":         "Fundrise",
-    "lemonade":         "Lemonade",
-    "rootinc":          "Root Insurance",
-    "amwins":           "Amwins",
-    "hippoinsurance":   "Hippo Insurance",
-    "policygenius":     "PolicyGenius",
-    "bestow":           "Bestow",
-    "ethoslife":        "Ethos Life",
-    "varo":             "Varo",
-    "adyen":            "Adyen",
-    "signifyd":         "Signifyd",
-    "riskified":        "Riskified",
-    "finix":            "Finix",
-    "moov":             "Moov",
+    "affirm":             "Affirm",
+    "brex":               "Brex",
+    "robinhood":          "Robinhood",
+    "carta":              "Carta",
+    "marqeta":            "Marqeta",
+    "betterment":         "Betterment",
+    "ethoslife":          "Ethos Life",
+    "adyen":              "Adyen",
+    "riskified":          "Riskified",
+    "amwins":             "Amwins",
     # HR Tech / Workforce
-    "gusto":            "Gusto",
-    "justworks":        "Justworks",
-    "bamboohr":         "BambooHR",
-    "papayaglobal":     "Papaya Global",
-    "gem":              "Gem",
-    "zenefits":         "Zenefits",
-    "navan":            "Navan",
+    "gusto":              "Gusto",
+    "justworks":          "Justworks",
     # Healthcare / Health Tech
-    "doximity":         "Doximity",
-    "modernhealth":     "Modern Health",
-    "noom":             "Noom",
-    "headspace":        "Headspace",
-    "hims":             "Hims & Hers",
-    "flatironhealth":   "Flatiron Health",
-    "tempus":           "Tempus",
-    "accolade":         "Accolade",
-    "devotedhealth":    "Devoted Health",
-    "icertis":          "iCertis",
-    "transcarent":      "Transcarent",
-    "oscar":            "Oscar Health",
-    "rallyhealth":      "Rally Health",
-    "calm":             "Calm",
+    "doximity":           "Doximity",
+    "modernhealth":       "Modern Health",
+    "flatironhealth":     "Flatiron Health",
+    "transcarent":        "Transcarent",
+    "oscar":              "Oscar Health",
+    "calm":               "Calm",
     # E-commerce / Marketplace
-    "faire":            "Faire",
-    "reverb":           "Reverb",
-    "poshmark":         "Poshmark",
-    "opentable":        "OpenTable",
-    "depop":            "Depop",
-    "rebag":            "Rebag",
-    "instacart":        "Instacart",
-    "gopuff":           "GoPuff",
-    "rover":            "Rover",
+    "faire":              "Faire",
+    "poshmark":           "Poshmark",
+    "opentable":          "OpenTable",
+    "rebag":              "Rebag",
+    "instacart":          "Instacart",
     # Travel / Mobility / Hospitality
-    "lyft":             "Lyft",
-    "hopper":           "Hopper",
-    "tripadvisor":      "TripAdvisor",
-    "vacasa":           "Vacasa",
-    "sonder":           "Sonder",
-    "getaround":        "Getaround",
-    "turo":             "Turo",
-    "outdoorsy":        "Outdoorsy",
-    "hipcamp":          "Hipcamp",
+    "lyft":               "Lyft",
+    "tripadvisor":        "TripAdvisor",
+    "vacasa":             "Vacasa",
     # Real Estate / PropTech
-    "opendoor":         "Opendoor",
-    "offerpad":         "Offerpad",
-    "orchard":          "Orchard",
-    "mynd":             "Mynd",
-    "flyhomes":         "Flyhomes",
+    "opendoor":           "Opendoor",
+    "orchard":            "Orchard",
     # Logistics / Supply Chain
-    "flexport":         "Flexport",
-    "shipbob":          "ShipBob",
-    "project44":        "Project44",
-    "samsara":          "Samsara",
-    "loadsmart":        "Loadsmart",
-    "stord":            "Stord",
-    "convoy":           "Convoy",
+    "flexport":           "Flexport",
+    "project44":          "Project44",
+    "samsara":            "Samsara",
     # Media / Education / Consumer
-    "reddit":           "Reddit",
-    "discord":          "Discord",
-    "scribd":           "Scribd",
-    "udemy":            "Udemy",
-    "coursera":         "Coursera",
-    "duolingo":         "Duolingo",
-    "nextdoor":         "Nextdoor",
-    "voxmedia":         "Vox Media",
-    "medium":           "Medium",
+    "reddit":             "Reddit",
+    "discord":            "Discord",
+    "udemy":              "Udemy",
+    "coursera":           "Coursera",
+    "duolingo":           "Duolingo",
+    "nextdoor":           "Nextdoor",
+    "voxmedia":           "Vox Media",
+    "medium":             "Medium",
     # AI / ML Platforms
-    "scaleai":          "Scale AI",
-    "huggingface":      "Hugging Face",
-    "cohere":           "Cohere",
-    "datarobot":        "DataRobot",
-    "togetherai":       "Together AI",
-    "synthesia":        "Synthesia",
+    "scaleai":            "Scale AI",
+    "togetherai":         "Together AI",
     # General Tech / Software
-    "airbnb":           "Airbnb",
-    "doordashusa":      "DoorDash",
-    "dropbox":          "Dropbox",
-    "figma":            "Figma",
-    "postman":          "Postman",
-    "procore":          "Procore",
-    "twilio":           "Twilio",
-    "okta":             "Okta",
-    "confluent":        "Confluent",
-    "databricks":       "Databricks",
-    "benchling":        "Benchling",
-    "clearbit":         "Clearbit",
-    "ironclad":         "IronClad",
-    "lob":              "Lob",
-    "matterport":       "Matterport",
-    "runway":           "Runway",
-    "socure":           "Socure",
-    "sendbird":         "Sendbird",
-    "upwork":           "Upwork",
-    "veeva":            "Veeva",
-    "checkr":           "Checkr",
-    "truework":         "Truework",
-    "unqork":           "Unqork",
-    "sumologicinc":     "Sumo Logic",
-    "nerdio":           "Nerdio",
-    "toptal":           "Toptal",
-    "persona":          "Persona",
-    "observeai":        "Observe.AI",
-    "talend":           "Talend",
-    "nylas":            "Nylas",
-    "zeplin":           "Zeplin",
-    "stedi":            "Stedi",
-    "clio":             "Clio",
-    "deepl":            "DeepL",
-    "adroll":           "AdRoll",
-    "chartmogul":       "ChartMogul",
-    "pendo":            "Pendo",
-    "elastic":          "Elastic",
-    # AI / ML (new)
+    "airbnb":             "Airbnb",
+    "doordashusa":        "DoorDash",
+    "dropbox":            "Dropbox",
+    "figma":              "Figma",
+    "postman":            "Postman",
+    "twilio":             "Twilio",
+    "okta":               "Okta",
+    "databricks":         "Databricks",
+    "lob":                "Lob",
+    "sendbird":           "Sendbird",
+    "upwork":             "Upwork",
+    "checkr":             "Checkr",
+    "truework":           "Truework",
+    "unqork":             "Unqork",
+    "observeai":          "Observe.AI",
+    "pendo":              "Pendo",
+    "elastic":            "Elastic",
+    # AI / ML
     "anthropic":          "Anthropic",
-    "writer":             "Writer",
-    "jasperai":           "Jasper",
-    "adept":              "Adept AI",
-    "codeium":            "Codeium",
-    "grammarly":          "Grammarly",
-    # Dev Tools / Infrastructure (new)
+    # Dev Tools / Infrastructure
     "gitlab":             "GitLab",
     "vercel":             "Vercel",
     "grafanalabs":        "Grafana Labs",
     "temporal":           "Temporal",
     "redpandadata":       "Redpanda",
-    "bufbuild":           "Buf",
-    "airbyte":            "Airbyte",
-    "prefecthq":          "Prefect",
     "harnessinc":         "Harness",
     "launchdarkly":       "LaunchDarkly",
     "pulumicorporation":  "Pulumi",
@@ -375,8 +259,7 @@ COMPANIES: dict[str, str] = {
     "cribl":              "Cribl",
     "clickhouse":         "ClickHouse",
     "acquia":             "Acquia",
-    "lucid":              "Lucid Software",
-    # Data / Analytics (new)
+    # Data / Analytics
     "dbtlabsinc":         "dbt Labs",
     "sigmacomputing":     "Sigma Computing",
     "hightouch":          "Hightouch",
@@ -384,7 +267,7 @@ COMPANIES: dict[str, str] = {
     "alphasense":         "AlphaSense",
     "yipitdata":          "YipitData",
     "guidepoint":         "Guidepoint Global",
-    # Security (new)
+    # Security
     "zscaler":            "Zscaler",
     "chainguard":         "Chainguard",
     "spycloud":           "SpyCloud",
@@ -392,20 +275,17 @@ COMPANIES: dict[str, str] = {
     "recordedfuture":     "Recorded Future",
     "arkoselabs":         "Arkose Labs",
     "orca":               "Orca Security",
-    "semgrep":            "Semgrep",
-    # Marketing / AdTech (new)
+    # Marketing / AdTech
     "braze":              "Braze",
     "stackadapt":         "StackAdapt",
-    # SaaS / Productivity (new)
+    # SaaS / Productivity
     "calendly":           "Calendly",
     "webflow":            "Webflow",
     "qualtrics":          "Qualtrics",
     "lumos":              "Lumos",
-    "zapier":             "Zapier",
-    "coda":               "Coda",
-    # HR Tech (new)
+    # HR Tech
     "remotecom":          "Remote",
-    # Finance / Fintech (new)
+    # Finance / Fintech
     "stripe":             "Stripe",
     "sofi":               "SoFi",
     "mercury":            "Mercury",
@@ -419,15 +299,11 @@ COMPANIES: dict[str, str] = {
     "block":              "Block",
     "stockx":             "StockX",
     "ripple":             "Ripple",
-    "tipalti":            "Tipalti",
     "payoneer":           "Payoneer",
-    "nerdwallet":         "NerdWallet",
     "toast":              "Toast",
     "monzo":              "Monzo",
-    "chainalysis":        "Chainalysis",
     "fireblocks":         "Fireblocks",
-    "blockdaemon":        "Blockdaemon",
-    # Healthcare (new)
+    # Healthcare
     "springhealth66":     "Spring Health",
     "omadahealth":        "Omada Health",
     "coherehealth":       "Cohere Health",
@@ -436,10 +312,8 @@ COMPANIES: dict[str, str] = {
     "oura":               "Oura",
     "carrotfertility":    "Carrot Fertility",
     "zocdoc":             "Zocdoc",
-    "lyrahealth":         "Lyra Health",
-    "swordhealth":        "Sword Health",
     "cerebral":           "Cerebral",
-    # Media / Entertainment (new)
+    # Media / Entertainment
     "thenewyorktimes":    "The New York Times",
     "axios":              "Axios",
     "twitch":             "Twitch",
@@ -449,37 +323,30 @@ COMPANIES: dict[str, str] = {
     "renttherunway":      "Rent the Runway",
     "speechify":          "Speechify",
     "newsbreak":          "NewsBreak",
-    "strava":             "Strava",
     "gofundme":           "GoFundMe",
-    "whoop":              "WHOOP",
-    "alltrails":          "AllTrails",
-    # Defense / Hard Tech (new)
+    # Defense / Hard Tech
     "andurilindustries":  "Anduril Industries",
     "flyzipline":         "Zipline",
-    "aurora":             "Aurora Innovation",
-    # E-commerce / Commerce (new)
+    # E-commerce / Commerce
     "loop":               "Loop Returns",
     "afresh":             "Afresh",
     "thedutchie":         "Dutchie",
-    "threadup":           "thredUP",
-    "olo":                "Olo",
-    "gorgias":            "Gorgias",
-    # Transportation (new)
+    # Transportation
     "via":                "Via",
     "fleetio":            "Fleetio",
-    # Biotech / Life Sciences (new)
+    # Biotech / Life Sciences
     "ginkgobioworks":     "Ginkgo Bioworks",
-    # Research / Nonprofit (new)
+    # Research / Nonprofit
     "a16z":               "Andreessen Horowitz",
     "ithaka":             "ITHAKA",
-    # Storage / Communications (new)
+    # Storage / Communications
     "purestorage":        "Pure Storage",
     "bandwidth":          "Bandwidth",
     "ujet":               "UJET",
 }
 
 
-# ── Async scraping ─────────────────────────────────────────────────────────────
+# -- Async scraping ------------------------------------------------------------
 
 async def _get_office_location(client: httpx.AsyncClient, slug: str, job_id: str) -> str:
     """Fetch individual job detail and return a combined offices location string."""
@@ -550,7 +417,7 @@ async def _fetch(
             if _NON_US_RE.search(title):
                 continue
             if not _is_us(loc):
-                # Ambiguous location (e.g. "In-Office", "Hybrid") — check offices
+                # Ambiguous location (e.g. "In-Office", "Hybrid") -- check offices
                 office_loc = await _get_office_location(client, slug, job_id)
                 if office_loc and _NON_US_RE.search(office_loc):
                     continue  # offices confirm non-US
@@ -582,11 +449,11 @@ async def _scrape_all() -> list[dict]:
     return [job for batch in batches for job in batch]
 
 
-# ── Email ──────────────────────────────────────────────────────────────────────
+# -- Email ---------------------------------------------------------------------
 
 def _send_email(jobs: list[dict]) -> None:
     if not EMAIL_PASSWORD:
-        print("[!] GMAIL_APP_PASSWORD not set — skipping email.")
+        print("[!] GMAIL_APP_PASSWORD not set -- skipping email.")
         return
 
     by_role: dict[str, list[dict]] = {}
@@ -605,15 +472,15 @@ def _send_email(jobs: list[dict]) -> None:
             f"<tr>"
             f"<td>{j['title']}{new_badge}</td>"
             f"<td>{j['company']}</td>"
-            f"<td>{j['location'] or '—'}</td>"
+            f"<td>{j['location'] or '--'}</td>"
             f"<td>{j['role']}</td>"
-            f"<td>{j.get('posted') or '—'}</td>"
+            f"<td>{j.get('posted') or '--'}</td>"
             f"<td><a href='{j['url']}'>Link</a></td>"
             f"</tr>"
         )
 
     body = f"""
-    <h2>Greenhouse No-Login Scraper — {len(jobs)} new job(s) (posted ≤3 days)</h2>
+    <h2>Greenhouse No-Login Scraper -- {len(jobs)} new job(s) (posted &le;3 days)</h2>
     <p>Scraped {len(COMPANIES)} company boards. Showing only new postings from the last 3 days.</p>
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
@@ -625,7 +492,7 @@ def _send_email(jobs: list[dict]) -> None:
     """
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"Greenhouse No-Login: {len(jobs)} new job(s) (≤3 days old)"
+    msg["Subject"] = f"Greenhouse No-Login: {len(jobs)} new job(s) (<=3 days old)"
     msg["From"]    = EMAIL_SENDER
     msg["To"]      = EMAIL_TO
     msg.attach(MIMEText(body, "html"))
@@ -639,7 +506,7 @@ def _send_email(jobs: list[dict]) -> None:
         print(f"[!] Email failed: {exc}")
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------------------
 
 def main() -> None:
     seen: set[str] = set()
@@ -662,7 +529,7 @@ def main() -> None:
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
     recent_jobs = [j for j in new_jobs if (j.get("posted") or "") >= cutoff]
-    print(f"[i] Posted ≤3 days: {len(recent_jobs)}")
+    print(f"[i] Posted <=3 days: {len(recent_jobs)}")
 
     if new_jobs:
         CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -688,7 +555,7 @@ def main() -> None:
     if recent_jobs:
         _send_email(recent_jobs)
     else:
-        print("[i] No recent new jobs — skipping email.")
+        print("[i] No recent new jobs -- skipping email.")
 
 
 if __name__ == "__main__":
