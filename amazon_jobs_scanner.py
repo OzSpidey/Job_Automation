@@ -422,7 +422,19 @@ async def scrape_jobs() -> list[dict]:
         # ── 6. Scrape pages in parallel via URL pagination ────────────────────
         # Once we have the base URL, each offset page is independent.
         # Split PAGES_TO_SCRAPE across WORKERS concurrent browser pages.
-        base_results_url = page.url
+        #
+        # Do NOT use page.url here — clicking "Sort by Most Recent" causes Amazon
+        # to reconstruct the URL from its internal form state, which corrupts
+        # loc_query ("United States" → "nited States") and clears country=USA.
+        # Pages 2-40 would then run against a broken location filter and return
+        # a different result set than page 1.  Build the canonical URL directly.
+        base_results_url = (
+            "https://www.amazon.jobs/en/search/"
+            "?result_limit=10&sort=recent&distanceType=Mi&radius=24km"
+            "&latitude=&longitude=&loc_group_id="
+            "&loc_query=United+States&base_query=&city="
+            "&country=USA&region=&county=&query_options="
+        )
 
         # Page 1 is already loaded — collect it before spawning workers
         print(f"\n[page 1 of {PAGES_TO_SCRAPE}] (already loaded)")
