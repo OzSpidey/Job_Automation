@@ -264,7 +264,10 @@ def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
 def fetch_job_detail(job_id: str) -> dict:
     resp = _get(DETAIL_URL.format(job_id))
     if not resp:
-        return {"description": "", "min_exp_years": None, "sponsorship": None}
+        return {"description": "", "min_exp_years": None, "sponsorship": None, "easy_apply": False}
+
+    # search raw HTML — LinkedIn embeds EASY_APPLY / easyApply in JSON blocks
+    easy_apply = bool(re.search(r"easy.?apply|EASY_APPLY|easyApply", resp.text, re.I))
 
     soup    = BeautifulSoup(resp.text, "html.parser")
     desc_el = soup.find("div", class_=re.compile(r"show-more-less-html__markup|description__text"))
@@ -274,6 +277,7 @@ def fetch_job_detail(job_id: str) -> dict:
         "description":   desc,
         "min_exp_years": parse_experience_years(desc),
         "sponsorship":   parse_sponsorship(desc),
+        "easy_apply":    easy_apply,
     }
 
 # ── EMAIL ─────────────────────────────────────────────────────────────────────
@@ -377,8 +381,10 @@ def main():
 
                 if FETCH_DETAILS:
                     time.sleep(random.uniform(1.5, 3.5))
-                    detail = fetch_job_detail(jid)
+                    card_ea = job.get("easy_apply", False)
+                    detail  = fetch_job_detail(jid)
                     job.update(detail)
+                    job["easy_apply"] = card_ea or job.get("easy_apply", False)
 
 
                 if jid not in seen:
