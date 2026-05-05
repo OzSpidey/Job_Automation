@@ -182,6 +182,34 @@ def parse_experience_years(text: str) -> int | None:
         candidates.append(int(m.group(1)))
     return min(candidates) if candidates else None
 
+_SPONSOR_NO = re.compile(
+    r'(not?\s+(?:able\s+to\s+)?(?:provide|offer|support|consider)?\s*(?:visa\s+)?sponsor'
+    r'|cannot\s+(?:provide\s+)?(?:visa\s+)?sponsor'
+    r'|no\s+(?:visa\s+)?sponsor'
+    r'|sponsorship\s+(?:is\s+)?not\s+(?:available|provided|offered)'
+    r'|does\s+not\s+(?:provide\s+)?(?:visa\s+)?sponsor'
+    r'|authorized\s+to\s+work\s+in\s+the\s+u\.?s\.?\s+without\s+(?:visa\s+)?sponsor)',
+    re.I,
+)
+_SPONSOR_YES = re.compile(
+    r'(will\s+(?:provide\s+)?(?:visa\s+)?sponsor'
+    r'|(?:visa\s+)?sponsorship\s+(?:is\s+)?(?:available|provided|offered)'
+    r'|h[-]?1[-]?b\s+sponsor'
+    r'|open\s+to\s+(?:visa\s+)?sponsor'
+    r'|we\s+(?:do\s+)?sponsor)',
+    re.I,
+)
+
+def parse_sponsorship(text: str) -> str | None:
+    """Returns 'yes', 'no', or None if the description doesn't mention it."""
+    if not text:
+        return None
+    if _SPONSOR_NO.search(text):
+        return "no"
+    if _SPONSOR_YES.search(text):
+        return "yes"
+    return None
+
 # ── FETCH SEARCH PAGE ─────────────────────────────────────────────────────────
 
 def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
@@ -217,14 +245,16 @@ def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
         company_el = card.find("h4", class_=re.compile(r"base-search-card__subtitle"))
         loc_el     = card.find("span", class_=re.compile(r"job-search-card__location"))
         time_el    = card.find("time")
+        easy_apply = bool(card.find(string=re.compile(r"easy\s+apply", re.I)))
 
         jobs.append({
-            "job_id":   job_id,
-            "title":    title_el.get_text(strip=True)   if title_el   else "",
-            "company":  company_el.get_text(strip=True) if company_el else "",
-            "location": loc_el.get_text(strip=True)     if loc_el     else "",
-            "posted":   time_el.get_text(strip=True)    if time_el    else "",
-            "apply_url": f"https://www.linkedin.com/jobs/view/{job_id}/",
+            "job_id":     job_id,
+            "title":      title_el.get_text(strip=True)   if title_el   else "",
+            "company":    company_el.get_text(strip=True) if company_el else "",
+            "location":   loc_el.get_text(strip=True)     if loc_el     else "",
+            "posted":     time_el.get_text(strip=True)    if time_el    else "",
+            "apply_url":  f"https://www.linkedin.com/jobs/view/{job_id}/",
+            "easy_apply": easy_apply,
         })
 
     return jobs
@@ -234,7 +264,7 @@ def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
 def fetch_job_detail(job_id: str) -> dict:
     resp = _get(DETAIL_URL.format(job_id))
     if not resp:
-        return {"description": "", "min_exp_years": None}
+        return {"description": "", "min_exp_years": None, "sponsorship": None}
 
     soup    = BeautifulSoup(resp.text, "html.parser")
     desc_el = soup.find("div", class_=re.compile(r"show-more-less-html__markup|description__text"))
@@ -243,6 +273,7 @@ def fetch_job_detail(job_id: str) -> dict:
     return {
         "description":   desc,
         "min_exp_years": parse_experience_years(desc),
+        "sponsorship":   parse_sponsorship(desc),
     }
 
 # ── EMAIL ─────────────────────────────────────────────────────────────────────
@@ -253,7 +284,14 @@ def send_email(new_jobs: list[dict]) -> None:
         return
 
     def job_row(j):
-        exp_cell = f"{j['min_exp_years']}yr" if j.get("min_exp_years") else "—"
+        exp_cell     = f"{j['min_exp_years']}yr" if j.get("min_exp_years") else "—"
+        ea_cell      = "✅ Yes" if j.get("easy_apply") else "No"
+        sponsor_val  = j.get("sponsorship")
+        sponsor_cell = (
+            "<span style='color:green;font-weight:bold'>Yes</span>" if sponsor_val == "yes"
+            else "<span style='color:#c0392b'>No</span>"            if sponsor_val == "no"
+            else "—"
+        )
         return (
             f"<tr style='background:#d4edda'>"
             f"<td><a href='{j['apply_url']}' style='font-weight:bold;color:#0a66c2'>"
@@ -262,6 +300,8 @@ def send_email(new_jobs: list[dict]) -> None:
             f"<td>{j['location']}</td>"
             f"<td>{j['posted']}</td>"
             f"<td>{exp_cell}</td>"
+            f"<td>{ea_cell}</td>"
+            f"<td>{sponsor_cell}</td>"
             f"</tr>"
         )
 
@@ -276,7 +316,7 @@ def send_email(new_jobs: list[dict]) -> None:
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%">
       <tr style="background:#0a66c2;color:white">
-        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Exp</th>
+        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Exp</th><th>Easy Apply</th><th>Sponsorship</th>
       </tr>
       {rows}
     </table>
@@ -374,8 +414,11 @@ def main():
     if target:
         print("\n── New Jobs ─────────────────────────────────────────")
         for j in target:
-            exp = f" | exp: {j['min_exp_years']}yr" if j.get("min_exp_years") else ""
-            print(f"  [NEW]  {j['title']} @ {j['company']}{exp}")
+            exp      = f" | exp: {j['min_exp_years']}yr" if j.get("min_exp_years") else ""
+            ea       = " | Easy Apply" if j.get("easy_apply") else ""
+            sponsor  = j.get("sponsorship")
+            sp       = f" | sponsor: {sponsor}" if sponsor else ""
+            print(f"  [NEW]  {j['title']} @ {j['company']}{exp}{ea}{sp}")
             print(f"         {j['location']} | {j['posted']}")
             print(f"         {j['apply_url']}")
             print()
