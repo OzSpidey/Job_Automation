@@ -348,14 +348,12 @@ async def ensure_logged_in(page: Page, email: str) -> None:
 # JOB LISTING SCRAPER
 # ──────────────────────────────────────────────────────────────────────────────
 
-async def collect_jobs(page: Page) -> list[dict]:
-    """Scrape all job cards from all Greenhouse search queries, de-duplicated."""
-    all_jobs: list[dict] = []
-    seen_urls: set[str] = set()
-
-    for query_meta in SEARCH_QUERIES:
-        search_url = query_meta["url"]
-        query_type = query_meta["type"]
+async def _scrape_query(context: BrowserContext, query_meta: dict) -> list[dict]:
+    """Scrape a single search query on its own page. Returns jobs with query_type set."""
+    search_url = query_meta["url"]
+    query_type = query_meta["type"]
+    page = await context.new_page()
+    try:
         print(f"[+] Loading: {search_url}")
         await page.goto(search_url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
         await page.wait_for_timeout(3000)
@@ -397,7 +395,7 @@ async def collect_jobs(page: Page) -> list[dict]:
 
         # Fallback: link scan
         if not page_jobs:
-            print("[i] Card parsing found 0 — falling back to link scan.")
+            print(f"[i] {query_type}: card parsing found 0 — falling back to link scan.")
             links = await page.evaluate("""() => {
                 return Array.from(document.querySelectorAll('a[href]'))
                     .filter(a => /greenhouse\\.io.*jobs\\/\\d+|\\/jobs\\/\\d+/.test(a.href))
@@ -413,21 +411,38 @@ async def collect_jobs(page: Page) -> list[dict]:
                         };
                     });
             }""")
-            # De-dup within this page only (local set so merge step still works)
-            local_seen: set[str] = set()
+            seen_local: set[str] = set()
             for lnk in links:
-                if lnk["apply_url"] not in local_seen:
-                    local_seen.add(lnk["apply_url"])
+                if lnk["apply_url"] not in seen_local:
+                    seen_local.add(lnk["apply_url"])
                     page_jobs.append(lnk)
 
-        # Merge into all_jobs, skipping cross-query duplicates
         for job in page_jobs:
+            job["query_type"] = query_type
+
+        print(f"[+] {query_type}: {len(page_jobs)} listing(s)")
+        return page_jobs
+    finally:
+        await page.close()
+
+
+async def collect_jobs(context: BrowserContext) -> list[dict]:
+    """Scrape all search queries in parallel, then de-duplicate by URL."""
+    results = await asyncio.gather(
+        *[_scrape_query(context, q) for q in SEARCH_QUERIES],
+        return_exceptions=True,
+    )
+
+    all_jobs: list[dict] = []
+    seen_urls: set[str] = set()
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            print(f"[!] Query '{SEARCH_QUERIES[i]['type']}' failed: {result}")
+            continue
+        for job in result:
             if job["apply_url"] not in seen_urls:
                 seen_urls.add(job["apply_url"])
-                job["query_type"] = query_type
                 all_jobs.append(job)
-
-        print(f"[+] {len(page_jobs)} listing(s) from this query (total so far: {len(all_jobs)})")
 
     print(f"[+] Total unique jobs across all queries: {len(all_jobs)}")
     return all_jobs
@@ -1974,7 +1989,7 @@ async def main() -> None:
         await ensure_logged_in(page, YOUR_INFO["email"])
 
         # ── Collect job listings ─────────────────────────────────────────────
-        jobs = await collect_jobs(page)
+        jobs = await collect_jobs(context)
         if not jobs:
             print("[!] No jobs found. The page structure may have changed.")
             print("    A screenshot has been saved for debugging.")
