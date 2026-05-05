@@ -49,7 +49,7 @@ ROLES = [
 
 GEO_ID        = "103644278"  # United States
 TIME_WINDOW   = "r3600"      # jobs posted in last 1 hour
-MAX_PAGES     = 3            # pages per role (25 jobs per page)
+MAX_PAGES     = 5            # pages per role (25 jobs per page)
 FETCH_DETAILS = True         # fetch job description to check experience requirements
 
 SKIP_COMPANIES = {
