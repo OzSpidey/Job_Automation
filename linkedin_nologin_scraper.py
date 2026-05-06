@@ -482,7 +482,7 @@ def main():
 
     target = sorted(
         [j for j in all_jobs if not SENIOR_RE.search(j["title"])],
-        key=lambda j: parse_posted_minutes(j["posted"])
+        key=lambda j: (not j.get("easy_apply"), parse_posted_minutes(j["posted"]))
     )
     senior = [j for j in all_jobs if SENIOR_RE.search(j["title"])]
 
