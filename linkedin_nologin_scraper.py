@@ -39,16 +39,15 @@ except ImportError:
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
 ROLES = [
-    "Data Engineer",
-    "Data Analyst",
-    "Business Intelligence",
-    "Analytics Engineer",
-    "AI Engineer",
+    ("Data Engineer",         3),
+    ("Data Analyst",          3),
+    ("Business Intelligence", 3),
+    ("Analytics Engineer",    1),
+    ("AI Engineer",           1),
 ]
 
 GEO_ID         = "103644278"  # United States
 TIME_WINDOW    = "r7200"      # jobs posted in last 2 hours (buffer for LinkedIn indexing latency)
-MAX_PAGES      = 3            # pages per role (guest API returns ~10 cards per page, regardless of filter)
 FETCH_DETAILS  = True         # fetch job description to check experience requirements
 DETAIL_MAX_AGE_MIN = 30       # skip detail fetch for jobs older than this (rely on card-level easy_apply)
 REPOST_ID_GAP  = 3_000_000   # job IDs this far below the reference max are flagged as reposts
@@ -408,12 +407,12 @@ def main():
     all_jobs = []
     seen_ids = set()
 
-    for role in ROLES:
+    for role, max_pages in ROLES:
         print(f"\n[+] Role: {role}")
 
         offset = 0
-        for page in range(MAX_PAGES):
-            print(f"    Page {page + 1}/{MAX_PAGES} (start={offset})...")
+        for page in range(max_pages):
+            print(f"    Page {page + 1}/{max_pages} (start={offset})...")
             cards = fetch_job_cards(role, offset)
 
             if not cards:
