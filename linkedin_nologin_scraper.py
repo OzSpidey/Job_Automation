@@ -41,8 +41,7 @@ except ImportError:
 ROLES = [
     "Data Engineer",
     "Data Analyst",
-    "Business Intelligence Analyst",
-    "Business Intelligence Engineer",
+    "Business Intelligence",
     "Analytics Engineer",
     "AI Engineer",
 ]
