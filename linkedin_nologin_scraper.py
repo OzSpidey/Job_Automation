@@ -47,11 +47,12 @@ ROLES = [
     "AI Engineer",
 ]
 
-GEO_ID        = "103644278"  # United States
-TIME_WINDOW   = "r7200"      # jobs posted in last 2 hours (buffer for LinkedIn indexing latency)
-MAX_PAGES     = 5            # pages per role (25 jobs per page)
-FETCH_DETAILS = True         # fetch job description to check experience requirements
-REPOST_ID_GAP = 3_000_000   # job IDs this far below the reference max are flagged as reposts
+GEO_ID         = "103644278"  # United States
+TIME_WINDOW    = "r7200"      # jobs posted in last 2 hours (buffer for LinkedIn indexing latency)
+MAX_PAGES      = 8            # pages per role (guest API returns ~10 cards per page, regardless of filter)
+DUPE_THRESHOLD = 0.8          # stop paginating when ≥80% of a page is already in seen
+FETCH_DETAILS  = True         # fetch job description to check experience requirements
+REPOST_ID_GAP  = 3_000_000   # job IDs this far below the reference max are flagged as reposts
 
 SKIP_COMPANY_KEYWORDS = {"rotaract"}
 
@@ -239,13 +240,13 @@ def parse_work_type(text: str) -> str:
 
 # ── FETCH SEARCH PAGE ─────────────────────────────────────────────────────────
 
-def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
+def fetch_job_cards(role: str, offset: int = 0) -> list[dict]:
     resp = _get(SEARCH_URL, params={
         "keywords": role,
         "geoId":    GEO_ID,
         "f_TPR":    TIME_WINDOW,
         "f_JT":     "F",
-        "start":    page * 25,
+        "start":    offset,
     })
     if not resp:
         return []
@@ -345,7 +346,7 @@ def send_email(new_jobs: list[dict]) -> None:
 
     rows    = "".join(job_row(j) for j in new_jobs)
     subject = (
-        f"LinkedIn (No-Login): {len(new_jobs)} new role(s) — "
+        f"LinkedIn PAGINATION TEST: {len(new_jobs)} new role(s) — "
         f"{datetime.now(ET).strftime('%b %d %I:%M %p ET')}"
     )
     body = f"""
@@ -391,19 +392,24 @@ def main():
     for role in ROLES:
         print(f"\n[+] Role: {role}")
 
+        offset = 0
         for page in range(MAX_PAGES):
-            print(f"    Page {page + 1}/{MAX_PAGES}...")
-            cards = fetch_job_cards(role, page)
+            print(f"    Page {page + 1}/{MAX_PAGES} (start={offset})...")
+            cards = fetch_job_cards(role, offset)
 
             if not cards:
                 print("    No results — stopping pagination.")
                 break
 
             print(f"    Got {len(cards)} cards")
-            added = 0
+            added         = 0
+            already_seen  = 0
 
             for job in cards:
                 jid = job["job_id"]
+
+                if jid in seen_ids or jid in seen:
+                    already_seen += 1
 
                 if jid in seen_ids:
                     continue
@@ -414,6 +420,9 @@ def main():
                     print(f"    SKIP company: {job['company']}")
                     continue
 
+                if jid in seen:
+                    continue
+
                 if FETCH_DETAILS:
                     time.sleep(random.uniform(1.5, 3.5))
                     card_ea = job.get("easy_apply", False)
@@ -421,16 +430,16 @@ def main():
                     job.update(detail)
                     job["easy_apply"] = card_ea or job.get("easy_apply", False)
 
+                all_jobs.append(job)
+                added += 1
 
-                if jid not in seen:
-                    all_jobs.append(job)
-                    added += 1
+            print(f"    Added {added} new jobs this page  ({already_seen}/{len(cards)} previously seen)")
 
-            print(f"    Added {added} new jobs this page")
-
-            if len(cards) < 25:
+            if already_seen / len(cards) >= DUPE_THRESHOLD:
+                print(f"    Dupe saturation (≥{int(DUPE_THRESHOLD*100)}%) — stopping pagination.")
                 break
 
+            offset += len(cards)
             time.sleep(random.uniform(3, 6))
 
         time.sleep(random.uniform(4, 8))
