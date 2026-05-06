@@ -94,6 +94,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
             rows_list.append(
                 f'<tr style="{row_bg}">'
                 f'<td style="padding:8px;border:1px solid #ddd;">{badge}{j["title"]}</td>'
+                f'<td style="padding:8px;border:1px solid #ddd;">{j.get("location", "")}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;"><a href="{j["url"]}">{j["url"]}</a></td>'
                 f'<td style="padding:8px;border:1px solid #ddd;white-space:nowrap;">{j.get("date", "")}</td>'
                 f'</tr>'
@@ -108,9 +109,10 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         </p>
         <table style="border-collapse:collapse;width:100%;max-width:1100px">
           <tr style="background:#232F3E;color:#FF9900">
-            <th style="padding:10px;border:1px solid #555;text-align:left;width:35%">Role</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:30%">Role</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:20%">Location</th>
             <th style="padding:10px;border:1px solid #555;text-align:left">Link</th>
-            <th style="padding:10px;border:1px solid #555;text-align:left;width:15%">Date Posted</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:13%">Date Posted</th>
           </tr>
           {rows}
         </table>
@@ -120,7 +122,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         </body></html>
         """
         plain = f"Found {count} matching role(s) ({new_count} NEW):\n\n" + "\n".join(
-            f"- {'[NEW] ' if j['url'] not in previously_seen else ''}{j['title']} ({j.get('date', 'date unknown')})\n  {j['url']}" for j in jobs
+            f"- {'[NEW] ' if j['url'] not in previously_seen else ''}{j['title']} — {j.get('location', 'location unknown')} ({j.get('date', 'date unknown')})\n  {j['url']}" for j in jobs
         )
 
     msg = MIMEMultipart("alternative")
@@ -137,8 +139,12 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
     print(f"[email] Sent to {TARGET_EMAIL} — {count} job(s).")
 
 
+_DEBUG_DUMPED = False  # one-shot HTML dump if first card has no location
+
+
 async def collect_page_jobs(page) -> list[dict]:
-    """Collect job title, URL, and posting date from the current results page."""
+    """Collect job title, URL, location, and posting date from the current results page."""
+    global _DEBUG_DUMPED
     seen: set[str] = set()
     results = []
 
@@ -170,7 +176,31 @@ async def collect_page_jobs(page) -> list[dict]:
             except Exception:
                 pass
 
-            results.append({"title": title, "url": href, "date": date})
+            location = ""
+            try:
+                loc_el = card.locator(
+                    '.location-and-id, [class*="location"], [class*="city"], '
+                    '[class*="country"], [data-test*="location"]'
+                ).first
+                if await loc_el.count() > 0:
+                    raw = (await loc_el.inner_text()).strip()
+                    # Amazon often renders "USA, WA, Seattle | Job ID: 1234567"
+                    location = raw.split("|")[0].strip()
+            except Exception:
+                pass
+
+            # One-time debug: dump first card's HTML if location came back empty
+            if not location and not _DEBUG_DUMPED:
+                try:
+                    html = await card.evaluate("el => el.outerHTML")
+                    snippet = html[:2000] if html else ""
+                    print("  [debug] First card had no location. Card HTML snippet:")
+                    print("  " + snippet.replace("\n", "\n  "))
+                    _DEBUG_DUMPED = True
+                except Exception:
+                    pass
+
+            results.append({"title": title, "url": href, "date": date, "location": location})
         except Exception:
             continue
 
@@ -191,23 +221,39 @@ async def collect_page_jobs(page) -> list[dict]:
                     continue
                 seen.add(href)
 
-                # Walk up the DOM to find the nearest .posting-date sibling
-                date = await page.evaluate("""
+                # Walk up the DOM to find the nearest .posting-date and location
+                meta = await page.evaluate("""
                     (href) => {
                         const a = document.querySelector(`a[href="${href}"]`);
-                        if (!a) return "";
+                        if (!a) return {date: "", location: ""};
                         let el = a.parentElement;
+                        let date = "", location = "";
                         for (let i = 0; i < 6; i++) {
                             if (!el) break;
-                            const d = el.querySelector(".posting-date");
-                            if (d) return d.innerText.trim();
+                            if (!date) {
+                                const d = el.querySelector(".posting-date");
+                                if (d) date = d.innerText.trim();
+                            }
+                            if (!location) {
+                                const l = el.querySelector(
+                                    '.location-and-id, [class*="location"], [class*="city"], ' +
+                                    '[class*="country"], [data-test*="location"]'
+                                );
+                                if (l) location = l.innerText.trim().split("|")[0].trim();
+                            }
+                            if (date && location) break;
                             el = el.parentElement;
                         }
-                        return "";
+                        return {date, location};
                     }
                 """, href)
 
-                results.append({"title": title, "url": href, "date": date or ""})
+                results.append({
+                    "title": title,
+                    "url": href,
+                    "date": meta.get("date", "") or "",
+                    "location": meta.get("location", "") or "",
+                })
             except Exception:
                 continue
 
@@ -494,7 +540,8 @@ async def scrape_jobs() -> list[dict]:
             seen_urls.add(job["url"])
             if is_target_role(job["title"]):
                 matched.append(job)
-                print(f"  MATCH: {job['title']}")
+                loc = job.get("location", "")
+                print(f"  MATCH: {job['title']}" + (f"  [{loc}]" if loc else ""))
 
         print(f"\n  Total links collected: {len(all_jobs)} | Matches: {len(matched)}")
 
