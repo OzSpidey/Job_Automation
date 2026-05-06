@@ -442,9 +442,11 @@ def main():
     save_seen(seen)
 
     if all_jobs:
-        max_id = max(int(j["job_id"]) for j in all_jobs)
+        run_max        = max(int(j["job_id"]) for j in all_jobs)
+        historical_max = max((int(k) for k in seen), default=0)
+        reference_max  = max(run_max, historical_max)
         for j in all_jobs:
-            j["reposted"] = (max_id - int(j["job_id"])) > REPOST_ID_GAP
+            j["reposted"] = (reference_max - int(j["job_id"])) > REPOST_ID_GAP
 
     target = sorted(
         [j for j in all_jobs if not SENIOR_RE.search(j["title"])],
