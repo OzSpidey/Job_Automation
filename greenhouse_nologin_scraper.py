@@ -672,7 +672,7 @@ async def _get_office_location(client: httpx.AsyncClient, slug: str, job_id: str
         data = resp.json()
         parts = []
         for office in data.get("offices", []):
-            oloc = (office.get("location") or {}).get("name", "")
+            oloc = ((office.get("location") or {}).get("name") or "")
             oname = office.get("name", "")
             if oloc:
                 parts.append(oloc)
@@ -712,7 +712,7 @@ async def _fetch(
         hits: list[dict] = []
         for job in data.get("jobs", []):
             title   = (job.get("title") or "").strip()
-            loc     = (job.get("location") or {}).get("name", "").strip()
+            loc     = ((job.get("location") or {}).get("name") or "").strip()
             job_id  = str(job.get("id", ""))
             job_url = job.get("absolute_url", "")
             raw_fp  = job.get("first_published") or job.get("updated_at") or ""
@@ -759,8 +759,8 @@ async def _scrape_all() -> list[dict]:
             _fetch(client, slug, name, sem)
             for slug, name in COMPANIES.items()
         ]
-        batches = await asyncio.gather(*tasks)
-    return [job for batch in batches for job in batch]
+        batches = await asyncio.gather(*tasks, return_exceptions=True)
+    return [job for batch in batches if isinstance(batch, list) for job in batch]
 
 
 # -- Email ---------------------------------------------------------------------
