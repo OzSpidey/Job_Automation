@@ -52,6 +52,7 @@ TIME_WINDOW    = "r7200"      # jobs posted in last 2 hours (buffer for LinkedIn
 MAX_PAGES      = 5            # pages per role (guest API returns ~10 cards per page, regardless of filter)
 DUPE_THRESHOLD = 0.7          # stop paginating when ≥70% of a page is already in seen (only checked from page 3 onwards)
 FETCH_DETAILS  = True         # fetch job description to check experience requirements
+DETAIL_MAX_AGE_MIN = 30       # skip detail fetch for jobs older than this (rely on card-level easy_apply)
 REPOST_ID_GAP  = 3_000_000   # job IDs this far below the reference max are flagged as reposts
 
 SKIP_COMPANY_KEYWORDS = {"rotaract"}
@@ -423,7 +424,7 @@ def main():
                 if jid in seen:
                     continue
 
-                if FETCH_DETAILS:
+                if FETCH_DETAILS and parse_posted_minutes(job["posted"]) <= DETAIL_MAX_AGE_MIN:
                     time.sleep(random.uniform(1.0, 1.6))
                     card_ea = job.get("easy_apply", False)
                     detail  = fetch_job_detail(jid)
