@@ -318,16 +318,36 @@ def send_email(new_jobs: list[dict]) -> None:
         return
 
     def job_row(j):
-        exp_cell     = f"{j['min_exp_years']}yr" if j.get("min_exp_years") else "—"
-        ea_cell      = "✅ Yes" if j.get("easy_apply") else "No"
-        sponsor_val  = j.get("sponsorship")
-        sponsor_cell = (
-            "<span style='color:green;font-weight:bold'>Yes</span>" if sponsor_val == "yes"
-            else "<span style='color:#c0392b'>No</span>"            if sponsor_val == "no"
+        skipped      = j.get("detail_skipped", False)
+        unk          = "<span style='color:#888'>Unknown</span>"
+
+        exp_cell = (
+            f"{j['min_exp_years']}yr" if j.get("min_exp_years")
+            else unk if skipped
             else "—"
         )
+        if j.get("easy_apply"):
+            ea_cell = "✅ Yes"
+        elif skipped:
+            ea_cell = unk
+        else:
+            ea_cell = "No"
+
+        sponsor_val = j.get("sponsorship")
+        if sponsor_val == "yes":
+            sponsor_cell = "<span style='color:green;font-weight:bold'>Yes</span>"
+        elif sponsor_val == "no":
+            sponsor_cell = "<span style='color:#c0392b'>No</span>"
+        elif skipped:
+            sponsor_cell = unk
+        else:
+            sponsor_cell = "—"
+
         repost_cell  = "<span style='color:#e67e22;font-weight:bold'>⚠ Yes</span>" if j.get("reposted") else "No"
-        wt           = j.get("work_type", "—")
+
+        wt_val = j.get("work_type", "—")
+        wt     = unk if (skipped and wt_val == "—") else wt_val
+
         row_bg       = "#27ae60" if (j.get("easy_apply") and sponsor_val == "yes") else "#d4edda"
         row_color    = "color:white;font-weight:bold" if row_bg == "#27ae60" else ""
         return (
@@ -430,6 +450,8 @@ def main():
                     detail  = fetch_job_detail(jid)
                     job.update(detail)
                     job["easy_apply"] = card_ea or job.get("easy_apply", False)
+                else:
+                    job["detail_skipped"] = True
 
                 all_jobs.append(job)
                 added += 1
