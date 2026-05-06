@@ -78,8 +78,29 @@ def is_target_role(title: str) -> bool:
     return any(role in t for role in TARGET_ROLES)
 
 
+def is_recent_post(date_str: str, max_days: int = 2) -> bool:
+    """True if Microsoft's 'Posted X ago' text is strictly less than max_days old."""
+    if not date_str:
+        return False
+    s = date_str.lower().replace("posted", "").strip()
+    if any(k in s for k in ("just", "moment", "second", "minute", "hour", "today")):
+        return True
+    if "yesterday" in s:
+        return True
+    if "day" in s:
+        m = re.search(r"(\d+)", s)
+        if m:
+            return int(m.group(1)) < max_days
+        # "a day ago"
+        return True
+    return False
+
+
 def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
-    new_count   = sum(1 for j in jobs if j["url"] not in previously_seen)
+    def _is_new(j: dict) -> bool:
+        return j["url"] not in previously_seen and is_recent_post(j.get("date", ""))
+
+    new_count   = sum(1 for j in jobs if _is_new(j))
     count       = len(jobs)
     subject     = f"Microsoft Jobs Alert — {count} Role(s) Found ({new_count} NEW)"
 
@@ -90,7 +111,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         NEW_BADGE = '<span style="background:#1a7f37;color:#fff;font-size:11px;font-weight:bold;padding:2px 6px;border-radius:3px;margin-right:6px;">NEW</span>'
         rows_list = []
         for j in jobs:
-            is_new   = j["url"] not in previously_seen
+            is_new   = _is_new(j)
             row_bg   = 'background:#e6f4ea;' if is_new else ''
             badge    = NEW_BADGE if is_new else ''
             rows_list.append(
@@ -124,7 +145,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         </body></html>
         """
         plain = f"Found {count} matching role(s) ({new_count} NEW):\n\n" + "\n".join(
-            f"- {'[NEW] ' if j['url'] not in previously_seen else ''}{j['title']} | {j.get('location', 'location unknown')} ({j.get('date', 'date unknown')})\n  {j['url']}" for j in jobs
+            f"- {'[NEW] ' if _is_new(j) else ''}{j['title']} | {j.get('location', 'location unknown')} ({j.get('date', 'date unknown')})\n  {j['url']}" for j in jobs
         )
 
     msg = MIMEMultipart("alternative")
@@ -374,8 +395,11 @@ async def main():
     print("=" * 60)
 
     previously_seen = load_seen_urls()
-    new_jobs = [j for j in jobs if j["url"] not in previously_seen]
-    print(f"New roles (not seen before): {len(new_jobs)}")
+    new_jobs = [
+        j for j in jobs
+        if j["url"] not in previously_seen and is_recent_post(j.get("date", ""))
+    ]
+    print(f"New roles (unseen and posted < 2 days ago): {len(new_jobs)}")
 
     save_seen_urls(previously_seen | {j["url"] for j in jobs})
 
