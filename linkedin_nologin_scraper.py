@@ -364,7 +364,7 @@ def send_email(new_jobs: list[dict]) -> None:
 
     rows    = "".join(job_row(j) for j in new_jobs)
     subject = (
-        f"LinkedIn PAGINATION TEST: {len(new_jobs)} new role(s) — "
+        f"LinkedIn (No-Login): {len(new_jobs)} new role(s) — "
         f"{datetime.now(ET).strftime('%b %d %I:%M %p ET')}"
     )
     body = f"""
