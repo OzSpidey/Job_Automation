@@ -123,6 +123,8 @@ def send_summary_email(all_jobs: list[dict]) -> None:
         print("[!] EMAIL_PASSWORD not set — skipping email notification.")
         return
 
+    all_jobs = [r for r in all_jobs if (r.get("company") or "").strip().lower() != "launch2"]
+
     n_applied  = sum(1 for r in all_jobs if r["status"] == "applied")
     n_failed   = sum(1 for r in all_jobs if r["status"] in ("failed", "error"))
     n_skipped  = sum(1 for r in all_jobs if r["status"].startswith("skipped"))
