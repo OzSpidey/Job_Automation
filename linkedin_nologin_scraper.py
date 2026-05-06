@@ -49,8 +49,7 @@ ROLES = [
 
 GEO_ID         = "103644278"  # United States
 TIME_WINDOW    = "r7200"      # jobs posted in last 2 hours (buffer for LinkedIn indexing latency)
-MAX_PAGES      = 5            # pages per role (guest API returns ~10 cards per page, regardless of filter)
-DUPE_THRESHOLD = 0.7          # stop paginating when ≥70% of a page is already in seen (only checked from page 3 onwards)
+MAX_PAGES      = 3            # pages per role (guest API returns ~10 cards per page, regardless of filter)
 FETCH_DETAILS  = True         # fetch job description to check experience requirements
 DETAIL_MAX_AGE_MIN = 30       # skip detail fetch for jobs older than this (rely on card-level easy_apply)
 REPOST_ID_GAP  = 3_000_000   # job IDs this far below the reference max are flagged as reposts
@@ -423,14 +422,10 @@ def main():
                 break
 
             print(f"    Got {len(cards)} cards")
-            added         = 0
-            already_seen  = 0
+            added = 0
 
             for job in cards:
                 jid = job["job_id"]
-
-                if jid in seen_ids or jid in seen:
-                    already_seen += 1
 
                 if jid in seen_ids:
                     continue
@@ -456,11 +451,7 @@ def main():
                 all_jobs.append(job)
                 added += 1
 
-            print(f"    Added {added} new jobs this page  ({already_seen}/{len(cards)} previously seen)")
-
-            if page >= 2 and already_seen / len(cards) >= DUPE_THRESHOLD:
-                print(f"    Dupe saturation (≥{int(DUPE_THRESHOLD*100)}%) — stopping pagination.")
-                break
+            print(f"    Added {added} new jobs this page")
 
             offset += len(cards)
             time.sleep(random.uniform(3, 6))
