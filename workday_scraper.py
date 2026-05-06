@@ -202,6 +202,45 @@ _FOREIGN_COUNTRY_RE = re.compile(
     re.I,
 )
 
+# Major US cities — fallback when location omits state code or "USA"
+# (e.g. Inspire Brands posts "Atlanta Support Center", Walmart "Bentonville Home Office").
+# _FOREIGN_COUNTRY_RE runs first, so "Cambridge, UK" / "Birmingham, UK" are still rejected.
+_US_CITIES = [
+    # Top US metros
+    "atlanta", "austin", "baltimore", "boston", "buffalo", "charlotte", "chicago",
+    "cincinnati", "cleveland", "columbus", "dallas", "denver", "detroit", "houston",
+    "indianapolis", "jacksonville", "kansas city", "las vegas", "los angeles",
+    "memphis", "miami", "milwaukee", "minneapolis", "nashville", "new orleans",
+    "new york", "nyc", "manhattan", "brooklyn", "queens", "bronx",
+    "oakland", "oklahoma city", "omaha", "orlando", "philadelphia", "phoenix",
+    "pittsburgh", "portland", "raleigh", "durham", "richmond", "sacramento",
+    "salt lake city", "san antonio", "san diego", "san francisco", "san jose",
+    "seattle", "st. louis", "st louis", "st. paul", "st paul",
+    "tampa", "tucson", "tulsa", "washington dc", "washington d.c.",
+    # Bay Area tech
+    "berkeley", "cupertino", "emeryville", "fremont", "menlo park", "mountain view",
+    "palo alto", "redwood city", "san mateo", "santa clara", "sunnyvale",
+    # Pacific NW tech
+    "bellevue", "kirkland", "redmond",
+    # Boston tech
+    "cambridge", "somerville", "waltham", "burlington",
+    # NY tristate corp
+    "armonk", "jersey city", "newark", "princeton", "stamford", "white plains", "yonkers",
+    # Texas tech / finance
+    "fort worth", "frisco", "plano", "el paso", "corpus christi",
+    # Walmart corridor
+    "bentonville", "fayetteville", "rogers",
+    # Other notable HQ / metro towns
+    "ann arbor", "boise", "boulder", "charleston", "colorado springs", "fort lauderdale",
+    "grand rapids", "hartford", "honolulu", "irvine", "long beach", "louisville",
+    "madison", "new haven", "providence", "reno", "rochester", "spokane", "tacoma",
+    "tallahassee", "knoxville", "lexington", "albuquerque",
+]
+_US_CITY_RE = re.compile(
+    r'\b(' + '|'.join(re.escape(c).replace(' ', r'\s+') for c in _US_CITIES) + r')\b',
+    re.I,
+)
+
 # ── Age parser — "Posted 3 Days Ago" / "Posted Today" / "Posted 30+ Days Ago" ──
 POSTED_DAYS_RE = re.compile(r"(\d+)\+?\s+day", re.I)
 
@@ -292,7 +331,11 @@ def is_us_location(location: str) -> bool:
     if _FOREIGN_COUNTRY_RE.search(location):
         if not re.search(r"\bnew\s+mexico\b", location, re.I):
             return False
-    return bool(_US_KEYWORDS_RE.search(location) or _US_STATE_ABBR_RE.search(location))
+    return bool(
+        _US_KEYWORDS_RE.search(location)
+        or _US_STATE_ABBR_RE.search(location)
+        or _US_CITY_RE.search(location)
+    )
 
 
 def posted_days_ago(posted_text: str) -> int:
