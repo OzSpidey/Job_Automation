@@ -39,19 +39,18 @@ except ImportError:
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
 ROLES = [
-    "Data Engineer",
-    "Data Analyst",
-    "Business Intelligence Analyst",
-    "Business Intelligence Engineer",
-    "Analytics Engineer",
-    "AI Engineer",
+    ("Data Engineer",         3),
+    ("Data Analyst",          3),
+    ("Business Intelligence", 3),
+    ("Analytics Engineer",    1),
+    ("AI Engineer",           1),
 ]
 
-GEO_ID        = "103644278"  # United States
-TIME_WINDOW   = "r7200"      # jobs posted in last 2 hours (buffer for LinkedIn indexing latency)
-MAX_PAGES     = 5            # pages per role (25 jobs per page)
-FETCH_DETAILS = True         # fetch job description to check experience requirements
-REPOST_ID_GAP = 3_000_000   # job IDs this far below the reference max are flagged as reposts
+GEO_ID         = "103644278"  # United States
+TIME_WINDOW    = "r7200"      # jobs posted in last 2 hours (buffer for LinkedIn indexing latency)
+FETCH_DETAILS  = True         # fetch job description to check experience requirements
+DETAIL_MAX_AGE_MIN = 30       # skip detail fetch for jobs older than this (rely on card-level easy_apply)
+REPOST_ID_GAP  = 3_000_000   # job IDs this far below the reference max are flagged as reposts
 
 SKIP_COMPANY_KEYWORDS = {"rotaract"}
 
@@ -239,13 +238,13 @@ def parse_work_type(text: str) -> str:
 
 # ── FETCH SEARCH PAGE ─────────────────────────────────────────────────────────
 
-def fetch_job_cards(role: str, page: int = 0) -> list[dict]:
+def fetch_job_cards(role: str, offset: int = 0) -> list[dict]:
     resp = _get(SEARCH_URL, params={
         "keywords": role,
         "geoId":    GEO_ID,
         "f_TPR":    TIME_WINDOW,
         "f_JT":     "F",
-        "start":    page * 25,
+        "start":    offset,
     })
     if not resp:
         return []
@@ -316,16 +315,36 @@ def send_email(new_jobs: list[dict]) -> None:
         return
 
     def job_row(j):
-        exp_cell     = f"{j['min_exp_years']}yr" if j.get("min_exp_years") else "—"
-        ea_cell      = "✅ Yes" if j.get("easy_apply") else "No"
-        sponsor_val  = j.get("sponsorship")
-        sponsor_cell = (
-            "<span style='color:green;font-weight:bold'>Yes</span>" if sponsor_val == "yes"
-            else "<span style='color:#c0392b'>No</span>"            if sponsor_val == "no"
+        skipped      = j.get("detail_skipped", False)
+        unk          = "<span style='color:#888'>Unknown</span>"
+
+        exp_cell = (
+            f"{j['min_exp_years']}yr" if j.get("min_exp_years")
+            else unk if skipped
             else "—"
         )
+        if j.get("easy_apply"):
+            ea_cell = "✅ Yes"
+        elif skipped:
+            ea_cell = unk
+        else:
+            ea_cell = "No"
+
+        sponsor_val = j.get("sponsorship")
+        if sponsor_val == "yes":
+            sponsor_cell = "<span style='color:green;font-weight:bold'>Yes</span>"
+        elif sponsor_val == "no":
+            sponsor_cell = "<span style='color:#c0392b'>No</span>"
+        elif skipped:
+            sponsor_cell = unk
+        else:
+            sponsor_cell = "—"
+
         repost_cell  = "<span style='color:#e67e22;font-weight:bold'>⚠ Yes</span>" if j.get("reposted") else "No"
-        wt           = j.get("work_type", "—")
+
+        wt_val = j.get("work_type", "—")
+        wt     = unk if (skipped and wt_val == "—") else wt_val
+
         row_bg       = "#27ae60" if (j.get("easy_apply") and sponsor_val == "yes") else "#d4edda"
         row_color    = "color:white;font-weight:bold" if row_bg == "#27ae60" else ""
         return (
@@ -388,12 +407,13 @@ def main():
     all_jobs = []
     seen_ids = set()
 
-    for role in ROLES:
+    for role, max_pages in ROLES:
         print(f"\n[+] Role: {role}")
 
-        for page in range(MAX_PAGES):
-            print(f"    Page {page + 1}/{MAX_PAGES}...")
-            cards = fetch_job_cards(role, page)
+        offset = 0
+        for page in range(max_pages):
+            print(f"    Page {page + 1}/{max_pages} (start={offset})...")
+            cards = fetch_job_cards(role, offset)
 
             if not cards:
                 print("    No results — stopping pagination.")
@@ -414,23 +434,24 @@ def main():
                     print(f"    SKIP company: {job['company']}")
                     continue
 
-                if FETCH_DETAILS:
-                    time.sleep(random.uniform(1.5, 3.5))
+                if jid in seen:
+                    continue
+
+                if FETCH_DETAILS and parse_posted_minutes(job["posted"]) <= DETAIL_MAX_AGE_MIN:
+                    time.sleep(random.uniform(1.0, 1.6))
                     card_ea = job.get("easy_apply", False)
                     detail  = fetch_job_detail(jid)
                     job.update(detail)
                     job["easy_apply"] = card_ea or job.get("easy_apply", False)
+                else:
+                    job["detail_skipped"] = True
 
-
-                if jid not in seen:
-                    all_jobs.append(job)
-                    added += 1
+                all_jobs.append(job)
+                added += 1
 
             print(f"    Added {added} new jobs this page")
 
-            if len(cards) < 25:
-                break
-
+            offset += len(cards)
             time.sleep(random.uniform(3, 6))
 
         time.sleep(random.uniform(4, 8))
@@ -448,9 +469,16 @@ def main():
         for j in all_jobs:
             j["reposted"] = (reference_max - int(j["job_id"])) > REPOST_ID_GAP
 
+    def ea_bucket(j):
+        if j.get("easy_apply"):
+            return 0          # known Easy Apply
+        if j.get("detail_skipped"):
+            return 2          # unknown (didn't fetch detail)
+        return 1              # known not Easy Apply
+
     target = sorted(
         [j for j in all_jobs if not SENIOR_RE.search(j["title"])],
-        key=lambda j: parse_posted_minutes(j["posted"])
+        key=lambda j: (ea_bucket(j), parse_posted_minutes(j["posted"]))
     )
     senior = [j for j in all_jobs if SENIOR_RE.search(j["title"])]
 
