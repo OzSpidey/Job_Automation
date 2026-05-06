@@ -48,7 +48,7 @@ ROLES = [
 ]
 
 GEO_ID        = "103644278"  # United States
-TIME_WINDOW   = "r3600"      # jobs posted in last 1 hour
+TIME_WINDOW   = "r7200"      # jobs posted in last 2 hours (buffer for LinkedIn indexing latency)
 MAX_PAGES     = 5            # pages per role (25 jobs per page)
 FETCH_DETAILS = True         # fetch job description to check experience requirements
 REPOST_ID_GAP = 3_000_000   # job IDs this far below the reference max are flagged as reposts

@@ -44,7 +44,7 @@ ROLES = [
 ]
 
 GEO_ID        = "102713980"  # India
-TIME_WINDOW   = "r3600"      # jobs posted in last 1 hour
+TIME_WINDOW   = "r7200"      # jobs posted in last 2 hours (buffer for LinkedIn indexing latency)
 MAX_PAGES     = 3            # pages per role (25 jobs per page)
 MAX_EXP_YEARS = 2            # skip jobs requiring more than this many years
 FETCH_DETAILS = True         # fetch job description to check experience requirements
