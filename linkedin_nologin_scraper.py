@@ -480,9 +480,16 @@ def main():
         for j in all_jobs:
             j["reposted"] = (reference_max - int(j["job_id"])) > REPOST_ID_GAP
 
+    def ea_bucket(j):
+        if j.get("easy_apply"):
+            return 0          # known Easy Apply
+        if j.get("detail_skipped"):
+            return 2          # unknown (didn't fetch detail)
+        return 1              # known not Easy Apply
+
     target = sorted(
         [j for j in all_jobs if not SENIOR_RE.search(j["title"])],
-        key=lambda j: (not j.get("easy_apply"), parse_posted_minutes(j["posted"]))
+        key=lambda j: (ea_bucket(j), parse_posted_minutes(j["posted"]))
     )
     senior = [j for j in all_jobs if SENIOR_RE.search(j["title"])]
 
