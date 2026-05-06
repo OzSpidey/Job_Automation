@@ -424,7 +424,7 @@ def main():
                     continue
 
                 if FETCH_DETAILS:
-                    time.sleep(random.uniform(1.5, 3.5))
+                    time.sleep(random.uniform(1.0, 1.6))
                     card_ea = job.get("easy_apply", False)
                     detail  = fetch_job_detail(jid)
                     job.update(detail)
