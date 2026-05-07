@@ -7900,5 +7900,71 @@
     "tenant": "zoom",
     "instance": "wd5",
     "career": "Zoom"
+  },
+  {
+    "name": "Continental Resources",
+    "tenant": "clr",
+    "instance": "wd5",
+    "career": "CLR_Careers"
+  },
+  {
+    "name": "Land O'Lakes",
+    "tenant": "landolakes",
+    "instance": "wd1",
+    "career": "LandOLakes"
+  },
+  {
+    "name": "PBF Energy",
+    "tenant": "pbfenergy",
+    "instance": "wd1",
+    "career": "PBF"
+  },
+  {
+    "name": "Plains All American Pipeline",
+    "tenant": "plains",
+    "instance": "wd1",
+    "career": "plains"
+  },
+  {
+    "name": "Mosaic Company",
+    "tenant": "mosaic",
+    "instance": "wd5",
+    "career": "mosaic"
+  },
+  {
+    "name": "Thrivent Financial",
+    "tenant": "thrivent",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "UFP Industries",
+    "tenant": "ufpi",
+    "instance": "wd503",
+    "career": "ufpi"
+  },
+  {
+    "name": "World Fuel Services / World Kinect",
+    "tenant": "wfscorp",
+    "instance": "wd5",
+    "career": "wfscareers"
+  },
+  {
+    "name": "Winebow",
+    "tenant": "winebow",
+    "instance": "wd501",
+    "career": "Winebow"
+  },
+  {
+    "name": "Trintech",
+    "tenant": "trintech",
+    "instance": "wd501",
+    "career": "Trintech"
+  },
+  {
+    "name": "Vitalant",
+    "tenant": "vitalant",
+    "instance": "wd12",
+    "career": "Careers"
   }
 ]
