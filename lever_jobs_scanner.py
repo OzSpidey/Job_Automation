@@ -66,30 +66,29 @@ COMPANIES = [
     "hevo", "matillion", "acceldata", "logrocket",
     "tinybird", "qonto",
     # Tech / SaaS
-    "outreach", "pipedrive", "clari", "contentsquare", "algolia",
-    "intercom", "typeform", "contentful", "sanity", "prismic",
-    "metabase", "linear", "postman", "sentry", "launchdarkly",
+    "outreach", "pipedrive", "clari", "contentsquare",
+    "prismic",
+    "metabase",
     "toptal", "gohighlevel", "attentive", "activecampaign",
     "bazaarvoice", "okendo", "entrata", "agiloft", "regrello",
     "conversica", "secureframe", "jobvite", "angellist", "findem",
     "skillshare", "brilliant",
     "freshworks", "houzz", "atlassian", "netflix",
     # Cloud / Infra / Security
-    "anyscale", "neon", "cockroachlabs", "temporal", "netlify",
-    "tailscale", "render", "replicate", "jumpcloud", "sysdig",
+    "anyscale", "neon", "jumpcloud", "sysdig",
     "verygoodsecurity", "evidentid",
     "teleport", "saviynt", "sonatype", "logz",
     # Fintech / Crypto
-    "plaid", "anchorage", "zerion", "ledger", "remitly", "relay",
-    "clearco", "pipe", "fundrise",
+    "plaid", "anchorage", "zerion", "ledger", "relay",
+    "fundrise",
     "kraken", "alloy", "sure", "better",
     # Healthcare / Wellness / Bio
-    "ro", "lyrahealth", "color", "tempus", "benchsci", "modernhealth",
-    "headspace", "forward", "helix", "insitro", "zocdoc", "veeva",
+    "ro", "lyrahealth", "color", "benchsci",
+    "veeva",
     "artera", "quantum-health", "nava",
     # Media / Consumer / Gaming
-    "spotify", "theathletic", "medium", "patreon", "rover",
-    "gopuff", "turo", "kabam", "whereby",
+    "spotify", "theathletic", "medium", "rover",
+    "gopuff", "kabam", "whereby",
     # Logistics / Supply Chain
     "loadsmart",
     "duffel", "resilinc", "meroxa",
@@ -102,7 +101,7 @@ COMPANIES = [
     # Fintech (additional)
     "wealthfront",
     # HR / People Ops
-    "15five", "trinet", "justworks", "bamboohr", "leapsome", "linkedin", "cornerstone",
+    "15five", "trinet", "linkedin", "cornerstone",
     "achievers", "deputy",
     # Security (additional)
     "sophos",
@@ -119,7 +118,7 @@ COMPANIES = [
     # EdTech
     "bloom",
     # Other / Misc
-    "lever", "greenhouse",
+    "lever",
     "canarytechnologies", "hhaexchange", "BestEgg", "3pillarglobal",
     "integrate", "electricmind", "thinkahead", "insiderone",
     "adhoclabs", "startengine", "repurposeglobal", "venteur",
@@ -171,6 +170,13 @@ COMPANIES = [
     "drivetrain",
     # Fintech / Healthcare (agent-verified)
     "zopa", "pointclickcare",
+    # Round 1 - probe-verified 2026-05-07 (with active jobs)
+    "dlocal", "swordhealth", "emburse", "xcimer", "cloudinary",
+    "velo3d", "pyka", "microventures", "harmony", "keboola",
+    "nimbus", "deepgenomics", "illumination",
+    # Round 1 - probe-verified 2026-05-07 (live boards, no active jobs)
+    "gamma", "jetbrains", "velocityglobal", "emitwise", "fitbod",
+    "kpmg", "metaview",
 ]
 
 COMPANIES = list(dict.fromkeys(COMPANIES))  # dedupe, preserve order
