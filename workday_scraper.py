@@ -183,7 +183,17 @@ _US_STATES = (
 # Split into two regexes: keywords are case-insensitive, but state abbreviations must
 # be uppercase — "Al" (Arabic definite article) and "IN" (Indian state codes) are
 # common in foreign addresses and were falsely matching AL/IN with re.I.
-_US_KEYWORDS_RE = re.compile(r"\b(united\s+states|usa|u\.s\.a?\.?|remote)\b", re.I)
+_US_KEYWORDS_RE = re.compile(
+    r"\b(united\s+states|usa|u\.s\.a?\.?|remote"
+    r"|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware"
+    r"|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana"
+    r"|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana"
+    r"|nebraska|nevada|new\s+hampshire|new\s+jersey|new\s+mexico|new\s+york"
+    r"|north\s+carolina|north\s+dakota|ohio|oklahoma|oregon|pennsylvania|puerto\s+rico"
+    r"|rhode\s+island|south\s+carolina|south\s+dakota|tennessee|texas|utah|vermont"
+    r"|virginia|washington|west\s+virginia|wisconsin|wyoming|district\s+of\s+columbia)\b",
+    re.I,
+)
 _US_STATE_ABBR_RE = re.compile(rf"\b({_US_STATES})\b")  # case-sensitive — uppercase only
 # State abbreviations like DE/IN/ME/CO are ambiguous — "de" is a Spanish preposition,
 # "IN" appears in Indian city names, etc. Explicitly exclude known foreign countries
@@ -339,10 +349,12 @@ def is_us_location(location: str) -> bool:
 
 
 def posted_days_ago(posted_text: str) -> int:
-    """Parse 'Posted 3 Days Ago' → 3. 'Posted Today' → 0. '30+' → 31."""
+    """Parse 'Posted 3 Days Ago' → 3. 'Posted Today' → 0. 'Posted Yesterday' → 1. '30+' → 31."""
     text = posted_text.lower()
     if "today" in text or "just now" in text or "hour" in text:
         return 0
+    if "yesterday" in text:
+        return 1
     m = POSTED_DAYS_RE.search(text)
     if m:
         n = int(m.group(1))
