@@ -1,10 +1,10 @@
-name: Amazon India Jobs Scanner
+name: Amazon India Scraper
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write            # needed to commit amazon_india_api_seen_jobs.json back
 
 jobs:
   scan:
@@ -21,33 +21,20 @@ jobs:
           cache: 'pip'
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: pip install python-dotenv
 
-      - name: Cache Playwright browser
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-v2-${{ hashFiles('requirements.txt') }}
-
-      - name: Install Playwright browser
-        run: playwright install chromium
-
-      - name: Install Playwright system deps
-        run: playwright install-deps chromium
-
-      - name: Run Amazon India Jobs Scanner
+      - name: Run Amazon India Scraper
         env:
           EMAIL_TO_INDIA:     ${{ secrets.EMAIL_TO_INDIA }}
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: python amazon_india_jobs_scanner.py
+        run: python amazon_india_scraper.py
 
       - name: Persist seen-jobs list
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/amazon_seen_jobs_india.json
+          git add json/amazon_india_api_seen_jobs.json
           git diff --staged --quiet || git commit -m "chore: update amazon india seen jobs [skip ci]"
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push && break
