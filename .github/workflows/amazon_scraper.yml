@@ -1,10 +1,10 @@
-name: Amazon Jobs Scanner
+name: Amazon Scraper
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write            # Needed to commit amazon_seen_jobs.json back
+  contents: write            # needed to commit amazon_api_seen_jobs.json back
 
 jobs:
   scan:
@@ -21,34 +21,21 @@ jobs:
           cache: 'pip'
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: pip install python-dotenv
 
-      - name: Cache Playwright browser
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-v2-${{ hashFiles('requirements.txt') }}
-
-      - name: Install Playwright browser
-        run: playwright install chromium
-
-      - name: Install Playwright system deps
-        run: playwright install-deps chromium
-
-      - name: Run Amazon Jobs Scanner
+      - name: Run Amazon Scraper
         env:
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: python amazon_jobs_scanner.py
+        run: python amazon_scraper.py
 
       - name: Persist seen-jobs list
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/amazon_seen_jobs.json
-          git diff --staged --quiet || git commit -m "chore: update seen jobs [skip ci]"
+          git add json/amazon_api_seen_jobs.json
+          git diff --staged --quiet || git commit -m "chore: update amazon seen jobs [skip ci]"
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push && break
             echo "Push attempt $i failed, retrying in $((i * 3))s..."
