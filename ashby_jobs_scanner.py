@@ -38,7 +38,7 @@ RECIPIENTS      = [e.strip() for e in os.environ.get("EMAIL_TO", "").split(",") 
 
 SEEN_FILE    = Path(__file__).parent / "json" / "ashby_seen_jobs.json"
 CONCURRENCY  = 20
-MAX_AGE_DAYS = 30  # wider window — Ashby is lower volume than Lever
+MAX_AGE_DAYS = 2  # today + last 2 days
 
 ALLOWED_TITLES = re.compile(
     r"\b(analyst|data\s+scientist|engineer|developer)\b",
