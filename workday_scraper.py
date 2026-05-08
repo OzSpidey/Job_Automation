@@ -57,8 +57,8 @@ _ROLES = {
     },
     "bi": {
         "label":        "Business Intelligence",
-        "search_terms": ["Business Intelligence", "Business Insights Analyst", "BI Analyst"],
-        "allow_re":     re.compile(r"\b(business\s+intelligence|business\s+insights\s+analyst|bi\s+analyst)\b", re.I),
+        "search_terms": ["Business Intelligence", "Business Insights Analyst", "BI Analyst", "BI Developer", "BI Engineer", "BI Specialist"],
+        "allow_re":     re.compile(r"\b(business\s+intelligence|business\s+insights\s+analyst|bi\s+(analyst|developer|engineer|specialist))\b", re.I),
         "seen_log":     "workday_seen_bi.json",
         "output_csv":   "workday_jobs_bi.csv",
     },
