@@ -41,9 +41,7 @@ CONCURRENCY  = 20
 MAX_AGE_DAYS = 30  # wider window — Ashby is lower volume than Lever
 
 ALLOWED_TITLES = re.compile(
-    r"\b(data\s+engineer|data\s+analyst|analytics\s+engineer|analytics\s+analyst"
-    r"|business\s+intelligence\s+analyst|machine\s+learning\s+engineer"
-    r"|data\s+scientist|ai\s+engineer|software\s+developer|software\s+engineer)\b",
+    r"\b(analyst|data\s+scientist|engineer|developer)\b",
     re.I
 )
 SKIP_TITLE_RE = re.compile(
