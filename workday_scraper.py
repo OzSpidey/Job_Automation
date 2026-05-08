@@ -62,32 +62,17 @@ _ROLES = {
         "seen_log":     "workday_seen_bi.json",
         "output_csv":   "workday_jobs_bi.csv",
     },
-    "bia": {
-        "label":        "BI Analyst",
-        "search_terms": ["BI Analyst", "Business Analyst"],
-        "allow_re":     re.compile(r"\b(bi\s+(analyst|developer|engineer|specialist)|business\s+analyst)\b", re.I),
-        "seen_log":     "workday_seen_bia.json",
-        "output_csv":   "workday_jobs_bia.csv",
-    },
-    "ra": {
-        "label":        "Reporting Analyst",
-        "search_terms": ["Reporting Analyst"],
-        "allow_re":     re.compile(r"\breporting\s+analyst\b", re.I),
-        "seen_log":     "workday_seen_ra.json",
-        "output_csv":   "workday_jobs_ra.csv",
-    },
-    "aa": {
-        "label":        "Analytics Analyst",
-        "search_terms": ["Analytics Analyst", "Advanced Analytics"],
+    "analyst": {
+        "label":        "Analyst",
+        "search_terms": ["Business Analyst", "Analytics Analyst", "Reporting Analyst", "Advanced Analytics"],
         "allow_re":     re.compile(
-            r"\banalytics\s+analyst\b"
-            r"|\badvanced\s+analytics\b"
+            r"\b(business|analytics|reporting|advanced)\s+(\w+\s+){0,2}(analyst|analytics)\b"
             r"|\banalyst\b.{0,40}\banalytics\b"
             r"|\banalytics\b.{0,40}\banalyst\b",
-            re.I
+            re.I,
         ),
-        "seen_log":     "workday_seen_aa.json",
-        "output_csv":   "workday_jobs_aa.csv",
+        "seen_log":     "workday_seen_analyst.json",
+        "output_csv":   "workday_jobs_analyst.csv",
     },
     "ds": {
         "label":        "Data Scientist",
@@ -121,7 +106,7 @@ _ROLES = {
 
 # ── Parse role argument ────────────────────────────────────────────────────────
 _parser = argparse.ArgumentParser(add_help=False)
-_parser.add_argument("--role", choices=["de", "da", "bi", "bia", "ra", "aa", "ds", "sd", "se", "aie"], default=None)
+_parser.add_argument("--role", choices=["de", "da", "bi", "analyst", "ds", "sd", "se", "aie"], default=None)
 _parser.add_argument("--batch", choices=["1", "2"], default=None)
 _args, _ = _parser.parse_known_args()
 

@@ -187,8 +187,8 @@ jobs:
             sleep $((RANDOM % 10 + 5))
           done
 
-  scrape-bia-1:
-    name: BI Analyst (1-600)
+  scrape-analyst-1:
+    name: Analyst (1-600)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -203,22 +203,22 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python workday_scraper.py --role bia --batch 1
+        run: python workday_scraper.py --role analyst --batch 1
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/workday_seen_bia_1.json 2>/dev/null || true
-          git add csv/workday_jobs_bia_1.csv 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update BIA-1 seen jobs [skip ci]"
+          git add json/workday_seen_analyst_1.json 2>/dev/null || true
+          git add csv/workday_jobs_analyst_1.csv 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "chore: update ANALYST-1 seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
             sleep $((RANDOM % 10 + 5))
           done
 
-  scrape-bia-2:
-    name: BI Analyst (601-1314)
+  scrape-analyst-2:
+    name: Analyst (601-1314)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -233,134 +233,14 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python workday_scraper.py --role bia --batch 2
+        run: python workday_scraper.py --role analyst --batch 2
       - name: Save seen-IDs
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/workday_seen_bia_2.json 2>/dev/null || true
-          git add csv/workday_jobs_bia_2.csv 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update BIA-2 seen jobs [skip ci]"
-          git checkout -- . 2>/dev/null || true
-          for i in 1 2 3 4 5; do
-            git pull --rebase && git push && break
-            sleep $((RANDOM % 10 + 5))
-          done
-
-  scrape-ra-1:
-    name: Reporting Analyst (1-600)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install requests python-dotenv
-      - name: Run scraper
-        env:
-          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python workday_scraper.py --role ra --batch 1
-      - name: Save seen-IDs
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/workday_seen_ra_1.json 2>/dev/null || true
-          git add csv/workday_jobs_ra_1.csv 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update RA-1 seen jobs [skip ci]"
-          git checkout -- . 2>/dev/null || true
-          for i in 1 2 3 4 5; do
-            git pull --rebase && git push && break
-            sleep $((RANDOM % 10 + 5))
-          done
-
-  scrape-ra-2:
-    name: Reporting Analyst (601-1314)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install requests python-dotenv
-      - name: Run scraper
-        env:
-          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python workday_scraper.py --role ra --batch 2
-      - name: Save seen-IDs
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/workday_seen_ra_2.json 2>/dev/null || true
-          git add csv/workday_jobs_ra_2.csv 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update RA-2 seen jobs [skip ci]"
-          git checkout -- . 2>/dev/null || true
-          for i in 1 2 3 4 5; do
-            git pull --rebase && git push && break
-            sleep $((RANDOM % 10 + 5))
-          done
-
-  scrape-aa-1:
-    name: Analytics Analyst (1-600)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install requests python-dotenv
-      - name: Run scraper
-        env:
-          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python workday_scraper.py --role aa --batch 1
-      - name: Save seen-IDs
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/workday_seen_aa_1.json 2>/dev/null || true
-          git add csv/workday_jobs_aa_1.csv 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update AA-1 seen jobs [skip ci]"
-          git checkout -- . 2>/dev/null || true
-          for i in 1 2 3 4 5; do
-            git pull --rebase && git push && break
-            sleep $((RANDOM % 10 + 5))
-          done
-
-  scrape-aa-2:
-    name: Analytics Analyst (601-1314)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install requests python-dotenv
-      - name: Run scraper
-        env:
-          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
-        run: python workday_scraper.py --role aa --batch 2
-      - name: Save seen-IDs
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/workday_seen_aa_2.json 2>/dev/null || true
-          git add csv/workday_jobs_aa_2.csv 2>/dev/null || true
-          git diff --cached --quiet || git commit -m "chore: update AA-2 seen jobs [skip ci]"
+          git add json/workday_seen_analyst_2.json 2>/dev/null || true
+          git add csv/workday_jobs_analyst_2.csv 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "chore: update ANALYST-2 seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
