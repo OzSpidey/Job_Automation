@@ -81,19 +81,12 @@ _ROLES = {
         "seen_log":     "workday_seen_ds.json",
         "output_csv":   "workday_jobs_ds.csv",
     },
-    "sd": {
-        "label":        "Software Developer",
-        "search_terms": ["Software Developer"],
-        "allow_re":     re.compile(r"\bsoftware\s+developer\b", re.I),
-        "seen_log":     "workday_seen_sd.json",
-        "output_csv":   "workday_jobs_sd.csv",
-    },
-    "se": {
-        "label":        "Software Engineer",
-        "search_terms": ["Software Engineer"],
-        "allow_re":     re.compile(r"\bsoftware\s+engineer\b", re.I),
-        "seen_log":     "workday_seen_se.json",
-        "output_csv":   "workday_jobs_se.csv",
+    "swe": {
+        "label":        "Software Engineer/Developer",
+        "search_terms": ["Software Engineer", "Software Developer"],
+        "allow_re":     re.compile(r"\bsoftware\s+(engineer|developer)\b", re.I),
+        "seen_log":     "workday_seen_swe.json",
+        "output_csv":   "workday_jobs_swe.csv",
     },
     "aie": {
         "label":        "AI Engineer",
@@ -106,7 +99,7 @@ _ROLES = {
 
 # ── Parse role argument ────────────────────────────────────────────────────────
 _parser = argparse.ArgumentParser(add_help=False)
-_parser.add_argument("--role", choices=["de", "da", "bi", "analyst", "ds", "sd", "se", "aie"], default=None)
+_parser.add_argument("--role", choices=["de", "da", "bi", "analyst", "ds", "swe", "aie"], default=None)
 _parser.add_argument("--batch", choices=["1", "2"], default=None)
 _args, _ = _parser.parse_known_args()
 
