@@ -212,23 +212,6 @@ _FOREIGN_COUNTRY_RE = re.compile(
     re.I,
 )
 
-# Workday encodes some foreign locations as ISO country codes without the
-# country name, e.g. "Hyderabad - TS - IN", "Toronto - ON - CA". The trailing
-# "- IN" then false-matches the US state abbreviation "IN" (Indiana).
-# Dash separator only — US locations use comma (e.g. "Indianapolis, IN",
-# "San Francisco, CA"), so requiring "-" avoids dropping US states.
-_TRAILING_FOREIGN_CC_RE = re.compile(r"-\s*(IN|CA|UK|DE|FR|JP|CN|AU|MX|BR)\s*$")
-
-# Major foreign cities the country regex misses — Workday often omits the
-# country name when the city is well-known.
-_FOREIGN_CITY_RE = re.compile(
-    r"\b(hyderabad|bengaluru|bangalore|mumbai|new\s+delhi|pune|chennai|kolkata|"
-    r"gurgaon|gurugram|noida|ahmedabad|jaipur|kochi|coimbatore|indore|"
-    r"bhubaneswar|nagpur|vadodara|surat|thiruvananthapuram|visakhapatnam|"
-    r"lucknow|kanpur|patna|bhopal|mysuru|mysore|guwahati|trivandrum)\b",
-    re.I,
-)
-
 # Major US cities — fallback when location omits state code or "USA"
 # (e.g. Inspire Brands posts "Atlanta Support Center", Walmart "Bentonville Home Office").
 # _FOREIGN_COUNTRY_RE runs first, so "Cambridge, UK" / "Birmingham, UK" are still rejected.
@@ -358,9 +341,6 @@ def is_us_location(location: str) -> bool:
     if _FOREIGN_COUNTRY_RE.search(location):
         if not re.search(r"\bnew\s+mexico\b", location, re.I):
             return False
-    # Reject foreign cities and ISO country-code suffixes the country regex misses
-    if _FOREIGN_CITY_RE.search(location) or _TRAILING_FOREIGN_CC_RE.search(location):
-        return False
     return bool(
         _US_KEYWORDS_RE.search(location)
         or _US_STATE_ABBR_RE.search(location)
