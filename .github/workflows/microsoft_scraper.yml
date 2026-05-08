@@ -1,4 +1,4 @@
-name: Microsoft Scraper
+name: Microsoft Jobs Scraper
 
 on:
   workflow_dispatch:
@@ -23,7 +23,7 @@ jobs:
       - name: Install Python dependencies
         run: pip install python-dotenv
 
-      - name: Run Microsoft Scraper
+      - name: Run Microsoft Jobs Scraper
         env:
           MS_TARGET_EMAILS:   ${{ secrets.MS_TARGET_EMAILS }}
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
