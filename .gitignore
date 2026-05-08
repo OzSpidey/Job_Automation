@@ -34,8 +34,8 @@ linkedin_jobs_applied.csv
 linkedin_cookie.txt
 .github/workflows/linkedin_job_applier.yml
 
-# Old Amazon Playwright scraper — kept locally, replaced by amazon_scraper.py
-old_amazon_scraper.py
+# Retired scripts — local-only archive of deprecated scrapers
+retired_scripts/
 
 # Claude internal
 .claude/
