@@ -632,7 +632,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
-WORKERS = 25  # parallel company threads
+WORKERS = 40  # parallel company threads
 
 
 def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter):
