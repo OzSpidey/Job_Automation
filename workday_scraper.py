@@ -657,9 +657,9 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
 
     matched_new = 0
     for job in all_postings:
-        title         = job.get("title", "").strip()
-        location      = job.get("locationsText", "").strip()
-        posted_text   = job.get("postedOn", "").strip()
+        title         = (job.get("title") or "").strip()
+        location      = (job.get("locationsText") or "").strip()
+        posted_text   = (job.get("postedOn") or "").strip()
         external_path = job.get("externalPath", "")
         job_req_id    = job.get("jobReqId", external_path)
 
@@ -667,14 +667,26 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
 
         if not is_allowed_title(title):
             continue
+
+        # Some Workday tenants (e.g. Corewell Health) return null for
+        # locationsText and postedOn on the listing endpoint; the detail
+        # endpoint has them. Fall back so these jobs aren't silently dropped.
+        posting_info = {}
+        if not posted_text or not location:
+            posting_info = fetch_posting_info(company, external_path)
+            if not posted_text:
+                posted_text = (posting_info.get("postedOn") or "").strip()
+            if not location:
+                location = (posting_info.get("location") or "").strip()
+
         if posted_days_ago(posted_text) > MAX_AGE_DAYS:
             continue
 
         # "N Locations" — fetch detail to resolve actual locations
-        posting_info = {}
         is_multi = bool(re.search(r'^\d+\s+locations?$', location.strip(), re.I))
         if is_multi:
-            posting_info = fetch_posting_info(company, external_path)
+            if not posting_info:
+                posting_info = fetch_posting_info(company, external_path)
             actual_locs = get_locations_from_info(posting_info)
             if actual_locs:
                 us_locs = [l for l in actual_locs if is_us_location(l)]
