@@ -49,7 +49,7 @@ ROLE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r'\bdata\s+analyst\b',                        re.I), "Data Analyst"),
     (re.compile(r'\banalytics?\s+engineer\b',                 re.I), "Analytics Engineer"),
     (re.compile(r'\bdata\s+engineer(?:ing)?\b',               re.I), "Data Engineer"),
-    (re.compile(r'\b(?:business\s+intelligence|bi)\s+(?:analyst|developer|engineer|specialist)\b',
+    (re.compile(r'\b(?:business\s+intelligence|bi)\b[^,()]{0,30}?\b(?:analyst|developer|engineer|specialist)\b',
                                                               re.I), "BI"),
     (re.compile(r'\bdata\s+scientist\b',                      re.I), "Data Scientist"),
     (re.compile(r'\bbusiness\s+analyst\b',                    re.I), "Business Analyst"),
@@ -185,6 +185,7 @@ COMPANIES: dict[str, str] = {
     "adyen":              "Adyen",
     "riskified":          "Riskified",
     "amwins":             "Amwins",
+    "fidelityguarantylife": "Fidelity & Guaranty Life",
     # HR Tech / Workforce
     "gusto":              "Gusto",
     "justworks":          "Justworks",
