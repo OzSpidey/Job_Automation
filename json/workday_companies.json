@@ -5958,6 +5958,12 @@
     "career": "External"
   },
   {
+    "name": "Richemont",
+    "tenant": "richemont",
+    "instance": "wd3",
+    "career": "richemont"
+  },
+  {
     "name": "Richland County Government",
     "tenant": "richlandonline",
     "instance": "wd5",
@@ -6424,6 +6430,12 @@
     "tenant": "sundial",
     "instance": "wd10",
     "career": "sndl_careers"
+  },
+  {
+    "name": "Snyk",
+    "tenant": "snyk",
+    "instance": "wd103",
+    "career": "external"
   },
   {
     "name": "Solera",

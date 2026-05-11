@@ -43,8 +43,8 @@ except ImportError:
 _ROLES = {
     "de": {
         "label":        "Data Engineer",
-        "search_terms": ["Data Engineer"],
-        "allow_re":     re.compile(r"\bdata\s+engineer\b", re.I),
+        "search_terms": ["Data Engineer", "Analytics Engineer"],
+        "allow_re":     re.compile(r"\b(data|analytics)\s+engineer\b", re.I),
         "seen_log":     "workday_seen_de.json",
         "output_csv":   "workday_jobs_de.csv",
     },
