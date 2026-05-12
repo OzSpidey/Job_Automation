@@ -37,5 +37,9 @@ linkedin_cookie.txt
 # Retired scripts — local-only archive of deprecated scrapers
 retired_scripts/
 
+# Greenhouse scraper — slug list is private; historical CSV is local-only
+greenhouse_companies.json
+csv/greenhouse_nologin_jobs.csv
+
 # Claude internal
 .claude/
