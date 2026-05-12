@@ -37,7 +37,7 @@ SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 RECIPIENTS      = [e.strip() for e in os.environ.get("EMAIL_TO", "").split(",") if e.strip()]
 
 SEEN_FILE    = Path(__file__).parent / "json" / "ashby_seen_jobs.json"
-CONCURRENCY  = 20
+CONCURRENCY  = 120
 MAX_AGE_DAYS = 2  # today + last 2 days
 
 ALLOWED_TITLES = re.compile(
@@ -142,7 +142,10 @@ async def fetch_company(
     url = f"https://api.ashbyhq.com/posting-api/job-board/{slug}"
     async with sem:
         try:
-            resp = await client.get(url, timeout=10)
+            resp = await client.get(url, timeout=6)
+            if resp.status_code == 429:
+                await asyncio.sleep(5)
+                resp = await client.get(url, timeout=6)
             if resp.status_code != 200:
                 return []
             data = resp.json()
