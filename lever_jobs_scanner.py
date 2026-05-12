@@ -59,125 +59,13 @@ US_LOCATION_RE = re.compile(
     rf"\b(united\s+states|usa|u\.s\.a?\.?|remote|{_US_STATES})\b", re.I
 )
 
-# ── Verified Lever companies ─────────────────────────────────────────────────────
-# Slugs confirmed live via API — add more as you discover them at jobs.lever.co/<slug>
-COMPANIES = [
-    # Data / Analytics
-    "hevo", "matillion", "acceldata", "logrocket",
-    "tinybird", "qonto",
-    # Tech / SaaS
-    "outreach", "pipedrive", "clari", "contentsquare",
-    "prismic",
-    "metabase",
-    "toptal", "gohighlevel", "attentive", "activecampaign",
-    "bazaarvoice", "okendo", "entrata", "agiloft", "regrello",
-    "conversica", "secureframe", "jobvite", "angellist", "findem",
-    "skillshare", "brilliant",
-    "freshworks", "houzz", "atlassian", "netflix",
-    # Cloud / Infra / Security
-    "anyscale", "neon", "jumpcloud", "sysdig",
-    "verygoodsecurity", "evidentid",
-    "teleport", "saviynt", "sonatype", "logz",
-    # Fintech / Crypto
-    "plaid", "anchorage", "zerion", "ledger", "relay",
-    "fundrise",
-    "kraken", "alloy", "sure", "better",
-    # Healthcare / Wellness / Bio
-    "ro", "lyrahealth", "color", "benchsci",
-    "veeva",
-    "artera", "quantum-health", "nava",
-    # Media / Consumer / Gaming
-    "spotify", "theathletic", "medium", "rover",
-    "gopuff", "kabam", "whereby",
-    # Logistics / Supply Chain
-    "loadsmart",
-    "duffel", "resilinc", "meroxa",
-    # Autonomous / Deep Tech
-    "weride", "hermeus", "rigetti", "voltus", "tamr", "toku",
-    "robust-ai",
-    # AI / ML
-    "mistral", "palantir", "whoop",
-    "labelbox", "beam", "humata",
-    # Fintech (additional)
-    "wealthfront",
-    # HR / People Ops
-    "15five", "trinet", "linkedin", "cornerstone",
-    "achievers", "deputy",
-    # Security (additional)
-    "sophos",
-    "accurate",
-    # Data / Streaming
-    "snowplow", "zilliz",
-    # Marketing / E-commerce
-    "omnisend",
-    "kochava",
-    # Climate / Clean Tech
-    "arcadia", "pachama", "verdigris",
-    # Legal Tech
-    "filevine",
-    # EdTech
-    "bloom",
-    # Other / Misc
-    "lever",
-    "canarytechnologies", "hhaexchange", "BestEgg", "3pillarglobal",
-    "integrate", "electricmind", "thinkahead", "insiderone",
-    "adhoclabs", "startengine", "repurposeglobal", "venteur",
-    "cloaked-app", "intersect", "noodle", "jiostar",
-    "oowlish", "hatchit", "jobgether", "revefi",
-    # Fintech / Payments (additional)
-    "binance", "nium", "wealthsimple", "prosper",
-    "rackspace", "spendesk", "ravio",
-    # Sales / Revenue
-    "reply", "stackadapt", "highspot", "mindtickle",
-    # HR / People (additional)
-    "humaans",
-    # Marketing / Analytics
-    "brightedge", "nielsen", "revinate",
-    # Healthcare (additional)
-    "aledade", "everlywell",
-    # PropTech
-    "belong", "lessen",
-    # E-commerce / Retail
-    "skio", "sugarcrm", "olo", "restaurant365", "revel",
-    # Media / Consumer
-    "restream", "playvs", "glide", "super", "thunkable",
-    "buildium",
-    # Learning / Education
-    "360learning", "docebo", "instructure",
-    # Logistics / Ops
-    "getcircuit", "zoox",
-    # Observability / DevTools
-    "100ms", "conduktor", "flatfile", "snaplogic",
-    "pivotal", "lemon",
-    # Finance / Payments
-    "factor",
-    # Data / AI
-    "appen", "superannotate", "aquarium",
-    # Crypto / Web3
-    "1inch", "safe",
-    # Field Service / Hospitality
-    "aircall", "boxcast",
-    # Consulting / Services
-    "bounteous", "cprime",
-    # Hosting / Infra
-    "hostinger", "kinsta", "siteground", "scaleway",
-    # Identity / Verification
-    "finch", "teller",
-    # Misc
-    "arable", "salesmsg", "mirror",
-    "trustarc", "upguard",
-    "caseware", "cority", "payactiv", "topdesk", "wonolo",
-    "drivetrain",
-    # Fintech / Healthcare (agent-verified)
-    "zopa", "pointclickcare",
-    # Round 1 - probe-verified 2026-05-07 (with active jobs)
-    "dlocal", "swordhealth", "emburse", "xcimer", "cloudinary",
-    "velo3d", "pyka", "microventures", "harmony", "keboola",
-    "nimbus", "deepgenomics", "illumination",
-    # Round 1 - probe-verified 2026-05-07 (live boards, no active jobs)
-    "gamma", "jetbrains", "velocityglobal", "emitwise", "fitbod",
-    "kpmg", "metaview",
-]
+# ── Lever board slugs (loaded from gitignored lever_companies.json) ─────────────
+COMPANIES_FILE = Path(__file__).parent / "lever_companies.json"
+try:
+    COMPANIES: list[str] = json.loads(COMPANIES_FILE.read_text(encoding="utf-8"))
+except FileNotFoundError:
+    print(f"[!] Missing {COMPANIES_FILE.name} — set LEVER_COMPANIES_PART1/PART2 secrets or create the file locally.", file=sys.stderr)
+    sys.exit(1)
 
 COMPANIES = list(dict.fromkeys(COMPANIES))  # dedupe, preserve order
 

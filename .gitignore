@@ -41,5 +41,8 @@ retired_scripts/
 greenhouse_companies.json
 csv/greenhouse_nologin_jobs.csv
 
+# Lever scraper — slug list is private
+lever_companies.json
+
 # Claude internal
 .claude/

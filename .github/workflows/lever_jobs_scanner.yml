@@ -24,6 +24,18 @@ jobs:
       - name: Install dependencies
         run: pip install httpx python-dotenv
 
+      - name: Materialize companies JSON from split secrets
+        env:
+          PART1: ${{ secrets.LEVER_COMPANIES_PART1 }}
+          PART2: ${{ secrets.LEVER_COMPANIES_PART2 }}
+        run: |
+          if [ -z "$PART1" ] || [ -z "$PART2" ]; then
+            echo "::error::LEVER_COMPANIES_PART1/PART2 secrets are not set."
+            exit 1
+          fi
+          { printf '%s' "$PART1"; printf '%s' "$PART2"; } | tr -d '\n\r' | base64 -d | gunzip > lever_companies.json
+          python -c "import json; print('companies loaded:', len(json.load(open('lever_companies.json'))))"
+
       - name: Run Lever Jobs Scanner
         env:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
