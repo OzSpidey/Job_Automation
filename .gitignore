@@ -44,5 +44,8 @@ csv/greenhouse_nologin_jobs.csv
 # Lever scraper — slug list is private
 lever_companies.json
 
+# Ashby scraper — slug list is private
+ashby_companies.json
+
 # Claude internal
 .claude/
