@@ -60,6 +60,11 @@ ROLE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r'\b(?:machine\s+learning|ml)\s+engineer\b',  re.I), "ML Engineer"),
     (re.compile(r'\bbackend\s+engineer\b',                    re.I), "Backend Engineer"),
     (re.compile(r'\bfull[\s-]?stack\s+engineer\b',            re.I), "Full-Stack Engineer"),
+    # Generic catch-alls (last — specific patterns above win first)
+    (re.compile(r'\b(?:ai|llm|genai|gen[\s-]?ai)\s+engineer\b', re.I), "AI Engineer"),
+    (re.compile(r'\bengineer(?:ing)?\b',                      re.I), "Engineer"),
+    (re.compile(r'\bdeveloper\b',                             re.I), "Developer"),
+    (re.compile(r'\banalyst\b',                               re.I), "Analyst"),
 ]
 
 SENIOR_RE = re.compile(

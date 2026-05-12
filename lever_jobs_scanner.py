@@ -42,9 +42,7 @@ CONCURRENCY  = 15
 MAX_AGE_DAYS = 7
 
 ALLOWED_TITLES = re.compile(
-    r"\b(data\s+engineer|data\s+analyst|analytics\s+engineer|analytics\s+analyst"
-    r"|business\s+intelligence\s+analyst|machine\s+learning\s+engineer"
-    r"|data\s+scientist|ai\s+engineer|software\s+developer|software\s+engineer)\b",
+    r"\b(analyst|analytics|engineer|developer|data\s+scientist)\b",
     re.I
 )
 SKIP_TITLE_RE  = re.compile(
