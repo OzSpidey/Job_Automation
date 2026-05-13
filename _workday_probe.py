@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """Probe a list of slugs for live Workday career portals.
 
-For each slug, tries every Workday data-center instance (wd1, wd3, wd5, wd12,
-wd14, wd501) and records the first one that returns a Workday page. Writes
-hits to CSV.
+For each slug, tries every (instance, career_path) combination by POSTing to
+the Workday jobs API. The first combination that returns HTTP 200 is recorded
+as a hit. Writes one row per slug (hit or NO_HIT) to CSV.
+
+Status code semantics (discovered by probing real Workday):
+- 200: real tenant + correct career path + correct instance -> HIT
+- 404: tenant exists on this instance but career path is wrong -> try next path
+- 422: wrong instance (or fake tenant) -> skip this instance entirely
+- 406: Workday edge accepts ALL subdomains; root path is useless for probing.
+       Must POST to /wday/cxs/{tenant}/{career}/jobs to get a real signal.
 
 Usage
 -----
@@ -16,19 +23,14 @@ Usage
     # Resume from offset
     python _workday_probe.py --in _workday_candidates.txt --start 10000 --limit 5000
 
-Notes
------
-- DNS misses (slug doesn't exist as a Workday tenant) return NXDOMAIN locally
-  and never hit Workday's infrastructure. Only confirmed hits make an HTTPS
-  round-trip to Workday's CDN.
-- A "hit" = HTTP 200 with `myworkdayjobs.com` in the final URL after redirects.
-- Output CSV columns: slug, instance, status, final_url
+Output CSV columns: slug, instance, career, status, careers_url
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
 import csv
+import json
 import os
 import smtplib
 import sys
@@ -46,52 +48,122 @@ except ImportError:
     sys.exit("Missing dependency. Run: pip install aiohttp")
 
 WD_INSTANCES = ["wd1", "wd3", "wd5", "wd12", "wd14", "wd501"]
+CAREER_PATHS = [
+    "External_Career_Site",
+    "careers",
+    "Careers",
+    "External",
+    "external",
+    "JobBoard",
+    "CareersExternal",
+]
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
+API_PAYLOAD = json.dumps({
+    "searchText": "",
+    "limit": 1,
+    "offset": 0,
+    "locations": [],
+    "appliedFacets": {},
+})
+API_HEADERS = {
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "User-Agent": UA,
+}
 
 EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 EMAIL_TO       = os.environ.get("EMAIL_TO", "")
 
 
-async def probe_one(session: aiohttp.ClientSession, slug: str, instance: str,
-                    sem: asyncio.Semaphore) -> tuple | None:
-    url = f"https://{slug}.{instance}.myworkdayjobs.com/"
+def api_url(slug: str, instance: str, career: str) -> str:
+    return (f"https://{slug}.{instance}.myworkdayjobs.com"
+            f"/wday/cxs/{slug}/{career}/jobs")
+
+
+def portal_url(slug: str, instance: str, career: str) -> str:
+    return f"https://{slug}.{instance}.myworkdayjobs.com/en-US/{career}"
+
+
+async def probe_endpoint(session, slug, instance, career, sem):
+    """POST to the jobs API. Returns HTTP status code, or None on transport error."""
+    url = api_url(slug, instance, career)
     async with sem:
         try:
-            async with session.get(url, allow_redirects=True) as resp:
-                final = str(resp.url)
-                if resp.status == 200 and "myworkdayjobs.com" in final:
-                    return (slug, instance, resp.status, final)
+            async with session.post(url, data=API_PAYLOAD) as r:
+                # Drain the body to free the connection
+                await r.read()
+                return r.status
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError):
-            pass
-    return None
+            return None
+
+
+def dynamic_career_paths(slug: str) -> list[str]:
+    """Generate plausible career-path slugs from the tenant name."""
+    s = slug
+    cap = slug.capitalize()
+    return [s, cap, f"{s}Careers", f"{cap}Careers",
+            f"{s}_Careers", f"{cap}_Careers",
+            f"{s}_Career_Site", f"{cap}_Career_Site",
+            "WD", "CorporateCareers"]
 
 
 async def probe_company(session, slug, sem, results, progress, lock):
-    final_hit = None
+    """Probe every instance. Output one row per slug with one of:
+        200          -> confirmed working URL (careers_url populated)
+        TENANT_EXISTS -> 404 across our career-path attempts (tenant is real
+                         on this instance but uses a custom career slug)
+        NO_HIT        -> 422/error across all instances (not a Workday tenant)
+    """
+    confirmed = None         # (instance, career)  for status=200
+    tenant_exists = None     # instance            for status=TENANT_EXISTS
+
     for instance in WD_INSTANCES:
-        hit = await probe_one(session, slug, instance, sem)
-        if hit:
-            final_hit = hit
+        first_status = await probe_endpoint(session, slug, instance, CAREER_PATHS[0], sem)
+
+        if first_status == 200:
+            confirmed = (instance, CAREER_PATHS[0])
             break
+        if first_status == 422 or first_status is None:
+            continue
+        if first_status == 404:
+            # Tenant exists on this instance. Try other known + dynamic paths.
+            tenant_exists = tenant_exists or instance
+            extra_paths = list(dict.fromkeys(CAREER_PATHS[1:] + dynamic_career_paths(slug)))
+            for career in extra_paths:
+                s = await probe_endpoint(session, slug, instance, career, sem)
+                if s == 200:
+                    confirmed = (instance, career)
+                    break
+            if confirmed:
+                break
+        # else 5xx / weird: try next instance
+
     async with lock:
-        if final_hit:
-            results.append(final_hit)
-            print(f"  HIT  {slug:<40s} {final_hit[1]}", flush=True)
+        if confirmed:
+            inst, career = confirmed
+            results.append((slug, inst, career, "200", portal_url(slug, inst, career)))
+            print(f"  HIT  {slug:<40s} {inst}/{career}", flush=True)
+        elif tenant_exists:
+            results.append((slug, tenant_exists, "", "TENANT_EXISTS", ""))
+            print(f"  ??   {slug:<40s} {tenant_exists} (custom career path)", flush=True)
         else:
-            results.append((slug, "", "NO_HIT", ""))
+            results.append((slug, "", "", "NO_HIT", ""))
+
         progress["done"] += 1
-        hits_so_far = sum(1 for r in results if r[2] != "NO_HIT")
-        if progress["done"] % 200 == 0:
+        if progress["done"] % 100 == 0:
             elapsed = time.time() - progress["t0"]
             rate = progress["done"] / max(elapsed, 0.1)
             eta = (progress["total"] - progress["done"]) / max(rate, 0.1)
+            hits = sum(1 for r in results if r[3] == "200")
+            partial = sum(1 for r in results if r[3] == "TENANT_EXISTS")
             print(
                 f"[{progress['done']}/{progress['total']}] "
-                f"hits={hits_so_far} rate={rate:.1f}/s eta={eta/60:.1f}min",
+                f"hits={hits} tenant_exists={partial} "
+                f"rate={rate:.1f}/s eta={eta/60:.1f}min",
                 flush=True,
             )
 
@@ -106,35 +178,59 @@ def send_email(csv_path: Path) -> None:
 
     rows = list(csv.reader(csv_path.open(encoding="utf-8")))
     header, data = rows[0], rows[1:]
-    hits = [r for r in data if r[2] not in ("NO_HIT", "")]
-    misses = len(data) - len(hits)
+    hits = [r for r in data if r[3] == "200"]
+    partial = [r for r in data if r[3] == "TENANT_EXISTS"]
+    misses = len(data) - len(hits) - len(partial)
 
-    sample_rows = "".join(
-        f"<tr><td>{r[0]}</td><td>{r[1]}</td>"
-        f"<td><a href='{r[3]}'>{r[3]}</a></td></tr>"
+    hit_rows = "".join(
+        f"<tr><td>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td>"
+        f"<td><a href='{r[4]}'>{r[4]}</a></td></tr>"
         for r in hits[:100]
     )
+    partial_rows = "".join(
+        f"<tr><td>{r[0]}</td><td>{r[1]}</td>"
+        f"<td><i>custom career path - check company careers page</i></td></tr>"
+        for r in partial[:50]
+    )
     subject = (
-        f"Workday Tenant Discovery — {len(hits)} hits / {len(data)} probed "
+        f"Workday Tenant Discovery — {len(hits)} confirmed / "
+        f"{len(partial)} tenant-only / {len(data)} probed "
         f"({datetime.now().strftime('%b %d %H:%M')})"
     )
     body = f"""
     <h2 style="font-family:sans-serif">Workday Tenant Discovery</h2>
-    <p><b>{len(hits)}</b> live Workday tenants found out of <b>{len(data)}</b>
-       slugs probed ({misses} misses).</p>
-    <p>Full results attached as <code>{csv_path.name}</code>. Showing first
-       100 hits below:</p>
+    <p>
+      <b>{len(hits)}</b> confirmed working URLs<br>
+      <b>{len(partial)}</b> tenants exist but use a custom career path
+        (returned HTTP 404 — needs manual lookup)<br>
+      <b>{misses}</b> not on Workday<br>
+      <b>{len(data)}</b> total probed
+    </p>
+    <p>Full results attached as <code>{csv_path.name}</code>.</p>
+
+    <h3>Confirmed hits (first 100)</h3>
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#0a66c2;color:white">
-        <th>Slug</th><th>Instance</th><th>Career Portal URL</th>
+        <th>Slug</th><th>Instance</th><th>Career Path</th><th>Career Portal URL</th>
       </tr>
-      {sample_rows or '<tr><td colspan="3">No hits.</td></tr>'}
+      {hit_rows or '<tr><td colspan="4">No confirmed hits.</td></tr>'}
     </table>
+
+    <h3 style="margin-top:24px">Tenants exist but career path unknown (first 50)</h3>
+    <table border="1" cellpadding="6" cellspacing="0"
+           style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
+      <tr style="background:#f39c12;color:white">
+        <th>Slug</th><th>Instance</th><th>Note</th>
+      </tr>
+      {partial_rows or '<tr><td colspan="3">None.</td></tr>'}
+    </table>
+
     <p style="font-size:12px;color:#888;margin-top:16px">
       Probed {len(WD_INSTANCES)} Workday data-center prefixes
-      ({', '.join(WD_INSTANCES)}). Generated
-      {datetime.now().strftime('%Y-%m-%d %H:%M')}.
+      ({', '.join(WD_INSTANCES)}) × {len(CAREER_PATHS)} known career paths +
+      dynamic patterns derived from each tenant slug.<br>
+      Generated {datetime.now().strftime('%Y-%m-%d %H:%M')}.
     </p>
     """
 
@@ -172,7 +268,7 @@ async def main():
                    help="Max simultaneous in-flight requests (default 50)")
     p.add_argument("--start", type=int, default=0, help="Skip first N slugs")
     p.add_argument("--limit", type=int, default=0, help="Process only N slugs")
-    p.add_argument("--timeout", type=float, default=10.0,
+    p.add_argument("--timeout", type=float, default=15.0,
                    help="Per-request total timeout in seconds")
     p.add_argument("--email", action="store_true",
                    help="Email the results CSV after probing finishes")
@@ -192,7 +288,6 @@ async def main():
         s.strip() for s in infile.read_text(encoding="utf-8").splitlines()
         if s.strip() and not s.startswith("#")
     ]
-    # Dedupe while preserving order
     seen = set()
     slugs = [s for s in all_slugs if not (s in seen or seen.add(s))]
 
@@ -202,8 +297,9 @@ async def main():
         slugs = slugs[:args.limit]
 
     print(f"Input: {len(all_slugs)} lines, {len(slugs)} after dedupe+slice")
-    print(f"Probing × {len(WD_INSTANCES)} instances "
-          f"({len(slugs) * len(WD_INSTANCES)} requests max)")
+    print(f"Probing × {len(WD_INSTANCES)} instances × {len(CAREER_PATHS)} career paths max "
+          f"(worst case ~{len(slugs) * len(WD_INSTANCES) * len(CAREER_PATHS)} requests, "
+          f"typical ~{len(slugs) * len(WD_INSTANCES)})")
     print(f"Concurrency: {args.concurrency}  Timeout: {args.timeout}s")
     print()
 
@@ -212,17 +308,16 @@ async def main():
     results: list[tuple] = []
     progress = {"done": 0, "total": len(slugs), "t0": time.time()}
 
-    timeout = aiohttp.ClientTimeout(total=args.timeout, connect=5)
+    timeout = aiohttp.ClientTimeout(total=args.timeout, connect=10)
     connector = aiohttp.TCPConnector(
         limit=args.concurrency * 2,
         ttl_dns_cache=300,
-        ssl=False,  # Skip cert validation - faster, we only care about status
     )
 
     async with aiohttp.ClientSession(
         timeout=timeout,
         connector=connector,
-        headers={"User-Agent": UA, "Accept": "text/html,application/json"},
+        headers=API_HEADERS,
     ) as session:
         tasks = [
             probe_company(session, s, sem, results, progress, lock)
@@ -233,14 +328,17 @@ async def main():
     out = Path(args.outfile)
     with out.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["slug", "instance", "status", "final_url"])
+        w.writerow(["slug", "instance", "career", "status", "careers_url"])
         for r in sorted(results):
             w.writerow(r)
 
     elapsed = time.time() - progress["t0"]
-    hits = sum(1 for r in results if r[2] != "NO_HIT")
+    hits = sum(1 for r in results if r[3] == "200")
+    partial = sum(1 for r in results if r[3] == "TENANT_EXISTS")
     print()
-    print(f"Done in {elapsed/60:.1f}min. {hits} hits / {len(results)} probed -> {out}")
+    print(f"Done in {elapsed/60:.1f}min. {hits} confirmed hits, "
+          f"{partial} tenants-exist, {len(results)-hits-partial} no-hits "
+          f"-> {out}")
 
     if args.email:
         send_email(out)
