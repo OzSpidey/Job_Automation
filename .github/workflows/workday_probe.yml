@@ -1,0 +1,91 @@
+name: Workday Tenant Discovery
+
+# Sharded probe of `_workday_candidates.txt` against all Workday data-center
+# instances. Each shard handles ~3000 slugs (~18k requests, mostly DNS misses).
+# Hits land in `_workday_hits_shard_N.csv`; the merge job concatenates them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      shard_size:
+        description: "Slugs per shard"
+        required: false
+        default: "3000"
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    name: Probe shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install aiohttp
+      - name: Probe slugs ${{ matrix.shard }}
+        run: |
+          START=$(( ${{ matrix.shard }} * ${{ inputs.shard_size }} ))
+          python _workday_probe.py \
+            --in _workday_candidates.txt \
+            --out _workday_hits_shard_${{ matrix.shard }}.csv \
+            --start $START \
+            --limit ${{ inputs.shard_size }} \
+            --concurrency 80
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hits-${{ matrix.shard }}
+          path: _workday_hits_shard_${{ matrix.shard }}.csv
+          if-no-files-found: ignore
+
+  merge:
+    name: Merge shard results and email
+    needs: probe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install aiohttp
+      - uses: actions/download-artifact@v4
+        with:
+          path: _shards
+          pattern: hits-*
+          merge-multiple: true
+      - name: Concatenate shards
+        run: |
+          echo "slug,instance,status,final_url" > _workday_hits.csv
+          for f in _shards/_workday_hits_shard_*.csv; do
+            [ -f "$f" ] && tail -n +2 "$f" >> _workday_hits.csv
+          done
+          wc -l _workday_hits.csv
+          echo "--- first 20 rows ---"
+          head -20 _workday_hits.csv
+          echo "--- hit count ---"
+          awk -F, 'NR>1 && $3!="NO_HIT" && $3!=""' _workday_hits.csv | wc -l
+      - name: Email results
+        env:
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: |
+          python _workday_probe.py --send-email-only --out _workday_hits.csv
+      - name: Commit results
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add _workday_hits.csv
+          git diff --cached --quiet || git commit -m "chore: refresh workday tenant discovery [skip ci]"
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
