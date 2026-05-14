@@ -333,14 +333,16 @@ def fetch_job_detail(job_id: str) -> dict:
 
 # ── EMAIL ─────────────────────────────────────────────────────────────────────
 
-def send_email(new_jobs: list[dict]) -> None:
+def send_email(fresh_jobs: list[dict], reposted_jobs: list[dict]) -> None:
     if not EMAIL_PASSWORD:
         print("[!] GMAIL_APP_PASSWORD not set — skipping email.")
         return
 
+    TABLE_HEADERS = "<th>Title</th><th>Company</th><th>Location</th><th>Exp</th><th>Easy Apply</th><th>Sponsorship</th><th>Work Type</th><th>Posted</th>"
+
     def job_row(j):
-        skipped      = j.get("detail_skipped", False)
-        unk          = "<span style='color:#888'>Unknown</span>"
+        skipped     = j.get("detail_skipped", False)
+        unk         = "<span style='color:#888'>Unknown</span>"
 
         exp_cell = (
             f"{j['min_exp_years']}yr" if j.get("min_exp_years")
@@ -364,13 +366,11 @@ def send_email(new_jobs: list[dict]) -> None:
         else:
             sponsor_cell = "—"
 
-        repost_cell  = "<span style='color:#e67e22;font-weight:bold'>⚠ Yes</span>" if j.get("reposted") else "No"
-
         wt_val = j.get("work_type", "—")
         wt     = unk if (skipped and wt_val == "—") else wt_val
 
-        row_bg       = "#27ae60" if (j.get("easy_apply") and sponsor_val == "yes") else "#d4edda"
-        row_color    = "color:white;font-weight:bold" if row_bg == "#27ae60" else ""
+        row_bg    = "#27ae60" if (j.get("easy_apply") and sponsor_val == "yes") else "#d4edda"
+        row_color = "color:white;font-weight:bold" if row_bg == "#27ae60" else ""
         return (
             f"<tr style='background:{row_bg};{row_color}'>"
             f"<td><a href='{j['apply_url']}' style='font-weight:bold;color:{'white' if row_bg == '#27ae60' else '#0a66c2'}'>"
@@ -380,27 +380,51 @@ def send_email(new_jobs: list[dict]) -> None:
             f"<td>{exp_cell}</td>"
             f"<td>{ea_cell}</td>"
             f"<td>{sponsor_cell}</td>"
-            f"<td>{repost_cell}</td>"
             f"<td>{wt}</td>"
             f"<td>{j['posted']}</td>"
             f"</tr>"
         )
 
-    rows    = "".join(job_row(j) for j in new_jobs)
+    def build_table(jobs: list[dict], header_color: str) -> str:
+        rows = "".join(job_row(j) for j in jobs)
+        return (
+            f"<table border='1' cellpadding='6' cellspacing='0'"
+            f" style='border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%'>"
+            f"<tr style='background:{header_color};color:white'>{TABLE_HEADERS}</tr>"
+            f"{rows}</table>"
+        )
+
+    total   = len(fresh_jobs) + len(reposted_jobs)
+    subject_parts = []
+    if fresh_jobs:
+        subject_parts.append(f"{len(fresh_jobs)} new")
+    if reposted_jobs:
+        subject_parts.append(f"{len(reposted_jobs)} repost(s)")
     subject = (
-        f"LinkedIn (No-Login): {len(new_jobs)} new role(s) — "
+        f"LinkedIn (No-Login): {' + '.join(subject_parts)} — "
         f"{datetime.now(ET).strftime('%b %d %I:%M %p ET')}"
     )
+
+    fresh_section = ""
+    if fresh_jobs:
+        fresh_section = f"""
+    <h3 style="color:#155724;margin-top:0">New Postings ({len(fresh_jobs)})</h3>
+    {build_table(fresh_jobs, "#0a66c2")}"""
+
+    repost_section = ""
+    if reposted_jobs:
+        repost_section = f"""
+    <h3 style="color:#8a4a00;margin-top:24px">Reposted Jobs ({len(reposted_jobs)})</h3>
+    <p style="font-size:12px;color:#888;margin:0 0 6px">
+      These job IDs are significantly older than today's newest listing — likely recycled postings.
+    </p>
+    {build_table(reposted_jobs, "#c0771a")}"""
+
     body = f"""
     <h2 style="color:#0a66c2">LinkedIn Job Alert — Public API</h2>
-    <p><b style="color:#155724">{len(new_jobs)} new role(s)</b> — posted in last hour</p>
-    <table border="1" cellpadding="6" cellspacing="0"
-           style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%">
-      <tr style="background:#0a66c2;color:white">
-        <th>Title</th><th>Company</th><th>Location</th><th>Exp</th><th>Easy Apply</th><th>Sponsorship</th><th>Reposted?</th><th>Work Type</th><th>Posted</th>
-      </tr>
-      {rows}
-    </table>
+    <p><b>{total} role(s) found</b> — {len(fresh_jobs)} new · {len(reposted_jobs)} reposted</p>
+    {fresh_section}
+    {repost_section}
     <p style="font-size:12px;color:#888;margin-top:16px">
       Scraped via LinkedIn public guest API — no login, no account risk.<br>
       Generated {datetime.now(ET).strftime("%Y-%m-%d %H:%M ET")}
@@ -416,7 +440,7 @@ def send_email(new_jobs: list[dict]) -> None:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as srv:
             srv.login(EMAIL_SENDER, EMAIL_PASSWORD)
             srv.sendmail(EMAIL_SENDER, EMAIL_TO, msg.as_string())
-        print(f"[+] Email sent → {len(new_jobs)} new role(s)")
+        print(f"[+] Email sent → {len(fresh_jobs)} new + {len(reposted_jobs)} reposted")
     except Exception as e:
         print(f"[!] Email failed: {e}")
 
@@ -535,10 +559,16 @@ def main():
             print(f"         {j['apply_url']}")
             print()
 
+    fresh    = [j for j in target if not j.get("reposted")]
+    reposted = [j for j in target if j.get("reposted")]
+
+    print(f"  Fresh postings   : {len(fresh)}")
+    print(f"  Reposted         : {len(reposted)}")
+
     if not target:
         print("\nNo new target roles this run — skipping email.")
     else:
-        send_email(target)
+        send_email(fresh, reposted)
 
     print("[+] Done.")
 
