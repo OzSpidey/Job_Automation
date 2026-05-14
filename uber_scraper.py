@@ -76,6 +76,9 @@ TARGET_ROLES = [
     "backend engineer",
     "full stack engineer",
     "fullstack engineer",
+    "new grad",
+    "university graduate",
+    "early career",
 ]
 
 EXCLUDE_LEVELS = ["senior", "sr.", "sr ", "lead", "staff", "principal", "manager",
@@ -86,7 +89,14 @@ _NON_US_RE = re.compile(
     r'netherlands|singapore|japan|china|brazil|mexico|ireland|poland|'
     r'london|amsterdam|berlin|toronto|sydney|bangalore|bengaluru|delhi|'
     r'hyderabad|mumbai|tel\s+aviv|warsaw|dublin|stockholm|'
-    r'sao\s+paulo|são\s+paulo|rio\s+de\s+janeiro)\b',
+    r'sao\s+paulo|são\s+paulo|rio\s+de\s+janeiro|'
+    r'santiago|chile|aarhus|denmark|copenhagen|'
+    r'buenos\s+aires|argentina|bogota|colombia|lima|peru|'
+    r'mexico\s+city|monterrey|'
+    r'berlin|munich|paris|lyon|madrid|barcelona|rome|milan|'
+    r'vienna|zurich|oslo|helsinki|stockholm|brussels|prague|'
+    r'seoul|tokyo|taipei|hong\s+kong|beijing|shanghai|'
+    r'johannesburg|cairo|dubai|istanbul)\b',
     re.I,
 )
 
@@ -228,7 +238,8 @@ PAGE_LIMIT = 100   # max per request; Uber returns fewer if exhausted
 
 DEPARTMENTS = [
     "Engineering",
-    "Data Science",   # contains Data Scientist, Data Analyst, Product Analyst
+    "Data Science",    # Data Scientist, Data Analyst, Product Analyst
+    "University",      # New grad / early career roles
 ]
 
 # ── Playwright fetch ──────────────────────────────────────────────────────────
@@ -401,6 +412,8 @@ def scan() -> list[dict]:
         if not is_target(job["title"]):
             continue
         if not is_us(job["location"]):
+            continue
+        if _NON_US_RE.search(job["title"]):
             continue
         matched.append(job)
         print(f"  MATCH: {job['title']}  [{job['location']}]")
