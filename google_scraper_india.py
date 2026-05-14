@@ -274,18 +274,20 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
             for j in jobs
         )
 
+    recipients = [a.strip() for a in TARGET_EMAIL.split(",") if a.strip()]
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = SENDER_EMAIL
-    msg["To"]      = TARGET_EMAIL
+    msg["To"]      = ", ".join(recipients)
     msg.attach(MIMEText(plain, "plain"))
     msg.attach(MIMEText(html,  "html"))
 
     with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as srv:
         srv.login(SENDER_EMAIL, SENDER_PASSWORD)
-        srv.sendmail(SENDER_EMAIL, TARGET_EMAIL, msg.as_string())
+        srv.sendmail(SENDER_EMAIL, recipients, msg.as_string())
 
-    print(f"[email] Sent to {TARGET_EMAIL} — {count} job(s).")
+    print(f"[email] Sent to {', '.join(recipients)} — {count} job(s).")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
