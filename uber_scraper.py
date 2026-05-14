@@ -4,12 +4,14 @@ uber_scraper.py
 Uses Playwright to intercept Uber's internal jobs API from:
 
     https://jobs.uber.com/en/
+    https://www.uber.com/us/en/careers/list/
 
 jobs.uber.com is a HappyDance-powered SPA. On page load it fires JSON
 API requests to fetch listings. We intercept every JSON response and
 pick out whichever one carries a jobs array — so we get structured
 data without parsing HTML and without needing to know the exact endpoint
-in advance (HappyDance can change routes without breaking this).
+in advance. All JSON response URLs are logged so the right endpoint can
+be identified if the structure ever changes.
 
 Run: python uber_scraper.py
 """
@@ -48,7 +50,14 @@ BASE_DIR        = Path(__file__).parent
 SEEN_FILE       = BASE_DIR / "json" / "uber_seen_jobs.json"
 CSV_FILE        = BASE_DIR / "csv"  / "uber_jobs.csv"
 
-JOBS_URL        = "https://jobs.uber.com/en/"
+# The landing page doesn't fire job-loading API calls; the careers/list
+# pages do. We hit multiple department filters so we get all relevant roles
+# rather than just the 10 shown on the unfiltered default page.
+JOBS_URLS = [
+    "https://www.uber.com/us/en/careers/list/?department=Engineering",
+    "https://www.uber.com/us/en/careers/list/?department=Data+Science+%26+Analytics",
+    "https://www.uber.com/us/en/careers/list/?department=Product+%26+Design",
+]
 PAGE_TIMEOUT_MS = 60_000
 
 TARGET_ROLES = [
@@ -68,14 +77,15 @@ TARGET_ROLES = [
     "fullstack engineer",
 ]
 
-EXCLUDE_LEVELS = ["senior", "sr.", "lead", "staff", "principal", "manager",
+EXCLUDE_LEVELS = ["senior", "sr.", "sr ", "lead", "staff", "principal", "manager",
                   "director", "vp ", "vice president", "head of"]
 
 _NON_US_RE = re.compile(
     r'\b(india|canada|united\s+kingdom|\buk\b|australia|germany|france|'
     r'netherlands|singapore|japan|china|brazil|mexico|ireland|poland|'
     r'london|amsterdam|berlin|toronto|sydney|bangalore|bengaluru|delhi|'
-    r'hyderabad|mumbai|tel\s+aviv|warsaw|dublin|stockholm)\b',
+    r'hyderabad|mumbai|tel\s+aviv|warsaw|dublin|stockholm|'
+    r'sao\s+paulo|são\s+paulo|rio\s+de\s+janeiro)\b',
     re.I,
 )
 
@@ -160,21 +170,31 @@ def _normalise(raw: dict) -> dict | None:
     if not url and job_id:
         url = f"https://jobs.uber.com/en/job/{job_id}"
 
-    # Location: string or nested object
-    loc_raw = raw.get("location") or raw.get("locationName") or raw.get("city") or ""
-    if isinstance(loc_raw, dict):
-        loc = loc_raw.get("name") or loc_raw.get("city") or ""
-    elif isinstance(loc_raw, list):
-        loc = ", ".join(
-            (item.get("name") or item.get("city") or item) if isinstance(item, dict) else str(item)
-            for item in loc_raw
+    # Location — try allLocations list first, then location string
+    all_locs = raw.get("allLocations") or []
+    if all_locs and isinstance(all_locs, list):
+        loc = " / ".join(
+            (item.get("name") or item.get("city") or str(item))
+            if isinstance(item, dict) else str(item)
+            for item in all_locs
         )
     else:
-        loc = str(loc_raw)
+        loc_raw = raw.get("location") or raw.get("locationName") or raw.get("city") or ""
+        if isinstance(loc_raw, dict):
+            loc = loc_raw.get("name") or loc_raw.get("city") or ""
+        elif isinstance(loc_raw, list):
+            loc = " / ".join(
+                (item.get("name") or item.get("city") or str(item))
+                if isinstance(item, dict) else str(item)
+                for item in loc_raw
+            )
+        else:
+            loc = str(loc_raw)
 
-    # Posted date
+    # Posted date — Uber uses creationDate
     posted_raw = (
-        raw.get("postedDate")
+        raw.get("creationDate")
+        or raw.get("postedDate")
         or raw.get("firstPublished")
         or raw.get("createdAt")
         or raw.get("publishedAt")
@@ -198,45 +218,97 @@ def _normalise(raw: dict) -> dict | None:
     }
 
 
+# API: POST https://www.uber.com/api/loadSearchJobsResults?localeCode=en
+# Body: {"limit": N, "page": 0, "params": {"department": [...]}}
+# We use page.evaluate() so the fetch inherits the page's session/cookies.
+API_PATH   = "/api/loadSearchJobsResults?localeCode=en"
+SEED_URL   = "https://www.uber.com/us/en/careers/list/"
+PAGE_LIMIT = 100   # max per request; Uber returns fewer if exhausted
+
+DEPARTMENTS = [
+    "Engineering",
+    "Data Science & Analytics",
+]
+
 # ── Playwright fetch ──────────────────────────────────────────────────────────
 
-async def _fetch_jobs() -> list[dict]:
-    all_raw: list[dict] = []
+async def _fetch_dept(context, department: str) -> list[dict]:
+    """
+    For each page offset, spin up a fresh page, install a route handler that
+    intercepts the loadSearchJobsResults POST and replaces the body with our
+    desired limit/page values, then navigate — the browser handles CSRF/cookies
+    automatically and we capture the response via the response handler.
+    """
+    dept_jobs: list[dict] = []
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            )
-        )
+    for pg in range(20):   # up to 20 pages × 100 = 2000 jobs per dept
+        captured: list[dict] = []
         page = await context.new_page()
 
-        async def on_response(resp):
-            ct = resp.headers.get("content-type", "")
-            if "json" not in ct:
+        async def _route_handler(route, request, _pg=pg, _dept=department):
+            new_body = json.dumps({
+                "limit":  PAGE_LIMIT,
+                "page":   _pg,
+                "params": {"department": [_dept]},
+            })
+            await route.continue_(post_data=new_body)
+
+        async def _resp_handler(resp):
+            if "loadSearchJobsResults" not in resp.url:
                 return
             try:
                 body = await resp.json()
             except Exception:
                 return
             found = _extract_jobs_from_payload(body)
-            if found:
-                all_raw.extend(found)
-                print(f"  [intercept] {resp.url[:80]}  → {len(found)} job objects")
+            captured.extend(found)
 
-        page.on("response", on_response)
+        await page.route("**/loadSearchJobsResults**", _route_handler)
+        page.on("response", _resp_handler)
 
-        print(f"  [browser] loading {JOBS_URL} ...")
+        url = f"https://www.uber.com/us/en/careers/list/?department={department.replace(' ', '+').replace('&', '%26')}"
         try:
-            await page.goto(JOBS_URL, wait_until="networkidle", timeout=PAGE_TIMEOUT_MS)
+            await page.goto(url, wait_until="networkidle", timeout=PAGE_TIMEOUT_MS)
         except Exception as exc:
-            print(f"  [warn] page load: {exc}")
+            print(f"    [warn] page {pg}: {exc}")
 
-        # Extra wait to let any lazy-loaded requests finish
-        await asyncio.sleep(3)
+        await page.close()
+
+        if not captured:
+            print(f"    page {pg}: 0 results — done")
+            break
+
+        dept_jobs.extend(captured)
+        print(f"    page {pg}: {len(captured)} jobs  (dept total: {len(dept_jobs)})")
+
+        if len(captured) < PAGE_LIMIT:
+            break   # partial page = last page
+
+    return dept_jobs
+
+
+async def _fetch_jobs() -> list[dict]:
+    all_raw: list[dict] = []
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+        )
+        context = await browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            viewport={"width": 1280, "height": 800},
+        )
+
+        for dept in DEPARTMENTS:
+            print(f"  [dept] {dept}")
+            jobs = await _fetch_dept(context, dept)
+            all_raw.extend(jobs)
+
         await browser.close()
 
     return all_raw
