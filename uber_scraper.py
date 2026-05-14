@@ -24,7 +24,7 @@ import re
 import smtplib
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -428,6 +428,11 @@ def main():
     new_jobs = [j for j in jobs if j["job_id"] not in previously_seen]
     print(f"New roles (not seen before): {len(new_jobs)}")
 
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+    recent_jobs = [j for j in new_jobs if (j.get("posted") or "") >= cutoff]
+    recent_jobs.sort(key=lambda j: j.get("posted") or "", reverse=True)
+    print(f"Posted <=3 days: {len(recent_jobs)}")
+
     # Append new jobs to CSV
     if new_jobs:
         CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -444,13 +449,13 @@ def main():
 
     save_seen(previously_seen | {j["job_id"] for j in jobs})
 
-    if not new_jobs:
-        print("No new roles — skipping email.")
+    if not recent_jobs:
+        print("No jobs posted in the last 3 days — skipping email.")
     elif not TARGET_EMAIL:
         print("[warn] EMAIL_TO not set — skipping email.")
     else:
-        print(f"\nSending email ({len(new_jobs)} new role(s))...")
-        send_email(jobs, previously_seen)
+        print(f"\nSending email ({len(recent_jobs)} recent role(s))...")
+        send_email(recent_jobs, previously_seen)
     print("Done.")
 
 
