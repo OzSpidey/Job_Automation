@@ -64,6 +64,7 @@ TARGET_ROLES = [
     "data engineer",
     "analytics engineer",
     "data analyst",
+    "product analyst",
     "business analyst",
     "business intelligence",
     "data scientist",
@@ -227,7 +228,7 @@ PAGE_LIMIT = 100   # max per request; Uber returns fewer if exhausted
 
 DEPARTMENTS = [
     "Engineering",
-    "Data Science & Analytics",
+    "Data Science",   # contains Data Scientist, Data Analyst, Product Analyst
 ]
 
 # ── Playwright fetch ──────────────────────────────────────────────────────────
