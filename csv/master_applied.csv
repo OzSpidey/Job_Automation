@@ -1,0 +1,17 @@
+source,job_id,title,company,location,role,posted,url,status,note,applied_at_est
+lever,8778f2b6-fd12-4f61-8c0f-0102fd8a7f60,Data Engineer,Daniels Sharpsmart,"Chicago, IL",Data Engineer,2026-05-14T21:28:47.926000+00:00,https://jobs.lever.co/daniels-sharpsmart/8778f2b6-fd12-4f61-8c0f-0102fd8a7f60/apply,failed,"submit failed: Locator.scroll_into_view_if_needed: Timeout 2993ms exceeded.
+Call log:
+  - attempting scroll into view action
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+    - waiting 20ms
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+      - waiting 100ms
+    5 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+      - waiting 500ms
+",
