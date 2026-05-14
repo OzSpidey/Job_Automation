@@ -1,29 +1,35 @@
 """
 Google Jobs Scraper
 ===================
-Hits Google's public careers JSON endpoint directly:
+Google's careers site is server-rendered (no public JSON API as of 2026).
+This scrapes the embedded Boq framework state from the HTML response:
 
-    https://careers.google.com/api/v3/search/?page=N&sort_by=date
+    https://www.google.com/about/careers/applications/jobs/results?sort_by=date&page=N
 
-Pages through up to MAX_JOBS most-recent postings, filters for US-located
-roles, then matches each title against TARGET_ROLES. Sorted
-most-recent-first before email send.
+The page HTML contains an `AF_initDataCallback({key: 'ds:1', ..., data:[...]})`
+block carrying the rendered jobs as a positional array. We regex it out and
+parse the JSON.
 
-Mirrors amazon_scraper.py — same flow (fetch → filter → match → email),
-just different field names. Notes on Google's schema:
-  - `publish_date` is ISO (YYYY-MM-DD), not Amazon's "Month  D, YYYY".
-  - `locations` is a list of dicts (city/state/country_code/display),
-    not Amazon's list of JSON-encoded strings.
-  - Page numbers are 1-indexed; response carries `next_page` and `count`.
-  - We trust `country_code == "US"` per location; Google's data is
-    cleaner than Amazon's here, so no equivalent of the null-country
-    workaround is needed.
+Strategy: poll-shallow. Fetch only the first MAX_PAGES (newest by date),
+diff against a seen-file, email on new matches. With ~20 jobs/page, 5 pages
+= 100 newest postings, which is plenty when you're polling every 15-30 min.
+
+Boq positional fields (mapped from a live response — may shift):
+  job[0]  = id          ("82471478787744454")
+  job[1]  = title
+  job[2]  = apply URL   (".../signin?jobId=...&loc=US&title=...")
+  job[9]  = locations   list of [display, [display], city, null, state, country_code]
+  job[12] = [unix_sec, nanos]  posted timestamp
+
+We pull title/url by structural anchors (apply URL contains '/signin?jobId=')
+where possible so an index shift doesn't silently break us.
 
 Run: python google_scraper.py
 """
 
 import json
 import os
+import re
 import smtplib
 import sys
 import time
@@ -46,24 +52,40 @@ SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 SMTP_SERVER     = "smtp.gmail.com"
 SMTP_PORT       = 465
 
-API_URL         = "https://careers.google.com/api/v3/search/"
-PAGE_SIZE       = 100        # API default is 20; 100 is the documented max
-MAX_JOBS        = 2000
-REQUEST_DELAY_S = 0.3
+SEARCH_URL      = "https://www.google.com/about/careers/applications/jobs/results"
+LOCATION_FILTER = "United States"  # URL-level filter, ~46% smaller universe than unfiltered
+MAX_PAGES       = 10         # 10 pages × ~20 jobs = 200 newest US postings per run
+REQUEST_DELAY_S = 0.6        # polite pause between page fetches
 SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "google_api_seen_jobs.json")
-USER_AGENT      = "Mozilla/5.0 (compatible; GoogleJobsScanner/1.0)"
+USER_AGENT      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
 TARGET_ROLES = [
     "data engineer",
-    "business intelligence engineer",
     "business analyst",
-    "bi engineer",
     "data analyst",
     "early grad",
     "software engineer",
     "ai engineer",
     "software developer",
+    # Google-specific analog titles (Google's posting conventions, not industry standard)
+    "data scientist",
+    "strategy and operations analyst",
+    "data transformation",
 ]
+
+# Regex catches BI roles whose titles don't match a clean substring above.
+# `\bbi\b` matches BI as a standalone word so it doesn't false-positive
+# inside words like "Mobile" or "ambient".
+BI_REGEX = re.compile(r"\bbusiness intelligence\b|\bbi\b", re.I)
+
+# Exclude senior+ levels — we want entry/mid only.
+EXCLUDE_SUBSTRINGS = ["senior", "staff", "lead"]
+
+# Matches the Boq initial-state block carrying the jobs list.
+DS1_PATTERN = re.compile(
+    r"AF_initDataCallback\(\{key:\s*'ds:1'.*?data:(\[.*?\])\s*,\s*sideChannel",
+    re.S,
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -84,96 +106,120 @@ def save_seen_urls(urls: set[str]) -> None:
 
 def is_target_role(title: str) -> bool:
     t = title.lower()
-    return any(role in t for role in TARGET_ROLES)
-
-
-def parse_posted_date(s: str) -> datetime:
-    """Parse Google's ISO date (YYYY-MM-DD). Some records include a time suffix."""
-    if not s:
-        return datetime.min
-    try:
-        return datetime.strptime(s[:10], "%Y-%m-%d")
-    except ValueError:
-        return datetime.min
-
-
-def is_us_job(job: dict) -> bool:
-    """True if any of the job's locations is in the US."""
-    for loc in (job.get("locations") or []):
-        if (loc.get("country_code") or "").upper() == "US":
-            return True
-        if (loc.get("country") or "").upper() in ("UNITED STATES", "USA"):
-            return True
-        display = (loc.get("display") or "").upper()
-        if display.endswith(", USA") or ", USA," in display:
-            return True
+    if any(x in t for x in EXCLUDE_SUBSTRINGS):
+        return False
+    if any(role in t for role in TARGET_ROLES):
+        return True
+    if BI_REGEX.search(title):
+        return True
     return False
 
 
+def parse_job(raw: list) -> dict | None:
+    """Pull (id, title, url, locations, posted_ts) from a Boq job array.
+
+    Indices are stable as of mapping but we double-check by structural cues
+    (apply URL must contain '/signin?jobId='). If structure looks wrong we
+    return None rather than emit garbage.
+    """
+    if not isinstance(raw, list) or len(raw) < 10:
+        return None
+    job_id = raw[0] if isinstance(raw[0], str) else None
+    title  = raw[1] if isinstance(raw[1], str) else None
+    url    = raw[2] if isinstance(raw[2], str) and "/signin?jobId=" in raw[2] else None
+    if not (job_id and title and url):
+        return None
+
+    # Locations: list of [display, [display], city, null, state, country_code]
+    locations = raw[9] if len(raw) > 9 and isinstance(raw[9], list) else []
+
+    # Posted timestamp: [unix_seconds, nanos]
+    posted_ts = None
+    if len(raw) > 12 and isinstance(raw[12], list) and raw[12] and isinstance(raw[12][0], int):
+        posted_ts = raw[12][0]
+
+    return {
+        "id":        job_id,
+        "title":     title,
+        "url":       url,
+        "locations": locations,
+        "posted_ts": posted_ts,
+    }
+
+
+def is_us_job(job: dict) -> bool:
+    """True if any location has country_code 'US'."""
+    for loc in (job.get("locations") or []):
+        if isinstance(loc, list) and len(loc) >= 6 and (loc[5] or "").upper() == "US":
+            return True
+        # fallback: display string ending in ", USA"
+        if isinstance(loc, list) and loc and isinstance(loc[0], str) and loc[0].upper().endswith(", USA"):
+            return True
+    # extra fallback: apply URL's loc param
+    return "loc=US" in (job.get("url") or "")
+
+
 def format_locations(job: dict) -> str:
-    """Render a multi-city posting as 'Mountain View, CA, USA / New York, NY, USA'."""
+    """Render a multi-city posting as 'Sunnyvale, CA, USA / Kirkland, WA, USA'."""
     cities = []
     seen = set()
     for loc in (job.get("locations") or []):
-        disp = loc.get("display")
-        if not disp:
-            city  = loc.get("city") or ""
-            state = loc.get("state") or ""
-            ctry  = loc.get("country") or ""
-            disp  = ", ".join(p for p in (city, state, ctry) if p)
-        if disp and disp not in seen:
-            seen.add(disp)
-            cities.append(disp)
+        if isinstance(loc, list) and loc and isinstance(loc[0], str):
+            disp = loc[0]
+            if disp not in seen:
+                seen.add(disp)
+                cities.append(disp)
     return " / ".join(cities)
 
 
-def job_url(job: dict) -> str:
-    """Build a canonical careers URL from the API record."""
-    apply = job.get("apply_url") or ""
-    if apply.startswith("http"):
-        return apply
-    job_id = job.get("id") or ""
-    # Strip any "jobs/" prefix Google sometimes embeds in the id field
-    if job_id.startswith("jobs/"):
-        job_id = job_id[len("jobs/"):]
-    return f"https://www.google.com/about/careers/applications/jobs/results/{job_id}"
+def format_date(ts: int | None) -> str:
+    if not ts:
+        return ""
+    try:
+        return datetime.utcfromtimestamp(ts).strftime("%b %d, %Y")
+    except (OverflowError, OSError, ValueError):
+        return ""
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# API FETCH
+# FETCH
 # ──────────────────────────────────────────────────────────────────────────────
 
-def fetch_recent_jobs(max_total: int = MAX_JOBS) -> list[dict]:
-    """Page through Google careers search, sorted by date.
+def fetch_page(page: int) -> list[dict]:
+    """Fetch one results page, extract the ds:1 Boq block, return parsed jobs."""
+    params = {"sort_by": "date", "page": str(page), "location": LOCATION_FILTER}
+    url    = SEARCH_URL + "?" + urllib.parse.urlencode(params)
+    req    = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        html = r.read().decode("utf-8", errors="replace")
+    m = DS1_PATTERN.search(html)
+    if not m:
+        print(f"  [page {page}] WARN: ds:1 block not found — Google may have changed layout")
+        return []
+    try:
+        ds1 = json.loads(m.group(1))
+    except json.JSONDecodeError as e:
+        print(f"  [page {page}] WARN: ds:1 parse failed: {e}")
+        return []
+    raw_jobs = ds1[0] if ds1 and isinstance(ds1[0], list) else []
+    parsed   = [j for j in (parse_job(r) for r in raw_jobs) if j]
+    if page == 1 and len(ds1) > 2:
+        print(f"  [page 1] Google reports {ds1[2]} total matches; page_size={ds1[3] if len(ds1) > 3 else '?'}")
+    return parsed
 
-    Google uses 1-indexed pages with `page_size` items each. The response
-    includes `next_page` (or `null` when there's no more), and `count` for
-    the total result set.
-    """
+
+def fetch_recent_jobs(max_pages: int = MAX_PAGES) -> list[dict]:
     results = []
-    page = 1
-    while len(results) < max_total:
-        params = {
-            "page":      str(page),
-            "page_size": str(PAGE_SIZE),
-            "sort_by":   "date",
-        }
-        url = API_URL + "?" + urllib.parse.urlencode(params)
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            data = json.loads(r.read())
-        jobs = data.get("jobs", [])
+    for page in range(1, max_pages + 1):
+        jobs = fetch_page(page)
         if not jobs:
-            print(f"  [api] page={page} returned 0 — stopping.")
+            print(f"  [page {page}] empty — stopping")
             break
         results.extend(jobs)
-        print(f"  [api] page={page:3d}  fetched={len(jobs)}  cumulative={len(results)}  total={data.get('count','?')}")
-        if not data.get("next_page"):
-            break
-        page += 1
-        if len(results) < max_total:
+        print(f"  [page {page}]  fetched={len(jobs)}  cumulative={len(results)}")
+        if page < max_pages:
             time.sleep(REQUEST_DELAY_S)
-    return results[:max_total]
+    return results
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -183,7 +229,7 @@ def fetch_recent_jobs(max_total: int = MAX_JOBS) -> list[dict]:
 def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
     new_count = sum(1 for j in jobs if j["url"] not in previously_seen)
     count     = len(jobs)
-    subject   = f"Google Jobs Scraper (API) — {count} Matching Role(s) Found ({new_count} NEW)"
+    subject   = f"Google Jobs Scraper — {count} Matching Role(s) Found ({new_count} NEW)"
 
     if not jobs:
         plain = "No matching jobs found."
@@ -199,33 +245,33 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
                 f'<tr style="{row_bg}">'
                 f'<td style="padding:8px;border:1px solid #ddd;">{badge}{j["title"]}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;">{j.get("location", "")}</td>'
-                f'<td style="padding:8px;border:1px solid #ddd;"><a href="{j["url"]}">{j["url"]}</a></td>'
+                f'<td style="padding:8px;border:1px solid #ddd;"><a href="{j["url"]}">Apply</a></td>'
                 f'<td style="padding:8px;border:1px solid #ddd;white-space:nowrap;">{j.get("date", "")}</td>'
                 f'</tr>'
             )
         html = f"""
         <html><body style="font-family:Arial,sans-serif;color:#333">
-        <h2 style="color:#202124">Google Jobs (API) — Matching Roles</h2>
+        <h2 style="color:#202124">Google Jobs — Matching Roles</h2>
         <p>Found <strong>{count}</strong> role(s) matching:
            <em>Data Engineer &nbsp;|&nbsp; Business Intelligence Engineer &nbsp;|&nbsp;
            Business Analyst &nbsp;|&nbsp; Data Analyst &nbsp;|&nbsp; Software Engineer &nbsp;|&nbsp; Early Grad</em>
         </p>
         <table style="border-collapse:collapse;width:100%;max-width:1100px">
           <tr style="background:#202124;color:#FBBC04">
-            <th style="padding:10px;border:1px solid #555;text-align:left;width:30%">Role</th>
-            <th style="padding:10px;border:1px solid #555;text-align:left;width:20%">Location</th>
-            <th style="padding:10px;border:1px solid #555;text-align:left">Link</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:38%">Role</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:30%">Location</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:10%">Link</th>
             <th style="padding:10px;border:1px solid #555;text-align:left;width:13%">Date Posted</th>
           </tr>
           {chr(10).join(rows)}
         </table>
         <p style="font-size:12px;color:#888;margin-top:20px">
-          Source: careers.google.com/api/v3/search · United States · Most Recent
+          Source: google.com/about/careers · United States · Most Recent · top {MAX_PAGES} page(s)
         </p>
         </body></html>
         """
         plain = f"Found {count} matching role(s) ({new_count} NEW):\n\n" + "\n".join(
-            f"- {'[NEW] ' if j['url'] not in previously_seen else ''}{j['title']} — {j.get('location', 'location unknown')} ({j.get('date', 'date unknown')})\n  {j['url']}"
+            f"- {'[NEW] ' if j['url'] not in previously_seen else ''}{j['title']} — {j.get('location', '?')} ({j.get('date', '?')})\n  {j['url']}"
             for j in jobs
         )
 
@@ -248,8 +294,8 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def scan() -> list[dict]:
-    print(f"[1] Fetching up to {MAX_JOBS} most-recent jobs from careers.google.com...")
-    raw = fetch_recent_jobs(MAX_JOBS)
+    print(f"[1] Fetching first {MAX_PAGES} page(s) of google.com/about/careers (sort_by=date)...")
+    raw = fetch_recent_jobs(MAX_PAGES)
     print(f"  Total raw jobs: {len(raw)}")
 
     print("[2] Filtering for US locations...")
@@ -260,28 +306,29 @@ def scan() -> list[dict]:
     matched = []
     seen_urls = set()
     for j in us_jobs:
-        title = j.get("title") or ""
-        if not is_target_role(title):
+        if not is_target_role(j["title"]):
             continue
-        url = job_url(j)
-        if url in seen_urls:
+        if j["url"] in seen_urls:
             continue
-        seen_urls.add(url)
+        seen_urls.add(j["url"])
         matched.append({
-            "title":    title,
-            "url":      url,
+            "title":    j["title"],
+            "url":      j["url"],
             "location": format_locations(j),
-            "date":     j.get("publish_date") or "",
+            "date":     format_date(j["posted_ts"]),
+            "posted_ts": j["posted_ts"] or 0,
         })
-        print(f"  MATCH: {title}  [{matched[-1]['location']}]")
+        print(f"  MATCH: {j['title']}  [{matched[-1]['location']}]")
 
-    matched.sort(key=lambda j: parse_posted_date(j["date"]), reverse=True)
+    matched.sort(key=lambda j: j["posted_ts"], reverse=True)
     return matched
 
 
 def main():
+    preview = "--preview" in sys.argv
+
     print("=" * 60)
-    print("Google Jobs Scanner (API) — US · Most Recent")
+    print("Google Jobs Scanner — US · Most Recent" + ("  [PREVIEW MODE]" if preview else ""))
     print("=" * 60)
 
     t0 = time.time()
@@ -296,16 +343,39 @@ def main():
     print("=" * 60)
 
     previously_seen = load_seen_urls()
-    new_jobs = [j for j in jobs if j["url"] not in previously_seen]
-    print(f"New roles (not seen before): {len(new_jobs)}")
 
+    # Email only includes roles posted in the last 7 days. Jobs without a
+    # parseable timestamp are kept (better to over-include than silently drop).
+    week_cutoff = int(time.time()) - 7 * 24 * 3600
+    email_jobs = [j for j in jobs if not j["posted_ts"] or j["posted_ts"] >= week_cutoff]
+
+    # Sort: new (not in seen) at top, then by recency desc within each group.
+    email_jobs.sort(key=lambda j: (j["url"] in previously_seen, -j["posted_ts"]))
+
+    new_jobs = [j for j in email_jobs if j["url"] not in previously_seen]
+    print(f"New roles (not seen before, <=7d): {len(new_jobs)}")
+    print(f"Roles in email body (<=7d): {len(email_jobs)}")
+
+    if preview:
+        # Don't update seen file so the next normal run still flags real "new"s.
+        if not email_jobs:
+            print("Preview: no recent roles to show.")
+        else:
+            print(f"\n[PREVIEW] Sending email with all {len(email_jobs)} recent role(s)...")
+            send_email(email_jobs, previously_seen)
+        print("Done. (Seen-file not updated in preview mode.)")
+        return
+
+    # Normal mode: update seen file (covers ALL matched, including >7d, so an
+    # 8-day-old role doesn't keep re-flagging as new on each run), then email
+    # only if there's at least one new recent role.
     save_seen_urls(previously_seen | {j["url"] for j in jobs})
 
     if not new_jobs:
-        print("No new roles — skipping email.")
+        print("No new recent roles — skipping email.")
     else:
         print(f"\nSending email ({len(new_jobs)} new role(s))...")
-        send_email(jobs, previously_seen)
+        send_email(email_jobs, previously_seen)
     print("Done.")
 
 
