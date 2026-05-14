@@ -76,6 +76,9 @@ TARGET_ROLES = [
     "ai engineer",
     "software developer",
     "machine learning engineer",
+    "new grad",
+    "university graduate",
+    "early career",
 ]
 
 EXCLUDE_LEVELS = ["senior", "principal", "lead", "staff", "manager", "director"]
