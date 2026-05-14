@@ -220,7 +220,10 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
                 f'<td style="padding:8px;border:1px solid #ddd;">{badge}{j["title"]}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;">{j.get("location", "")}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;"><a href="{j["url"]}">{j["url"]}</a></td>'
-                f'<td style="padding:8px;border:1px solid #ddd;white-space:nowrap;">{j.get("date", "")}</td>'
+                f'<td style="padding:8px;border:1px solid #ddd;white-space:nowrap;">'
+                f'{j.get("date", "")}'
+                + (f'<br><span style="font-size:11px;color:#666">(updated {j["ago"]})</span>' if j.get("ago") else '')
+                + f'</td>'
                 f'</tr>'
             )
         html = f"""
@@ -245,7 +248,9 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         </body></html>
         """
         plain = f"Found {count} matching role(s) ({new_count} NEW):\n\n" + "\n".join(
-            f"- {'[NEW] ' if j['url'] not in previously_seen else ''}{j['title']} — {j.get('location', 'location unknown')} ({j.get('date', 'date unknown')})\n  {j['url']}"
+            f"- {'[NEW] ' if j['url'] not in previously_seen else ''}{j['title']} — {j.get('location', 'location unknown')}\n  {j.get('date', 'date unknown')}"
+            + (f" (updated {j['ago']})" if j.get("ago") else "")
+            + f"\n  {j['url']}"
             for j in jobs
         )
 
@@ -292,6 +297,7 @@ def scan() -> list[dict]:
             "url":      url,
             "location": format_locations(j),
             "date":     j.get("posted_date") or "",
+            "ago":      j.get("updated_time") or "",
         })
         print(f"  MATCH: {title}  [{matched[-1]['location']}]")
 
@@ -318,6 +324,12 @@ def main():
     previously_seen = load_seen_urls()
     new_jobs = [j for j in jobs if j["url"] not in previously_seen]
     print(f"New roles (not seen before): {len(new_jobs)}")
+
+    # NEW (not in seen file) at the top, then everything else by date desc.
+    # Two-pass stable sort: date desc first, then is-seen, so within each group
+    # date order is preserved.
+    jobs.sort(key=lambda j: parse_posted_date(j["date"]), reverse=True)
+    jobs.sort(key=lambda j: j["url"] in previously_seen)  # False < True, so new first
 
     save_seen_urls(previously_seen | {j["url"] for j in jobs})
 
