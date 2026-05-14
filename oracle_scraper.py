@@ -26,6 +26,7 @@ import threading
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -243,34 +244,64 @@ def is_us_location(location: str) -> bool:
     return bool(US_LOCATION_RE.search(location))
 
 
-def posted_days_ago(posted_date_str: str) -> int:
-    """Parse ISO date string '2026-04-29' to number of days ago."""
+_EST = ZoneInfo("America/New_York")
+
+
+def _parse_posted_dt(posted_date_str: str) -> datetime | None:
+    """Parse Oracle PostedDate — full ISO datetime if available, else date-only."""
     if not posted_date_str:
-        return 999
+        return None
+    s = str(posted_date_str).strip()
     try:
-        date_part = str(posted_date_str)[:10]  # "YYYY-MM-DD"
-        posted = datetime.strptime(date_part, "%Y-%m-%d").date()
-        return (date.today() - posted).days
+        dt = datetime.fromisoformat(s)
+        # If no tzinfo assume UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+        return dt.astimezone(_EST)
     except Exception:
+        pass
+    try:
+        return datetime.strptime(s[:10], "%Y-%m-%d").replace(tzinfo=_EST)
+    except Exception:
+        return None
+
+
+def posted_days_ago(posted_date_str: str) -> int:
+    dt = _parse_posted_dt(posted_date_str)
+    if dt is None:
         return 999
+    return (datetime.now(_EST).date() - dt.date()).days
 
 
 def format_posted_date(posted_date_str: str) -> str:
-    if not posted_date_str:
+    dt = _parse_posted_dt(posted_date_str)
+    if dt is None:
         return ""
-    try:
-        return datetime.strptime(str(posted_date_str)[:10], "%Y-%m-%d").strftime("%b %d, %Y")
-    except Exception:
-        return ""
+    has_time = dt.second != 0 or dt.minute != 0 or dt.hour != 0
+    if has_time:
+        abbr = "EDT" if dt.dst() else "EST"
+        time_str = dt.strftime("%I:%M:%S %p").lstrip("0")
+        return f"{dt.strftime('%b %d, %Y')} {time_str} {abbr}"
+    return dt.strftime("%b %d, %Y")
 
 
 def format_posted_ago(posted_date_str: str) -> str:
-    days = posted_days_ago(posted_date_str)
-    if days == 0:
-        return "Posted today"
-    if days == 1:
-        return "Posted 1 day ago"
-    return f"Posted {days} days ago"
+    dt = _parse_posted_dt(posted_date_str)
+    if dt is None:
+        return ""
+    delta = int((datetime.now(_EST) - dt).total_seconds())
+    if delta < 0:
+        return "Posted just now"
+    if delta < 60:
+        return f"Posted {delta} second{'s' if delta != 1 else ''} ago"
+    if delta < 3600:
+        m = delta // 60
+        return f"Posted {m} minute{'s' if m != 1 else ''} ago"
+    if delta < 86400:
+        h = delta // 3600
+        return f"Posted {h} hour{'s' if h != 1 else ''} ago"
+    d = delta // 86400
+    return f"Posted {d} day{'s' if d != 1 else ''} ago"
 
 
 # ── Oracle Cloud API ───────────────────────────────────────────────────────────
