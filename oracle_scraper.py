@@ -63,26 +63,12 @@ _ROLES = {
         "seen_log":     "oracle_seen_bi.json",
         "output_csv":   "oracle_jobs_bi.csv",
     },
-    "bia": {
-        "label":        "BI Analyst",
-        "search_terms": ["BI Analyst"],
-        "allow_re":     re.compile(r"\bbi\s+(analyst|developer|engineer|specialist)\b", re.I),
-        "seen_log":     "oracle_seen_bia.json",
-        "output_csv":   "oracle_jobs_bia.csv",
-    },
-    "ra": {
-        "label":        "Reporting Analyst",
-        "search_terms": ["Reporting Analyst"],
-        "allow_re":     re.compile(r"\breporting\s+analyst\b", re.I),
-        "seen_log":     "oracle_seen_ra.json",
-        "output_csv":   "oracle_jobs_ra.csv",
-    },
-    "aa": {
-        "label":        "Analytics Analyst",
-        "search_terms": ["Analytics Analyst"],
-        "allow_re":     re.compile(r"\banalytics\s+analyst\b", re.I),
-        "seen_log":     "oracle_seen_aa.json",
-        "output_csv":   "oracle_jobs_aa.csv",
+    "analyst": {
+        "label":        "Analyst",
+        "search_terms": ["BI Analyst", "Reporting Analyst", "Analytics Analyst", "Business Analyst"],
+        "allow_re":     re.compile(r"\banalyst\b", re.I),
+        "seen_log":     "oracle_seen_analyst.json",
+        "output_csv":   "oracle_jobs_analyst.csv",
     },
     "ds": {
         "label":        "Data Scientist",
