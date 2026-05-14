@@ -565,8 +565,8 @@ def main():
     print(f"  Fresh postings   : {len(fresh)}")
     print(f"  Reposted         : {len(reposted)}")
 
-    if not target:
-        print("\nNo new target roles this run — skipping email.")
+    if not fresh:
+        print("\nNo fresh (non-reposted) roles this run — skipping email.")
     else:
         send_email(fresh, reposted)
 
