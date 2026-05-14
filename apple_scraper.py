@@ -40,7 +40,7 @@ SMTP_PORT       = 465
 API_URL         = "https://jobs.apple.com/api/v1/search"
 SEARCH_PAGE_URL = "https://jobs.apple.com/en-us/search"
 PAGE_SIZE       = 20        # Apple returns exactly 20 per page
-MAX_PAGES       = 50        # 50 * 20 = 1 000 most-recent jobs scanned; 3 days fits well within this
+MAX_PAGES       = 20        # 20 * 20 = 400 most-recent jobs scanned; plenty for a 3-day window
 MAX_AGE_DAYS    = 3         # ignore jobs posted more than 3 days ago
 REQUEST_DELAY_S = 0.4
 SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "apple_api_seen_jobs.json")
@@ -287,7 +287,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def scan() -> list[dict]:
-    print(f"[1] Fetching US jobs from Apple API (up to {MAX_PAGES} pages × {PAGE_SIZE}, newest first, last {MAX_AGE_DAYS} days)...")
+    print(f"[1] Fetching up to {MAX_PAGES * PAGE_SIZE} most-recent US jobs from Apple API (newest first, last {MAX_AGE_DAYS} days)...")
     raw = fetch_all_jobs(MAX_PAGES)
     print(f"  Total raw jobs fetched: {len(raw)}")
 
