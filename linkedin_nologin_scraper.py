@@ -89,6 +89,27 @@ SENIOR_RE = re.compile(
 # Titles with truncated words (e.g. "Analys" without the "t") are typically scam/fake postings
 TRUNCATED_TITLE_RE = re.compile(r'\bAnalys\b', re.I)
 
+# Staffing/recruiting agency signals in the job description (checked on already-fetched text, no extra requests)
+_STAFFING_DESC_RE = re.compile(
+    r'\b(our\s+client\b'
+    r'|contract[\s-]to[\s-]hire'
+    r'|c2c\b|corp[\s-]to[\s-]corp'
+    r'|w-?2\s+or\s+c2c'
+    r'|we\s+are\s+a\s+staffing'
+    r'|staffing\s+(agency|firm|company)'
+    r'|recruiting\s+(agency|firm)'
+    r'|placed\s+(with|at)\s+our\s+client'
+    r'|this\s+(role|position)\s+is\s+(with|at)\s+our\s+client'
+    r'|our\s+client\s+is\s+(looking|seeking|hiring))',
+    re.I,
+)
+
+# Conservative company-name fallback for when description wasn't fetched
+_STAFFING_COMPANY_RE = re.compile(
+    r'\b(staffing|recruiters?|talent\s+solutions|it\s+staffing|tech\s+staffing)\b',
+    re.I,
+)
+
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -450,8 +471,14 @@ def main():
                     detail  = fetch_job_detail(jid)
                     job.update(detail)
                     job["easy_apply"] = card_ea or job.get("easy_apply", False)
+                    if _STAFFING_DESC_RE.search(job.get("description", "")):
+                        print(f"    SKIP staffing (desc): {job['company']}")
+                        continue
                 else:
                     job["detail_skipped"] = True
+                    if _STAFFING_COMPANY_RE.search(job["company"]):
+                        print(f"    SKIP staffing (name): {job['company']}")
+                        continue
 
                 all_jobs.append(job)
                 added += 1
