@@ -591,9 +591,10 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
             badges += "&nbsp;<span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span>"
         if j.get("entry_level"):
             badges += "&nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span>"
+        posted_today = posted_days_ago(j.get("posted", "")) == 0
         if j.get("is_new") and j.get("entry_level"):
             bg = "#e3f2fd"
-        elif j.get("is_new"):
+        elif posted_today:
             bg = "#f1f8e9"
         else:
             bg = ""
@@ -616,7 +617,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     )
     body_html = f"""
     <h2>Workday — {_role_label} Jobs (Last {MAX_AGE_DAYS} Day)</h2>
-    <p><b>{new_count} new role(s)</b> found. All listings from the last {MAX_AGE_DAYS} day(s) shown — new ones highlighted in green.</p>
+    <p><b>{new_count} new role(s)</b> found. All listings from the last {MAX_AGE_DAYS} day(s) shown — <span style='background:#f1f8e9;padding:1px 4px'>green rows</span> posted today &nbsp;|&nbsp; <span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span> = new this run.</p>
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#e0e0e0">
