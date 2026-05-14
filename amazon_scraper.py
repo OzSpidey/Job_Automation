@@ -182,8 +182,20 @@ def fetch_recent_jobs(max_total: int = MAX_JOBS) -> list[dict]:
         }
         url = API_URL + "?" + urllib.parse.urlencode(params)
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            data = json.loads(r.read())
+        for attempt in range(4):
+            try:
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    data = json.loads(r.read())
+                break
+            except urllib.error.HTTPError as e:
+                if e.code in (429, 503, 504) and attempt < 3:
+                    wait = 2 ** attempt * 5
+                    print(f"  [api] {e.code} at offset={offset}, retrying in {wait}s…")
+                    time.sleep(wait)
+                else:
+                    raise
+        else:
+            raise RuntimeError(f"Failed after retries at offset={offset}")
         jobs = data.get("jobs", [])
         if not jobs:
             print(f"  [api] offset={offset} returned 0 — stopping.")
