@@ -16,12 +16,13 @@ Run: python lever_jobs_scanner.py
 """
 
 import asyncio
+import csv
 import json
 import os
 import re
 import smtplib
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -38,8 +39,39 @@ SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 RECIPIENTS      = [e.strip() for e in os.environ.get("EMAIL_TO", "").split(",") if e.strip()]
 
 SEEN_FILE    = Path(__file__).parent / "json" / "lever_seen_jobs.json"
+MASTER_CSV   = Path(__file__).parent / "csv"  / "new_jobs.csv"
 CONCURRENCY  = 15
 MAX_AGE_DAYS = 7
+
+# -- Master CSV ----------------------------------------------------------------
+_MASTER_COLS    = ["source", "job_id", "title", "company", "location", "role", "posted", "url", "found_at"]
+_MASTER_ROLE_RE = re.compile(r'data\s+analyst|data\s+engineer|business\s+intelligence', re.I)
+
+def _classify_master_role(title: str) -> str:
+    if re.search(r'data\s+engineer',         title, re.I): return "Data Engineer"
+    if re.search(r'data\s+analyst',          title, re.I): return "Data Analyst"
+    if re.search(r'business\s+intelligence', title, re.I): return "Business Intelligence"
+    return ""
+
+def _append_master_csv(rows: list[dict]) -> None:
+    if not rows:
+        return
+    existing: set[str] = set()
+    if MASTER_CSV.exists():
+        with open(MASTER_CSV, newline="", encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                existing.add(f"{r.get('source','')}:{r.get('job_id','')}")
+    new_rows = [r for r in rows if f"{r['source']}:{r['job_id']}" not in existing]
+    if not new_rows:
+        return
+    MASTER_CSV.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not MASTER_CSV.exists() or MASTER_CSV.stat().st_size == 0
+    with open(MASTER_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_MASTER_COLS, extrasaction="ignore")
+        if write_header:
+            writer.writeheader()
+        writer.writerows(new_rows)
+    print(f"[+] Master CSV: appended {len(new_rows)} job(s)")
 
 ALLOWED_TITLES = re.compile(
     r"\b(analyst|analytics|engineer|developer|data\s+scientist)\b",
@@ -281,6 +313,32 @@ async def main():
         print(f"    Location: {cats.get('location', '')}")
         print(f"    Posted:   {posted_label(p.get('createdAt', 0))}")
         print(f"    URL:      {p.get('hostedUrl', '')}")
+
+    # Append DA/DE/BI new jobs posted <24h to master CSV
+    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+    now_str    = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    master_rows = []
+    for p in matched:
+        if p["id"] not in new_ids:
+            continue
+        title = p.get("text", "")
+        if not _MASTER_ROLE_RE.search(title):
+            continue
+        posted_dt = datetime.fromtimestamp(p.get("createdAt", 0) / 1000, tz=timezone.utc)
+        if posted_dt < cutoff_24h:
+            continue
+        master_rows.append({
+            "source":   "lever",
+            "job_id":   p["id"],
+            "title":    title,
+            "company":  p["_company"].replace("-", " ").title(),
+            "location": p.get("categories", {}).get("location", ""),
+            "role":     _classify_master_role(title),
+            "posted":   posted_dt.isoformat(),
+            "url":      p.get("applyUrl", "") or p.get("hostedUrl", ""),
+            "found_at": now_str,
+        })
+    _append_master_csv(master_rows)
 
     if not new_ids:
         print("\n  No new roles since last run — skipping email.")

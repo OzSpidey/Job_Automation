@@ -15,12 +15,13 @@ Run: python ashby_jobs_scanner.py
 """
 
 import asyncio
+import csv
 import json
 import os
 import re
 import smtplib
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -37,8 +38,39 @@ SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 RECIPIENTS      = [e.strip() for e in os.environ.get("EMAIL_TO", "").split(",") if e.strip()]
 
 SEEN_FILE    = Path(__file__).parent / "json" / "ashby_seen_jobs.json"
+MASTER_CSV   = Path(__file__).parent / "csv"  / "new_jobs.csv"
 CONCURRENCY  = 20
 MAX_AGE_DAYS = 30  # wider window — Ashby is lower volume than Lever
+
+# -- Master CSV ----------------------------------------------------------------
+_MASTER_COLS    = ["source", "job_id", "title", "company", "location", "role", "posted", "url", "found_at"]
+_MASTER_ROLE_RE = re.compile(r'data\s+analyst|data\s+engineer|business\s+intelligence', re.I)
+
+def _classify_master_role(title: str) -> str:
+    if re.search(r'data\s+engineer',         title, re.I): return "Data Engineer"
+    if re.search(r'data\s+analyst',          title, re.I): return "Data Analyst"
+    if re.search(r'business\s+intelligence', title, re.I): return "Business Intelligence"
+    return ""
+
+def _append_master_csv(rows: list[dict]) -> None:
+    if not rows:
+        return
+    existing: set[str] = set()
+    if MASTER_CSV.exists():
+        with open(MASTER_CSV, newline="", encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                existing.add(f"{r.get('source','')}:{r.get('job_id','')}")
+    new_rows = [r for r in rows if f"{r['source']}:{r['job_id']}" not in existing]
+    if not new_rows:
+        return
+    MASTER_CSV.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not MASTER_CSV.exists() or MASTER_CSV.stat().st_size == 0
+    with open(MASTER_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_MASTER_COLS, extrasaction="ignore")
+        if write_header:
+            writer.writeheader()
+        writer.writerows(new_rows)
+    print(f"[+] Master CSV: appended {len(new_rows)} job(s)")
 
 ALLOWED_TITLES = re.compile(
     r"\b(data\s+engineer|data\s+analyst|analytics\s+engineer|analytics\s+analyst"
@@ -615,6 +647,39 @@ async def main():
         apply_url = p.get("applyUrl", "") or p.get("jobUrl", "") or \
                     f"https://jobs.ashbyhq.com/{slug}/{p['id']}/application"
         print(f"    URL:      {apply_url}")
+
+    # Append DA/DE/BI new jobs posted <24h to master CSV
+    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+    now_str    = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    master_rows = []
+    for p in matched:
+        if p["id"] not in new_ids:
+            continue
+        title = p.get("title", "")
+        if not _MASTER_ROLE_RE.search(title):
+            continue
+        pub = p.get("publishedAt", "")
+        try:
+            posted_dt = datetime.fromisoformat(pub.replace("Z", "+00:00")).astimezone(timezone.utc)
+            if posted_dt < cutoff_24h:
+                continue
+        except Exception:
+            continue
+        slug      = p["_slug"]
+        apply_url = p.get("applyUrl", "") or p.get("jobUrl", "") or \
+                    f"https://jobs.ashbyhq.com/{slug}/{p['id']}/application"
+        master_rows.append({
+            "source":   "ashby",
+            "job_id":   p["id"],
+            "title":    title,
+            "company":  COMPANIES.get(slug, slug.replace("-", " ").title()),
+            "location": _extract_location(p),
+            "role":     _classify_master_role(title),
+            "posted":   posted_dt.isoformat(),
+            "url":      apply_url,
+            "found_at": now_str,
+        })
+    _append_master_csv(master_rows)
 
     if not new_ids:
         print("\n  No new roles since last run — skipping email.")

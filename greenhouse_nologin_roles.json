@@ -1,0 +1,7 @@
+{
+  "autoapply_patterns": [
+    "data\\s+analyst",
+    "data\\s+engineer",
+    "business\\s+intelligence"
+  ]
+}

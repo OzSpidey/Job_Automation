@@ -1,0 +1,73 @@
+name: Master Auto-Apply
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - "Greenhouse No-Login Scraper"
+      - "Lever Jobs Scanner"
+      - "Ashby Jobs Scanner"
+    types: [completed]
+
+concurrency:
+  group: master-autoapply
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  autoapply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v2-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright browser
+        run: playwright install chromium
+
+      - name: Install Playwright system deps
+        run: playwright install-deps chromium
+
+      - name: Download resume
+        run: |
+          git clone https://github.com/OzSpidey/job-assets.git /tmp/job-assets
+          cp /tmp/job-assets/resume_de.pdf /tmp/resume_de.pdf
+
+      - name: Run Master Auto-Apply
+        env:
+          APPLICANT_INFO_JSON: ${{ secrets.APPLICANT_INFO_JSON }}
+          RESUME_PATH:         /tmp/resume_de.pdf
+          EMAIL_SENDER:        ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD:  ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:            ${{ secrets.EMAIL_TO }}
+        run: python master_autoapply.py
+
+      - name: Persist state
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add csv/new_jobs.csv json/master_applied_ids.json csv/master_applied.csv 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update master applied jobs [skip ci]"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $i failed, retrying in $((i * 3))s..."
+            sleep $((i * 3))
+          done

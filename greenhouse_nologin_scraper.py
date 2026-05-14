@@ -40,6 +40,31 @@ SEEN_FILE      = BASE_DIR / "json" / "greenhouse_nologin_seen.json"
 CSV_FILE       = BASE_DIR / "csv"  / "greenhouse_nologin_jobs.csv"
 LAST_RUN_FILE  = BASE_DIR / "greenhouse_last_run_jobs.json"
 COMPANIES_FILE = BASE_DIR / "greenhouse_companies.json"
+MASTER_CSV     = BASE_DIR / "csv"  / "new_jobs.csv"
+
+# -- Master CSV ----------------------------------------------------------------
+_MASTER_COLS    = ["source", "job_id", "title", "company", "location", "role", "posted", "url", "found_at"]
+_MASTER_ROLE_RE = re.compile(r'data\s+analyst|data\s+engineer|business\s+intelligence', re.I)
+
+def _append_master_csv(rows: list[dict]) -> None:
+    if not rows:
+        return
+    existing: set[str] = set()
+    if MASTER_CSV.exists():
+        with open(MASTER_CSV, newline="", encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                existing.add(f"{r.get('source','')}:{r.get('job_id','')}")
+    new_rows = [r for r in rows if f"{r['source']}:{r['job_id']}" not in existing]
+    if not new_rows:
+        return
+    MASTER_CSV.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not MASTER_CSV.exists() or MASTER_CSV.stat().st_size == 0
+    with open(MASTER_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_MASTER_COLS, extrasaction="ignore")
+        if write_header:
+            writer.writeheader()
+        writer.writerows(new_rows)
+    print(f"[+] Master CSV: appended {len(new_rows)} job(s)")
 
 API_URL        = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
 MAX_CONCURRENT = 200
@@ -208,9 +233,9 @@ async def _fetch(
             job_url = job.get("absolute_url", "")
             raw_fp  = job.get("first_published") or job.get("updated_at") or ""
             try:
-                posted = datetime.fromisoformat(raw_fp).strftime("%Y-%m-%d") if raw_fp else ""
+                posted = datetime.fromisoformat(raw_fp.replace("Z", "+00:00")).isoformat() if raw_fp else ""
             except Exception:
-                posted = raw_fp[:10] if raw_fp else ""
+                posted = raw_fp[:19] if raw_fp else ""
 
             role = _classify(title)
             if not role:
@@ -254,6 +279,39 @@ async def _scrape_all() -> list[dict]:
     return [job for batch in batches if isinstance(batch, list) for job in batch]
 
 
+# -- Email helpers -------------------------------------------------------------
+
+def _format_posted(iso: str) -> str:
+    if not iso:
+        return "--"
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+        return dt.strftime("%b %d, %Y %H:%M UTC")
+    except Exception:
+        return iso[:10]
+
+
+def _format_ago(iso: str) -> str:
+    if not iso:
+        return ""
+    try:
+        delta = int((datetime.now(timezone.utc) - datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)).total_seconds())
+        if delta < 0:
+            return "just now"
+        if delta < 60:
+            return f"{delta}s ago"
+        if delta < 3600:
+            m = delta // 60
+            return f"{m}m ago"
+        if delta < 86400:
+            h = delta // 3600
+            return f"{h}h ago"
+        d = delta // 86400
+        return f"{d}d ago"
+    except Exception:
+        return ""
+
+
 # -- Email ---------------------------------------------------------------------
 
 def _send_email(jobs: list[dict]) -> None:
@@ -273,13 +331,20 @@ def _send_email(jobs: list[dict]) -> None:
             "font-weight:bold;padding:2px 5px;border-radius:3px;margin-left:5px'>NEW</span>"
             if j.get("is_new") else ""
         )
+        posted_str = _format_posted(j.get("posted", ""))
+        ago_str    = _format_ago(j.get("posted", ""))
+        posted_cell = (
+            f"{posted_str}"
+            f"<br><span style='font-size:11px;color:#666'>({ago_str})</span>"
+            if ago_str else posted_str
+        )
         rows += (
             f"<tr>"
             f"<td>{j['title']}{new_badge}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location'] or '--'}</td>"
             f"<td>{j['role']}</td>"
-            f"<td>{j.get('posted') or '--'}</td>"
+            f"<td style='white-space:nowrap'>{posted_cell}</td>"
             f"<td><a href='{j['url']}'>Link</a></td>"
             f"</tr>"
         )
@@ -356,6 +421,31 @@ def main() -> None:
     SEEN_FILE.write_text(json.dumps(sorted(updated_seen)), encoding="utf-8")
 
     LAST_RUN_FILE.write_text(json.dumps(sorted({j["job_id"] for j in all_jobs})), encoding="utf-8")
+
+    # Append DA/DE/BI jobs posted <24h to master CSV
+    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+    master_rows = []
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    for j in new_jobs:
+        if not _MASTER_ROLE_RE.search(j["title"]):
+            continue
+        try:
+            if datetime.fromisoformat(j["posted"].replace("Z", "+00:00")).astimezone(timezone.utc) < cutoff_24h:
+                continue
+        except Exception:
+            continue
+        master_rows.append({
+            "source":   "greenhouse",
+            "job_id":   j["job_id"],
+            "title":    j["title"],
+            "company":  j["company"],
+            "location": j["location"],
+            "role":     j["role"],
+            "posted":   j["posted"],
+            "url":      j["url"],
+            "found_at": now_str,
+        })
+    _append_master_csv(master_rows)
 
     if recent_jobs:
         _send_email(recent_jobs)
