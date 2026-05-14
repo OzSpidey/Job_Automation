@@ -48,6 +48,7 @@ USER_AGENT      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 
 TARGET_ROLES = [
     "data engineer",
+    "data scientist",
     "business intelligence engineer",
     "business analyst",
     "bi engineer",
