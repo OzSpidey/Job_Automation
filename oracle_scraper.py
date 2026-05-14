@@ -58,8 +58,8 @@ _ROLES = {
     },
     "bi": {
         "label":        "Business Intelligence",
-        "search_terms": ["Business Intelligence"],
-        "allow_re":     re.compile(r"\bbusiness\s+intelligence\b", re.I),
+        "search_terms": ["Business Intelligence", "BI Analyst", "BI Developer", "BI Engineer", "BI Specialist"],
+        "allow_re":     re.compile(r"\b(business\s+intelligence|bi\s+(analyst|developer|engineer|specialist))\b", re.I),
         "seen_log":     "oracle_seen_bi.json",
         "output_csv":   "oracle_jobs_bi.csv",
     },
