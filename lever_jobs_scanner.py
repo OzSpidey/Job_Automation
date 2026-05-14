@@ -72,6 +72,10 @@ def _append_master_csv(rows: list[dict]) -> None:
             writer.writeheader()
         writer.writerows(new_rows)
     print(f"[+] Master CSV: appended {len(new_rows)} job(s)")
+    github_env = os.environ.get("GITHUB_ENV")
+    if github_env:
+        with open(github_env, "a") as f:
+            f.write("MASTER_CSV_UPDATED=true\n")
 
 ALLOWED_TITLES = re.compile(
     r"\b(analyst|analytics|engineer|developer|data\s+scientist)\b",

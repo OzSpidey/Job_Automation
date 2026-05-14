@@ -2,12 +2,6 @@ name: Master Auto-Apply
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - "Greenhouse No-Login Scraper"
-      - "Lever Jobs Scanner"
-      - "Ashby Jobs Scanner"
-    types: [completed]
 
 concurrency:
   group: master-autoapply
