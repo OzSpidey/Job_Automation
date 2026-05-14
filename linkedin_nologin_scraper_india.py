@@ -69,6 +69,9 @@ SENIOR_RE = re.compile(
     re.I,
 )
 
+# Titles with truncated words (e.g. "Analys" without the "t") are typically scam/fake postings
+TRUNCATED_TITLE_RE = re.compile(r'\bAnalys\b', re.I)
+
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -321,6 +324,10 @@ def main():
 
                 if job["company"].lower().strip() in SKIP_COMPANIES:
                     print(f"    SKIP company: {job['company']}")
+                    continue
+
+                if TRUNCATED_TITLE_RE.search(job["title"]):
+                    print(f"    SKIP truncated title: {job['title']}")
                     continue
 
                 if FETCH_DETAILS:
