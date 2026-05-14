@@ -247,61 +247,79 @@ def is_us_location(location: str) -> bool:
 _EST = ZoneInfo("America/New_York")
 
 
-def _parse_posted_dt(posted_date_str: str) -> datetime | None:
-    """Parse Oracle PostedDate — full ISO datetime if available, else date-only."""
+_UTC = ZoneInfo("UTC")
+
+
+def _parse_posted_dt(posted_date_str: str) -> tuple[datetime, bool] | tuple[None, bool]:
+    """Parse Oracle PostedDate.
+
+    Returns (dt_in_est, has_real_time).
+    has_real_time is False when Oracle stored only the date (midnight UTC placeholder).
+    """
     if not posted_date_str:
-        return None
+        return None, False
     s = str(posted_date_str).strip()
     try:
         dt = datetime.fromisoformat(s)
-        # If no tzinfo assume UTC
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-        return dt.astimezone(_EST)
+            dt = dt.replace(tzinfo=_UTC)
+        dt_utc = dt.astimezone(_UTC)
+        # Midnight UTC means Oracle only stored the date, no real time
+        has_real_time = not (dt_utc.hour == 0 and dt_utc.minute == 0 and dt_utc.second == 0)
+        return dt_utc.astimezone(_EST), has_real_time
     except Exception:
         pass
     try:
-        return datetime.strptime(s[:10], "%Y-%m-%d").replace(tzinfo=_EST)
+        dt = datetime.strptime(s[:10], "%Y-%m-%d").replace(tzinfo=_UTC)
+        return dt.astimezone(_EST), False
     except Exception:
-        return None
+        return None, False
 
 
 def posted_days_ago(posted_date_str: str) -> int:
-    dt = _parse_posted_dt(posted_date_str)
+    dt, _ = _parse_posted_dt(posted_date_str)
     if dt is None:
         return 999
-    return (datetime.now(_EST).date() - dt.date()).days
+    return (datetime.now(_UTC).date() - dt.astimezone(_UTC).date()).days
 
 
 def format_posted_date(posted_date_str: str) -> str:
-    dt = _parse_posted_dt(posted_date_str)
+    dt, has_real_time = _parse_posted_dt(posted_date_str)
     if dt is None:
         return ""
-    has_time = dt.second != 0 or dt.minute != 0 or dt.hour != 0
-    if has_time:
+    if has_real_time:
         abbr = "EDT" if dt.dst() else "EST"
         time_str = dt.strftime("%I:%M:%S %p").lstrip("0")
         return f"{dt.strftime('%b %d, %Y')} {time_str} {abbr}"
-    return dt.strftime("%b %d, %Y")
+    # Date-only — use the UTC calendar date (what Oracle actually meant)
+    return dt.astimezone(_UTC).strftime("%b %d, %Y")
 
 
 def format_posted_ago(posted_date_str: str) -> str:
-    dt = _parse_posted_dt(posted_date_str)
+    dt, has_real_time = _parse_posted_dt(posted_date_str)
     if dt is None:
         return ""
-    delta = int((datetime.now(_EST) - dt).total_seconds())
-    if delta < 0:
-        return "Posted just now"
-    if delta < 60:
-        return f"Posted {delta} second{'s' if delta != 1 else ''} ago"
-    if delta < 3600:
-        m = delta // 60
-        return f"Posted {m} minute{'s' if m != 1 else ''} ago"
-    if delta < 86400:
-        h = delta // 3600
-        return f"Posted {h} hour{'s' if h != 1 else ''} ago"
-    d = delta // 86400
-    return f"Posted {d} day{'s' if d != 1 else ''} ago"
+    if has_real_time:
+        delta = int((datetime.now(_EST) - dt).total_seconds())
+        if delta < 0:
+            return "Posted just now"
+        if delta < 60:
+            return f"Posted {delta} second{'s' if delta != 1 else ''} ago"
+        if delta < 3600:
+            m = delta // 60
+            return f"Posted {m} minute{'s' if m != 1 else ''} ago"
+        if delta < 86400:
+            h = delta // 3600
+            return f"Posted {h} hour{'s' if h != 1 else ''} ago"
+        d = delta // 86400
+        return f"Posted {d} day{'s' if d != 1 else ''} ago"
+    # Date-only fallback
+    days = posted_days_ago(posted_date_str)
+    if days == 0:
+        return "Posted today"
+    if days == 1:
+        return "Posted 1 day ago"
+    return f"Posted {days} days ago"
 
 
 # ── Oracle Cloud API ───────────────────────────────────────────────────────────
