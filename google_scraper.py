@@ -38,7 +38,10 @@ import urllib.request
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
+
+EAST_ZONE = ZoneInfo("America/New_York")  # auto-handles EST/EDT switchover
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 load_dotenv()
@@ -173,12 +176,36 @@ def format_locations(job: dict) -> str:
 
 
 def format_date(ts: int | None) -> str:
+    """Eastern-time wallclock with seconds. e.g. 'May 14, 2026 6:30:23 AM EDT'."""
     if not ts:
         return ""
     try:
-        return datetime.utcfromtimestamp(ts).strftime("%b %d, %Y")
+        dt = datetime.fromtimestamp(ts, tz=EAST_ZONE)
     except (OverflowError, OSError, ValueError):
         return ""
+    abbr = "EDT" if dt.dst() else "EST"
+    # %I gives zero-padded 12-hour; strip the leading zero for readability
+    time_str = dt.strftime("%I:%M:%S %p").lstrip("0")
+    return f"{dt.strftime('%b %d, %Y')} {time_str} {abbr}"
+
+
+def format_ago(ts: int | None) -> str:
+    """Relative posting age. e.g. 'Posted 25 minutes ago'."""
+    if not ts:
+        return ""
+    delta = int(time.time()) - ts
+    if delta < 0:
+        return "Posted just now"
+    if delta < 60:
+        return f"Posted {delta} second{'s' if delta != 1 else ''} ago"
+    if delta < 3600:
+        m = delta // 60
+        return f"Posted {m} minute{'s' if m != 1 else ''} ago"
+    if delta < 86400:
+        h = delta // 3600
+        return f"Posted {h} hour{'s' if h != 1 else ''} ago"
+    d = delta // 86400
+    return f"Posted {d} day{'s' if d != 1 else ''} ago"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -246,7 +273,10 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
                 f'<td style="padding:8px;border:1px solid #ddd;">{badge}{j["title"]}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;">{j.get("location", "")}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;"><a href="{j["url"]}">Apply</a></td>'
-                f'<td style="padding:8px;border:1px solid #ddd;white-space:nowrap;">{j.get("date", "")}</td>'
+                f'<td style="padding:8px;border:1px solid #ddd;white-space:nowrap;">'
+                f'{j.get("date", "")}'
+                f'<br><span style="font-size:11px;color:#666">({j.get("ago", "")})</span>'
+                f'</td>'
                 f'</tr>'
             )
         html = f"""
@@ -271,7 +301,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         </body></html>
         """
         plain = f"Found {count} matching role(s) ({new_count} NEW):\n\n" + "\n".join(
-            f"- {'[NEW] ' if j['url'] not in previously_seen else ''}{j['title']} — {j.get('location', '?')} ({j.get('date', '?')})\n  {j['url']}"
+            f"- {'[NEW] ' if j['url'] not in previously_seen else ''}{j['title']} — {j.get('location', '?')}\n  {j.get('date', '?')} ({j.get('ago', '?')})\n  {j['url']}"
             for j in jobs
         )
 
@@ -316,6 +346,7 @@ def scan() -> list[dict]:
             "url":      j["url"],
             "location": format_locations(j),
             "date":     format_date(j["posted_ts"]),
+            "ago":      format_ago(j["posted_ts"]),
             "posted_ts": j["posted_ts"] or 0,
         })
         print(f"  MATCH: {j['title']}  [{matched[-1]['location']}]")
