@@ -65,7 +65,7 @@ _ROLES = {
     },
     "analyst": {
         "label":        "Analyst",
-        "search_terms": ["BI Analyst", "Reporting Analyst", "Analytics Analyst", "Business Analyst"],
+        "search_terms": ["Reporting Analyst", "Analytics Analyst", "Business Analyst"],
         "allow_re":     re.compile(r"\banalyst\b", re.I),
         "seen_log":     "oracle_seen_analyst.json",
         "output_csv":   "oracle_jobs_analyst.csv",
