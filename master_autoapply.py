@@ -667,9 +667,13 @@ async def run() -> None:
 
     save_applied(applied)
     append_output_csv(results)
-    send_summary_email(results)
 
-    n_ok  = sum(1 for r in results if r["status"] == "applied")
+    n_ok = sum(1 for r in results if r["status"] == "applied")
+    if n_ok > 0:
+        send_summary_email(results)
+    else:
+        print("[i] No successful applications this run — skipping email.")
+
     print(f"\n[i] Done — {n_ok}/{len(results)} applied")
 
 
