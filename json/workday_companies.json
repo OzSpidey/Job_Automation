@@ -7978,5 +7978,173 @@
     "tenant": "vitalant",
     "instance": "wd12",
     "career": "Careers"
+  },
+  {
+    "name": "Accuray",
+    "tenant": "accuray",
+    "instance": "wd5",
+    "career": "External"
+  },
+  {
+    "name": "ADTRAN",
+    "tenant": "adtran",
+    "instance": "wd3",
+    "career": "adtran"
+  },
+  {
+    "name": "AECOM",
+    "tenant": "aecom",
+    "instance": "wd5",
+    "career": "External_Career_Site"
+  },
+  {
+    "name": "Almirall",
+    "tenant": "almirall",
+    "instance": "wd3",
+    "career": "External"
+  },
+  {
+    "name": "Andela",
+    "tenant": "andela",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Bizagi",
+    "tenant": "bizagi",
+    "instance": "wd3",
+    "career": "bizagi_Career_Site"
+  },
+  {
+    "name": "Booster",
+    "tenant": "booster",
+    "instance": "wd5",
+    "career": "booster_Careers"
+  },
+  {
+    "name": "BrowserStack",
+    "tenant": "browserstack",
+    "instance": "wd3",
+    "career": "External"
+  },
+  {
+    "name": "Bullhorn",
+    "tenant": "bullhorn",
+    "instance": "wd1",
+    "career": "bullhornCareers"
+  },
+  {
+    "name": "Criteo",
+    "tenant": "criteo",
+    "instance": "wd3",
+    "career": "criteo_Career_Site"
+  },
+  {
+    "name": "Fastly",
+    "tenant": "fastly",
+    "instance": "wd1",
+    "career": "fastly_Careers"
+  },
+  {
+    "name": "Galileo",
+    "tenant": "galileo",
+    "instance": "wd3",
+    "career": "galileo_Career_Site"
+  },
+  {
+    "name": "Ibotta",
+    "tenant": "ibotta",
+    "instance": "wd1",
+    "career": "ibotta"
+  },
+  {
+    "name": "INRIX",
+    "tenant": "inrix",
+    "instance": "wd5",
+    "career": "inrix"
+  },
+  {
+    "name": "Interactions",
+    "tenant": "interactions",
+    "instance": "wd1",
+    "career": "interactions"
+  },
+  {
+    "name": "Logicalis",
+    "tenant": "logicalis",
+    "instance": "wd3",
+    "career": "logicalisCareers"
+  },
+  {
+    "name": "Lytx",
+    "tenant": "lytx",
+    "instance": "wd1",
+    "career": "lytx"
+  },
+  {
+    "name": "nCino",
+    "tenant": "ncino",
+    "instance": "wd5",
+    "career": "ncinoCareers"
+  },
+  {
+    "name": "Novavax",
+    "tenant": "novavax",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "Petco",
+    "tenant": "petco",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Planet",
+    "tenant": "planet",
+    "instance": "wd3",
+    "career": "planet"
+  },
+  {
+    "name": "Remitly",
+    "tenant": "remitly",
+    "instance": "wd5",
+    "career": "remitly_Careers"
+  },
+  {
+    "name": "Rovi",
+    "tenant": "rovi",
+    "instance": "wd3",
+    "career": "rovi_Careers"
+  },
+  {
+    "name": "Starfish",
+    "tenant": "starfish",
+    "instance": "wd501",
+    "career": "Careers"
+  },
+  {
+    "name": "Stewart",
+    "tenant": "stewart",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "Sunrise",
+    "tenant": "sunrise",
+    "instance": "wd3",
+    "career": "sunrise"
+  },
+  {
+    "name": "Tricentis",
+    "tenant": "tricentis",
+    "instance": "wd1",
+    "career": "tricentis_Careers"
+  },
+  {
+    "name": "UserTesting",
+    "tenant": "usertesting",
+    "instance": "wd12",
+    "career": "usertesting"
   }
 ]
