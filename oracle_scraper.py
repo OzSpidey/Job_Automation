@@ -25,7 +25,7 @@ import time
 import threading
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -255,13 +255,22 @@ def posted_days_ago(posted_date_str: str) -> int:
         return 999
 
 
-def format_posted_text(posted_date_str: str) -> str:
+def format_posted_date(posted_date_str: str) -> str:
+    if not posted_date_str:
+        return ""
+    try:
+        return datetime.strptime(str(posted_date_str)[:10], "%Y-%m-%d").strftime("%b %d, %Y")
+    except Exception:
+        return ""
+
+
+def format_posted_ago(posted_date_str: str) -> str:
     days = posted_days_ago(posted_date_str)
     if days == 0:
-        return "Posted Today"
+        return "Posted today"
     if days == 1:
-        return "Posted 1 Day Ago"
-    return f"Posted {days} Days Ago"
+        return "Posted 1 day ago"
+    return f"Posted {days} days ago"
 
 
 # ── Oracle Cloud API ───────────────────────────────────────────────────────────
@@ -421,7 +430,8 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
             f"<td>{j['title']}{badges}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
-            f"<td>{j['posted']}</td>"
+            f"<td style='white-space:nowrap'>{j['posted']}<br>"
+            f"<span style='font-size:11px;color:#666'>({j.get('posted_ago','')})</span></td>"
             f"<td><a href='{j['link']}'>Apply</a></td>"
             f"</tr>"
         )
@@ -498,7 +508,8 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
         if age > MAX_AGE_DAYS:
             continue
 
-        posted_text = format_posted_text(posted_date)
+        posted_text = format_posted_date(posted_date)
+        posted_ago  = format_posted_ago(posted_date)
         job_url     = build_job_url(company, job_id, ext_desc_id)
 
         with lock:
@@ -511,6 +522,7 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             "company":     company["name"],
             "location":    location,
             "posted":      posted_text,
+            "posted_ago":  posted_ago,
             "link":        job_url,
             "found_on":    datetime.now().strftime("%Y-%m-%d %H:%M"),
             "is_new":      is_new,
@@ -527,7 +539,7 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             with lock:
                 counter[0] += 1
             matched_new += 1
-            print(f"    [+] NEW: {title} | {location} | {posted_text}")
+            print(f"    [+] NEW: {title} | {location} | {posted_text} ({posted_ago})")
 
     if matched_new == 0:
         print(f"    [–] {company['name']} — no new matches")
@@ -577,7 +589,7 @@ def main() -> None:
     if new_count:
         with lock:
             jobs_to_send = list(all_current_jobs)
-        jobs_to_send.sort(key=lambda j: j["age_days"])
+        jobs_to_send.sort(key=lambda j: (not j["is_new"], j["age_days"]))
         send_summary_email(jobs_to_send, new_count)
     else:
         print("[i] No new jobs — skipping email.")

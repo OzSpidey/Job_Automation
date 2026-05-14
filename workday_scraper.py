@@ -21,7 +21,7 @@ import sys
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 _EST = ZoneInfo("America/New_York")
@@ -340,6 +340,14 @@ def posted_days_ago(posted_text: str) -> int:
     return 999  # unknown = treat as old
 
 
+def derive_posted_date(posted_text: str) -> str:
+    """Derive 'May 11, 2026' from 'Posted 3 Days Ago'."""
+    days = posted_days_ago(posted_text)
+    if days == 999:
+        return ""
+    return (datetime.now(_EST).date() - timedelta(days=days)).strftime("%b %d, %Y")
+
+
 # ── Workday API ────────────────────────────────────────────────────────────────
 
 HEADERS = {
@@ -594,7 +602,8 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
             f"<td>{j['title']}{badges}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
-            f"<td>{j['posted']}</td>"
+            f"<td style='white-space:nowrap'>{j.get('posted_date','')}<br>"
+            f"<span style='font-size:11px;color:#666'>({j['posted']})</span></td>"
             f"<td>{j.get('experience', '—')}</td>"
             f"<td><a href='{j['link']}'>Apply</a></td>"
             f"</tr>"
@@ -712,15 +721,16 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             experience = extract_experience(posting_info.get("jobDescription", ""))
 
         row = {
-            "title":       title,
-            "company":     company["name"],
-            "location":    location,
-            "posted":      posted_text,
-            "experience":  experience,
-            "link":        job_url,
-            "found_on":    datetime.now(_EST).strftime("%Y-%m-%d %H:%M"),
-            "is_new":      is_new,
-            "entry_level": is_entry_level(title),
+            "title":        title,
+            "company":      company["name"],
+            "location":     location,
+            "posted":       posted_text,
+            "posted_date":  derive_posted_date(posted_text),
+            "experience":   experience,
+            "link":         job_url,
+            "found_on":     datetime.now(_EST).strftime("%Y-%m-%d %H:%M"),
+            "is_new":       is_new,
+            "entry_level":  is_entry_level(title),
         }
 
         with lock:
@@ -779,9 +789,9 @@ def main() -> None:
         with lock:
             jobs_to_send = list(all_current_jobs)
         jobs_to_send.sort(key=lambda j: (
+            not j["is_new"],
+            0 if j.get("entry_level") else 1,
             posted_days_ago(j["posted"]),
-            0 if (j["is_new"] and j["entry_level"]) else
-            1 if j["is_new"] else 2
         ))
         send_summary_email(jobs_to_send, new_count)
     else:
