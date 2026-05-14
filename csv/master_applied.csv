@@ -15,3 +15,20 @@ Call log:
     - retrying scroll into view action
       - waiting 500ms
 ",
+lever,8778f2b6-fd12-4f61-8c0f-0102fd8a7f60,Data Engineer,Daniels Sharpsmart,"Chicago, IL",Data Engineer,2026-05-14T21:28:47.926000+00:00,https://jobs.lever.co/daniels-sharpsmart/8778f2b6-fd12-4f61-8c0f-0102fd8a7f60/apply,failed,"submit failed: Locator.scroll_into_view_if_needed: Timeout 2996ms exceeded.
+Call log:
+  - attempting scroll into view action
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+    - waiting 20ms
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+      - waiting 100ms
+    5 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+      - waiting 500ms
+",
+greenhouse,8550730002,"Data Analyst, Project Controls",Ventureglobal,"Point Celeste, LA",Data Analyst,2026-05-14T16:37:24-04:00,https://job-boards.greenhouse.io/ventureglobal/jobs/8550730002,failed,validation error after submit,
