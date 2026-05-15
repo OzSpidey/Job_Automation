@@ -57,14 +57,13 @@ USER_AGENT     = "Mozilla/5.0 (compatible; AmazonJobsScanner/1.0)"
 TARGET_ROLES = [
     "data engineer",
     "business intelligence engineer",
+    "business intelligence developer",
     "business analyst",
     "bi engineer",
+    "bi developer",
     "data analyst",
     "early grad",
-    "software engineer",
-    "software development engineer",
     "ai engineer",
-    "software developer",
 ]
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -255,7 +254,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         <h2 style="color:#232F3E">Amazon Jobs (API) — Matching Roles</h2>
         <p>Found <strong>{count}</strong> role(s) matching:
            <em>Data Engineer &nbsp;|&nbsp; Business Intelligence Engineer &nbsp;|&nbsp;
-           Business Analyst &nbsp;|&nbsp; Data Analyst &nbsp;|&nbsp; Software Engineer &nbsp;|&nbsp; Early Grad</em>
+           Business Analyst &nbsp;|&nbsp; Data Analyst &nbsp;|&nbsp; AI Engineer &nbsp;|&nbsp; BI Developer &nbsp;|&nbsp; Early Grad</em>
         </p>
         <table style="border-collapse:collapse;width:100%;max-width:1100px">
           <tr style="background:#232F3E;color:#FF9900">
