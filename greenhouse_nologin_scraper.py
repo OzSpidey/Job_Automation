@@ -100,6 +100,9 @@ ROLE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r'\bdata\b',                                  re.I), "Data"),
 ]
 
+# Quant firms — scrape all locations, not just US
+_GLOBAL_SLUGS = {"janestreet", "janestreetevents"}
+
 SENIOR_RE = re.compile(
     r'\b(senior|sr\.?|lead|staff|principal|manager|director|vp|'
     r'vice\s+president|head\s+of|associate\s+director)\b',
@@ -250,15 +253,15 @@ async def _fetch(
                 continue
             if SENIOR_RE.search(title):
                 continue
-            if _NON_US_RE.search(loc):
-                continue
-            if _NON_US_RE.search(title):
-                continue
-            if not _is_us(loc):
-                # Ambiguous location (e.g. "In-Office", "Hybrid") -- check offices
-                office_loc = await _get_office_location(client, slug, job_id)
-                if office_loc and _NON_US_RE.search(office_loc):
-                    continue  # offices confirm non-US
+            if slug not in _GLOBAL_SLUGS:
+                if _NON_US_RE.search(loc):
+                    continue
+                if _NON_US_RE.search(title):
+                    continue
+                if not _is_us(loc):
+                    office_loc = await _get_office_location(client, slug, job_id)
+                    if office_loc and _NON_US_RE.search(office_loc):
+                        continue
 
             hits.append({
                 "job_id":   job_id,
