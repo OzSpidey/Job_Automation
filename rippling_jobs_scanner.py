@@ -203,9 +203,11 @@ async def _fetch(
         return []
 
     try:
-        nd = json.loads(m.group(1))
+        nd      = json.loads(m.group(1))
         queries = nd["props"]["pageProps"]["dehydratedState"]["queries"]
-        items   = queries[0]["state"]["data"]["items"]
+        if not queries:
+            return []  # board exists but jobs load client-side or no openings
+        items = queries[0]["state"]["data"]["items"]
     except (KeyError, IndexError, json.JSONDecodeError):
         print(f"[!] {company} ({slug}): unexpected __NEXT_DATA__ structure")
         return []
