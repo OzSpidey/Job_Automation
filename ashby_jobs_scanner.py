@@ -168,6 +168,7 @@ COMPANIES: dict[str, str] = {
     "replicant":        "Replicant",
     "level":            "Level AI",
     # Analytics / Data Tooling
+    "snowflake":        "Snowflake",
     "posthog":          "PostHog",
     "wandb":            "Weights & Biases",
     "hex":              "Hex",
