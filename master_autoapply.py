@@ -388,15 +388,16 @@ async def _submit_and_confirm(page: Page) -> tuple[bool, str]:
     btn = await _find_submit_btn(page)
     if btn is None:
         return False, "no submit button"
+    original_url = page.url
     try:
         await btn.scroll_into_view_if_needed(timeout=8000)
         await btn.click(timeout=15_000)
         await page.wait_for_timeout(4000)
     except Exception as e:
         return False, f"submit failed: {e}"
-    # If submit button disappeared, form navigated away — treat as success
-    if await _find_submit_btn(page) is None:
-        return True, "submitted (form navigated away)"
+    # URL changed → form submitted and navigated away (e.g. Greenhouse → job listing)
+    if page.url != original_url:
+        return True, "submitted (URL changed)"
     text = (await page.evaluate("document.body.innerText")).lower()
     if any(p in text for p in ["application submitted", "thank you", "we've received",
                                 "successfully submitted", "application received", "thanks for applying"]):
