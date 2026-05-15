@@ -212,16 +212,20 @@ async def fill_greenhouse_selects(page: Page) -> list:
         (r"salary requirements",                                                       "70"),
         (r"opt in.*text mess|sms.*opt",                                               "no"),
         (r"accept.*terms.*application|please review.*accept",                         "i certify"),
-        (r"describe.*gender|i identify my gender",                                     "decline"),
-        (r"describe.*racial|ethnic.*background",                                       "decline"),
-        (r"have.*disability|identify.*disability",                                     "decline"),
-        (r"military veteran|identify.*veteran",                                        "decline"),
+        (r"describe.*gender|i identify my gender|\bgender\b",                           "decline"),
+        (r"describe.*racial|ethnic.*background|hispanic|latino|\brace\b",             "decline"),
+        (r"have.*disability|identify.*disability|disability status|\bdisability\b",   "decline"),
+        (r"military veteran|identify.*veteran|veteran status|\bveteran\b",            "decline"),
         (r"sexual orient|lgbtq",                                                       "decline"),
         (r"consent.*sms|sms.*recruiting",                                              "no"),
         (r"level.*sql|sql.*expertise",                                                 "advanced"),
         (r"years.*azure|azure.*experience",                                            "yes"),
         (r"years.*data engineer",                                                      "yes"),
         (r"have.*worked.*data.*pipeline",                                              "yes"),
+        (r"convicted.*felony|felony.*convict|criminal.*record",                       "no"),
+        (r"how.*find.*out|how.*hear.*about|how.*learn.*about|where.*hear|source.*opening|find.*position", "indeed"),
+        (r"related.*employee|related.*any.*employee|related.*any.*person",            "no"),
+        (r"require.*sponsorship|sponsorship.*work.*unit|future.*require.*sponsor",    "no"),
     ]
     answer_fallbacks = {
         "yes":      ["yes", "i verify", "i confirm", "i agree", "i certify", "authorized to work", "eligible"],
@@ -232,6 +236,8 @@ async def fill_greenhouse_selects(page: Page) -> list:
         "70":       ["70", "$70", "70,000", "60", "80"],
         "i certify":["i certify", "i verify", "i confirm", "i agree", "foregoing applicant"],
         "advanced": ["advanced", "expert", "proficient"],
+        "indeed":   ["indeed", "job board", "online", "internet", "linkedin", "glassdoor",
+                     "ziprecruiter", "google", "website", "career"],
     }
     controls_info = await page.evaluate("""() => {
         const controls = Array.from(document.querySelectorAll('[class*="select__control"]'))
@@ -266,7 +272,20 @@ async def fill_greenhouse_selects(page: Page) -> list:
         answer = next((v for p, v in rules_compiled if p.search(label_text)), None)
         if not answer:
             continue
-        control = page.locator(f'div[class*="select__control"]:has(input#{input_id})').first if input_id else None
+        # Use attribute selector to avoid CSS syntax errors when input_id contains [] or other special chars.
+        # Fall back to a label-text-based locator when input has no id (e.g. EEO selects on some forms).
+        if input_id:
+            control = page.locator(
+                f'div[class*="select__control"]:has(input[id="{input_id}"])'
+            ).first
+        else:
+            # No id on input — locate via XPath: label containing label_text → sibling/cousin control
+            escaped = label_text[:40].replace('"', '\\"')
+            control = page.locator(
+                f'xpath=//label[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ",'
+                f'"abcdefghijklmnopqrstuvwxyz"), "{escaped.lower()[:30]}")]'
+                f'/following::div[contains(@class,"select__control")][1]'
+            ).first
         clicked = False
         if control and await control.count() > 0:
             try:
@@ -288,7 +307,11 @@ async def fill_greenhouse_selects(page: Page) -> list:
                     if clicked:
                         break
                 if not clicked and texts:
-                    await page.keyboard.press("Escape")
+                    if answer == "indeed":
+                        # "How did you find out" — any answer is acceptable; pick first option
+                        await opts.first.click(timeout=3000)
+                    else:
+                        await page.keyboard.press("Escape")
             except Exception:
                 pass
     return filled
@@ -322,21 +345,65 @@ async def _upload_resume(page: Page, info: dict) -> None:
     except Exception as e:
         print(f"    [resume] failed: {e}")
 
+_SUBMIT_SKIP = re.compile(r'^(dismiss|cancel|close|back|no|skip)$', re.I)
+
+async def _find_submit_btn(page: Page):
+    """
+    Returns the real submit button. Priority:
+    1. Rendered button whose text contains 'submit' or 'apply' (>50px wide — not a CAPTCHA widget)
+    2. Rendered type="submit" / input[type="submit"] that isn't a tiny dismiss-style button
+    Lever and some other ATSes use type="button" for their main CTA.
+    """
+    # Priority 1: button with submit/apply text that is visibly on-page (y >= 0)
+    cand = page.locator('button, input[type="submit"], input[type="button"]')
+    for i in range(await cand.count()):
+        b = cand.nth(i)
+        box = await b.bounding_box()
+        if not box or box["width"] < 80 or box["height"] < 24 or box["y"] < 0:
+            continue
+        try:
+            txt = (await b.inner_text()).strip().lower()
+        except Exception:
+            txt = (await b.get_attribute("value") or "").lower()
+        if re.search(r'\b(submit|apply)\b', txt) and not _SUBMIT_SKIP.match(txt):
+            return b
+
+    # Priority 2: any rendered on-page type="submit" that isn't a tiny/dismiss button
+    typed = page.locator('button[type="submit"], input[type="submit"]')
+    for i in range(await typed.count()):
+        b = typed.nth(i)
+        box = await b.bounding_box()
+        if not box or box["width"] < 50 or box["height"] < 20 or box["y"] < 0:
+            continue
+        try:
+            txt = (await b.inner_text()).strip().lower()
+        except Exception:
+            txt = ""
+        if not _SUBMIT_SKIP.match(txt):
+            return b
+
+    return None
+
 async def _submit_and_confirm(page: Page) -> tuple[bool, str]:
-    btn = page.locator('button[type="submit"], input[type="submit"]').first
-    if await btn.count() == 0:
+    btn = await _find_submit_btn(page)
+    if btn is None:
         return False, "no submit button"
     try:
-        await btn.scroll_into_view_if_needed(timeout=3000)
-        await btn.click(timeout=10_000)
-        await page.wait_for_timeout(3000)
+        await btn.scroll_into_view_if_needed(timeout=8000)
+        await btn.click(timeout=15_000)
+        await page.wait_for_timeout(4000)
     except Exception as e:
         return False, f"submit failed: {e}"
     text = (await page.evaluate("document.body.innerText")).lower()
     if any(p in text for p in ["application submitted", "thank you", "we've received",
                                 "successfully submitted", "application received", "thanks for applying"]):
         return True, ""
-    if any(p in text for p in ["please fix", "required field", "error", "invalid"]):
+    # Use specific multi-word phrases to avoid matching "error"/"invalid" in nav or footers
+    if any(p in text for p in ["please fix", "required field", "field is required",
+                                "fields are required", "fix the following", "correct the following",
+                                "please correct", "must be filled"]):
+        snippet = text[:400].replace("\n", " ")
+        print(f"    [validation] page text snippet: {snippet!r}")
         return False, "validation error after submit"
     return True, "no confirmation detected"
 
@@ -386,6 +453,41 @@ async def fill_greenhouse(page: Page, job: dict, info: dict) -> tuple[bool, str]
     await click_radio(page, r"legally authorized.*work|authorized.*work.*us", "yes")
     await click_radio(page, r"require.*visa sponsorship",                     "no")
     await fill_greenhouse_selects(page)
+
+    # EEO/demographic react-selects: use JS to locate controls near matching labels,
+    # since some forms have no formal label[for=id] association (get_by_label won't find them).
+    _decline_terms = ["decline", "prefer not", "choose not", "i don't wish"]
+    for _label_kw in ["gender", "hispanic", "veteran", "disability"]:
+        try:
+            clicked = await page.evaluate("""(kw) => {
+                const pat = new RegExp(kw, 'i');
+                for (const lbl of document.querySelectorAll('label')) {
+                    if (!pat.test(lbl.innerText)) continue;
+                    let node = lbl;
+                    for (let i = 0; i < 8; i++) {
+                        if (!node) break;
+                        const ctrl = node.querySelector('[class*="select__control"]');
+                        if (ctrl && ctrl.querySelector('[class*="select__placeholder"]')) {
+                            ctrl.click();
+                            return true;
+                        }
+                        node = node.parentElement;
+                    }
+                }
+                return false;
+            }""", _label_kw)
+            if clicked:
+                await page.wait_for_timeout(700)
+                opts = page.locator('[class*="select__option"]')
+                for j in range(await opts.count()):
+                    t = (await opts.nth(j).inner_text()).strip().lower()
+                    if any(d in t for d in _decline_terms):
+                        await opts.nth(j).click(timeout=3000)
+                        break
+                else:
+                    await page.keyboard.press("Escape")
+        except Exception:
+            pass
 
     return await _submit_and_confirm(page)
 
@@ -443,9 +545,15 @@ async def fill_lever(page: Page, job: dict, info: dict) -> tuple[bool, str]:
         await safe_fill(page, 'textarea[name="comments"], textarea[id*="additional"]',
                         info["cover_letter"])
 
-    # Lever EEO / demographic dropdowns (select "Decline to self-identify")
-    for sel_name in ['select[name*="eeo"], select[name*="gender"], '
-                     'select[name*="race"], select[name*="veteran"], select[name*="disability"]']:
+    # Work authorization radios (Lever forms often gate submit button on these)
+    await click_radio(page, r"legally authorized.*work|authorized.*work.*us|authorized to work", "yes")
+    await click_radio(page, r"require.*visa sponsorship|require.*sponsorship|visa.*sponsor",     "no")
+    await click_radio(page, r"currently hold.*temporary|cpt.*opt|opt.*cpt",                      "no")
+    await click_radio(page, r"relative.*employed|employ.*family|related.*employee",              "no")
+
+    # Lever EEO — native <select> elements
+    for sel_name in ['select[name*="eeo"]', 'select[name*="gender"]',
+                     'select[name*="race"]', 'select[name*="veteran"]', 'select[name*="disability"]']:
         try:
             loc = page.locator(sel_name).first
             if await loc.count() > 0:
@@ -455,6 +563,29 @@ async def fill_lever(page: Page, job: dict, info: dict) -> tuple[bool, str]:
                     await loc.select_option(label=decline, timeout=3000)
         except Exception:
             pass
+
+    # Lever EEO — radio-based demographic questions
+    await click_radio(page, r"gender|identify.*gender",       "decline")
+    await click_radio(page, r"race|ethnicity|ethnic",         "decline")
+    await click_radio(page, r"veteran|military",              "decline")
+    await click_radio(page, r"disability|disabled",           "decline")
+
+    # Lever disability section uses empty-label radio groups — JS fallback:
+    # find any unchecked radio group whose sibling text mentions disability/decline and click "I don't"
+    await page.evaluate("""() => {
+        for (const radio of document.querySelectorAll('input[type="radio"]')) {
+            const name = radio.name;
+            const group = Array.from(document.querySelectorAll('input[type="radio"][name="' + name + '"]'));
+            if (group.some(r => r.checked)) continue;
+            // Look for a "no" / "i don't" / "not disabled" option
+            const target = group.find(r => {
+                const wrap = r.closest('label') || r.parentElement || {};
+                const t = ((r.value || '') + ' ' + (wrap.innerText || '')).toLowerCase();
+                return t.includes("not") || t.includes("don't") || t.includes("do not") || t.includes("no, i");
+            });
+            if (target) target.click();
+        }
+    }""")
 
     return await _submit_and_confirm(page)
 
