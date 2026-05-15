@@ -15,6 +15,9 @@ import re
 import smtplib
 import sys
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+_ET = ZoneInfo("America/New_York")
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -289,8 +292,8 @@ def _format_posted(iso: str) -> str:
     if not iso:
         return "--"
     try:
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
-        return dt.strftime("%b %d, %Y %H:%M UTC")
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(_ET)
+        return dt.strftime("%b %d, %Y %H:%M ET")
     except Exception:
         return iso[:10]
 
@@ -383,9 +386,19 @@ def _send_email(jobs: list[dict]) -> None:
 # -- Main ----------------------------------------------------------------------
 
 def main() -> None:
-    seen: set[str] = set()
+    seen_ts: dict[str, str] = {}
     if SEEN_FILE.exists():
-        seen = set(json.loads(SEEN_FILE.read_text(encoding="utf-8")))
+        raw = json.loads(SEEN_FILE.read_text(encoding="utf-8"))
+        if isinstance(raw, list):
+            # migrate legacy flat list — stamp everything as now so they age out in 7 days
+            now_iso = datetime.now(timezone.utc).isoformat()
+            seen_ts = {job_id: now_iso for job_id in raw}
+        else:
+            seen_ts = raw
+    # prune entries older than 7 days
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    seen_ts = {k: v for k, v in seen_ts.items() if v >= week_ago}
+    seen: set[str] = set(seen_ts)
 
     last_run_ids: set[str] = set()
     if LAST_RUN_FILE.exists():
@@ -402,7 +415,7 @@ def main() -> None:
     print(f"[i] New this run:   {len(new_jobs)}")
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
-    recent_jobs = [j for j in new_jobs if (j.get("posted") or "") >= cutoff]
+    recent_jobs = [j for j in new_jobs if not j.get("posted") or j["posted"] >= cutoff]
     print(f"[i] Posted <=3 days: {len(recent_jobs)}")
 
     if new_jobs:
@@ -419,10 +432,14 @@ def main() -> None:
                 writer.writerow({**j, "found_at": now})
         print(f"[+] Appended to {CSV_FILE}")
 
-    # Always update seen with everything observed this run (including already-seen)
-    updated_seen = seen | {j["job_id"] for j in all_jobs}
+    # Only mark a job seen once it has actually surfaced in the email.
+    # Jobs that pass role/location but fail the recency window stay out of seen
+    # so they get another chance next run (instead of being silently swallowed).
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for j in recent_jobs:
+        seen_ts.setdefault(j["job_id"], now_iso)
     SEEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SEEN_FILE.write_text(json.dumps(sorted(updated_seen)), encoding="utf-8")
+    SEEN_FILE.write_text(json.dumps(seen_ts, sort_keys=True), encoding="utf-8")
 
     LAST_RUN_FILE.write_text(json.dumps(sorted({j["job_id"] for j in all_jobs})), encoding="utf-8")
 
