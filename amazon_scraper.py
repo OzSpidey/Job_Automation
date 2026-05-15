@@ -62,6 +62,7 @@ TARGET_ROLES = [
     "data analyst",
     "early grad",
     "software engineer",
+    "software development engineer",
     "ai engineer",
     "software developer",
 ]
