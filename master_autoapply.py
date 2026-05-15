@@ -394,6 +394,9 @@ async def _submit_and_confirm(page: Page) -> tuple[bool, str]:
         await page.wait_for_timeout(4000)
     except Exception as e:
         return False, f"submit failed: {e}"
+    # If submit button disappeared, form navigated away — treat as success
+    if await _find_submit_btn(page) is None:
+        return True, "submitted (form navigated away)"
     text = (await page.evaluate("document.body.innerText")).lower()
     if any(p in text for p in ["application submitted", "thank you", "we've received",
                                 "successfully submitted", "application received", "thanks for applying"]):
