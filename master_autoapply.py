@@ -395,7 +395,7 @@ async def _submit_and_confirm(page: Page) -> tuple[bool, str]:
         await page.wait_for_timeout(4000)
     except Exception as e:
         return False, f"submit failed: {e}"
-    # URL changed → form submitted and navigated away (e.g. Greenhouse → job listing)
+    # URL changed → form submitted and navigated away (e.g. some ATS redirects)
     if page.url != original_url:
         return True, "submitted (URL changed)"
     text = (await page.evaluate("document.body.innerText")).lower()
@@ -406,9 +406,15 @@ async def _submit_and_confirm(page: Page) -> tuple[bool, str]:
     if any(p in text for p in ["please fix", "required field", "field is required",
                                 "fields are required", "fix the following", "correct the following",
                                 "please correct", "must be filled"]):
-        snippet = text[:400].replace("\n", " ")
-        print(f"    [validation] page text snippet: {snippet!r}")
-        return False, "validation error after submit"
+        # Only a real validation error if visible form inputs still exist on the page
+        visible_inputs = await page.locator(
+            'input[type="text"]:visible, input[type="email"]:visible, textarea:visible'
+        ).count()
+        if visible_inputs > 0:
+            snippet = text[:400].replace("\n", " ")
+            print(f"    [validation] page text snippet: {snippet!r}")
+            return False, "validation error after submit"
+        return True, "submitted (form gone - phrase in job description)"
     return True, "no confirmation detected"
 
 
