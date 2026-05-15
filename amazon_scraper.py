@@ -29,6 +29,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -46,12 +47,12 @@ SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 SMTP_SERVER     = "smtp.gmail.com"
 SMTP_PORT       = 465
 
-API_URL         = "https://www.amazon.jobs/en/search.json"
-PAGE_SIZE       = 100        # API max per request
-MAX_JOBS        = 2000       # how deep into "most recent" to scan (was effectively 400 in UI scanner)
-REQUEST_DELAY_S = 0.3        # polite pause between page fetches
-SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "amazon_api_seen_jobs.json")
-USER_AGENT      = "Mozilla/5.0 (compatible; AmazonJobsScanner/1.0)"
+API_URL        = "https://www.amazon.jobs/en/search.json"
+PAGE_SIZE      = 100         # API max per request
+MAX_JOBS       = 3000        # how deep into "most recent" to scan
+MAX_WORKERS    = 5           # parallel page fetches
+SEEN_JOBS_FILE = os.path.join(os.path.dirname(__file__), "json", "amazon_api_seen_jobs.json")
+USER_AGENT     = "Mozilla/5.0 (compatible; AmazonJobsScanner/1.0)"
 
 TARGET_ROLES = [
     "data engineer",
@@ -165,46 +166,56 @@ def job_url(job: dict) -> str:
 # API FETCH
 # ──────────────────────────────────────────────────────────────────────────────
 
+def fetch_page(offset: int) -> tuple[int, list[dict]]:
+    """Fetch one page of results; returns (offset, jobs). Retries on 429/503/504."""
+    params = {
+        "sort": "recent",
+        "result_limit": str(PAGE_SIZE),
+        "offset": str(offset),
+    }
+    url = API_URL + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.loads(r.read())
+            break
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 503, 504) and attempt < 3:
+                wait = 2 ** attempt * 5
+                print(f"  [api] {e.code} at offset={offset}, retry {attempt + 1} in {wait}s…")
+                time.sleep(wait)
+            else:
+                raise
+    else:
+        raise RuntimeError(f"Failed after retries at offset={offset}")
+    return offset, data.get("jobs", [])
+
+
 def fetch_recent_jobs(max_total: int = MAX_JOBS) -> list[dict]:
-    """Page through search.json sort=recent, no country filter.
+    """Page through search.json in parallel, no country filter.
 
     We don't pass country=USA at the API level so we don't lose records
     with null top-level country (see is_us_job for why). US-only filtering
     happens in Python.
     """
+    offsets = list(range(0, max_total, PAGE_SIZE))
+    pages: dict[int, list[dict]] = {}
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {pool.submit(fetch_page, off): off for off in offsets}
+        for fut in as_completed(futures):
+            offset, jobs = fut.result()
+            pages[offset] = jobs
+            print(f"  [api] offset={offset:4d}  fetched={len(jobs)}  done={len(pages)}/{len(offsets)}")
+
     results = []
-    offset = 0
-    while offset < max_total:
-        params = {
-            "sort": "recent",
-            "result_limit": str(PAGE_SIZE),
-            "offset": str(offset),
-        }
-        url = API_URL + "?" + urllib.parse.urlencode(params)
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        for attempt in range(4):
-            try:
-                with urllib.request.urlopen(req, timeout=30) as r:
-                    data = json.loads(r.read())
-                break
-            except urllib.error.HTTPError as e:
-                if e.code in (429, 503, 504) and attempt < 3:
-                    wait = 2 ** attempt * 5
-                    print(f"  [api] {e.code} at offset={offset}, retrying in {wait}s…")
-                    time.sleep(wait)
-                else:
-                    raise
-        else:
-            raise RuntimeError(f"Failed after retries at offset={offset}")
-        jobs = data.get("jobs", [])
-        if not jobs:
-            print(f"  [api] offset={offset} returned 0 — stopping.")
+    for off in offsets:
+        chunk = pages.get(off, [])
+        if not chunk:
+            print(f"  [api] offset={off} returned 0 — stopping.")
             break
-        results.extend(jobs)
-        print(f"  [api] offset={offset:4d}  fetched={len(jobs)}  cumulative={len(results)}")
-        offset += PAGE_SIZE
-        if offset < max_total:
-            time.sleep(REQUEST_DELAY_S)
+        results.extend(chunk)
     return results
 
 
