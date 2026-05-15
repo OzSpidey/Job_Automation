@@ -47,7 +47,7 @@ MASTER_CSV     = BASE_DIR / "csv"  / "new_jobs.csv"
 
 # -- Master CSV ----------------------------------------------------------------
 _MASTER_COLS    = ["source", "job_id", "title", "company", "location", "role", "posted", "url", "found_at"]
-_MASTER_ROLE_RE = re.compile(r'data\s+analyst|data\s+engineer|business\s+intelligence', re.I)
+_MASTER_ROLE_RE = re.compile(r'\bdata\b|business\s+intelligence', re.I)
 
 def _append_master_csv(rows: list[dict]) -> None:
     if not rows:
@@ -97,6 +97,7 @@ ROLE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r'\bengineer(?:ing)?\b',                      re.I), "Engineer"),
     (re.compile(r'\bdeveloper\b',                             re.I), "Developer"),
     (re.compile(r'\banalyst\b',                               re.I), "Analyst"),
+    (re.compile(r'\bdata\b',                                  re.I), "Data"),
 ]
 
 SENIOR_RE = re.compile(
