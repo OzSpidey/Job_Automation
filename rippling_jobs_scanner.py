@@ -244,6 +244,23 @@ async def _fetch(
     return hits
 
 
+async def _get_created_on(client: httpx.AsyncClient, job: dict, sem: asyncio.Semaphore) -> None:
+    """Fetch the job detail page and set job['posted'] to the createdOn ISO string."""
+    async with sem:
+        try:
+            resp = await client.get(job["url"], timeout=TIMEOUT)
+            if resp.status_code != 200:
+                return
+            m = _NEXT_DATA_RE.search(resp.text)
+            if not m:
+                return
+            nd = json.loads(m.group(1))
+            created_on = nd["props"]["pageProps"]["apiData"]["jobPost"]["createdOn"]
+            job["posted"] = created_on
+        except Exception:
+            pass
+
+
 async def _scrape_all() -> list[dict]:
     sem = asyncio.Semaphore(MAX_CONCURRENT)
     headers = {"User-Agent": "Mozilla/5.0 (compatible; rippling-job-scanner/1.0)"}
@@ -256,21 +273,74 @@ async def _scrape_all() -> list[dict]:
     return [job for batch in batches if isinstance(batch, list) for job in batch]
 
 
-# ── Email ─────────────────────────────────────────────────────────────────────
+async def _enrich_posted_dates(new_jobs: list[dict]) -> None:
+    """Fetch createdOn for new jobs only (one detail page request each)."""
+    if not new_jobs:
+        return
+    sem = asyncio.Semaphore(MAX_CONCURRENT)
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; rippling-job-scanner/1.0)"}
+    async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
+        await asyncio.gather(*[_get_created_on(client, j, sem) for j in new_jobs])
+
+
+# ── Email helpers ──────────────────────────────────────────────────────────────
+
+def _format_posted(iso: str) -> str:
+    if not iso:
+        return "--"
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(_ET)
+        abbr = "EDT" if dt.dst() else "EST"
+        time_str = dt.strftime("%I:%M %p").lstrip("0")
+        return f"{dt.strftime('%b %d, %Y')} {time_str} {abbr}"
+    except Exception:
+        return iso[:10]
+
+
+def _format_ago(iso: str) -> str:
+    if not iso:
+        return ""
+    try:
+        delta = int((datetime.now(timezone.utc) - datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)).total_seconds())
+        if delta < 0:
+            return "just now"
+        if delta < 60:
+            return f"{delta}s ago"
+        if delta < 3600:
+            return f"{delta // 60}m ago"
+        if delta < 86400:
+            return f"{delta // 3600}h ago"
+        return f"{delta // 86400}d ago"
+    except Exception:
+        return ""
+
+
+# ── Email ──────────────────────────────────────────────────────────────────────
 
 def _send_email(new_jobs: list[dict]) -> None:
     if not EMAIL_PASSWORD:
         print("[!] GMAIL_APP_PASSWORD not set — skipping email.")
         return
 
+    # Sort newest first
+    sorted_jobs = sorted(new_jobs, key=lambda j: j.get("posted") or "", reverse=True)
+
     rows = ""
-    for j in sorted(new_jobs, key=lambda x: x["company"]):
+    for j in sorted_jobs:
+        posted_str = _format_posted(j.get("posted", ""))
+        ago_str    = _format_ago(j.get("posted", ""))
+        posted_cell = (
+            f"{posted_str}<br>"
+            f"<span style='font-size:11px;color:#666'>({ago_str})</span>"
+            if ago_str else posted_str
+        )
         rows += (
             f"<tr>"
             f"<td>{j['title']}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location'] or '--'}</td>"
             f"<td>{j['role']}</td>"
+            f"<td style='white-space:nowrap'>{posted_cell}</td>"
             f"<td><a href='{j['url']}'>Apply</a></td>"
             f"</tr>"
         )
@@ -281,7 +351,7 @@ def _send_email(new_jobs: list[dict]) -> None:
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#e0e0e0">
-        <th>Title</th><th>Company</th><th>Location</th><th>Role</th><th>Link</th>
+        <th>Title</th><th>Company</th><th>Location</th><th>Role</th><th>Posted</th><th>Link</th>
       </tr>
       {rows}
     </table>
@@ -323,10 +393,14 @@ def main() -> None:
     print(f"[i] New this run:   {len(new_jobs)}")
 
     if new_jobs:
+        print(f"[i] Fetching posted dates for {len(new_jobs)} new job(s)...")
+        asyncio.run(_enrich_posted_dates(new_jobs))
+
+    if new_jobs:
         # Append to rippling-specific CSV
         CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
         write_header = not CSV_FILE.exists() or CSV_FILE.stat().st_size == 0
-        fieldnames = ["job_id", "title", "company", "location", "role", "url", "found_at"]
+        fieldnames = ["job_id", "title", "company", "location", "role", "posted", "url", "found_at"]
         now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
@@ -348,7 +422,7 @@ def main() -> None:
                 "company":  j["company"],
                 "location": j["location"],
                 "role":     j["role"],
-                "posted":   "",
+                "posted":   j.get("posted", ""),
                 "url":      j["url"],
                 "found_at": now_str,
             })
