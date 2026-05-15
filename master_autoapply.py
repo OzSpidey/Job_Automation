@@ -45,6 +45,8 @@ EMAIL_TO       = os.environ.get("EMAIL_TO", "")
 BASE_DIR     = Path(__file__).parent
 MASTER_CSV   = BASE_DIR / "csv"  / "new_jobs.csv"
 APPLIED_LOG  = BASE_DIR / "json" / "master_applied_ids.json"
+FAILED_LOG   = BASE_DIR / "json" / "master_failed_ids.json"
+MAX_ATTEMPTS = 2
 OUTPUT_CSV   = BASE_DIR / "csv"  / "master_applied.csv"
 
 EST          = ZoneInfo("America/New_York")
@@ -67,6 +69,16 @@ def save_applied(ids: dict) -> None:
     APPLIED_LOG.parent.mkdir(parents=True, exist_ok=True)
     APPLIED_LOG.write_text(json.dumps(ids, indent=2))
 
+def load_failed() -> dict:
+    if FAILED_LOG.exists():
+        data = json.loads(FAILED_LOG.read_text())
+        return data if isinstance(data, dict) else {}
+    return {}
+
+def save_failed(ids: dict) -> None:
+    FAILED_LOG.parent.mkdir(parents=True, exist_ok=True)
+    FAILED_LOG.write_text(json.dumps(ids, indent=2))
+
 def append_output_csv(rows: list[dict]) -> None:
     if not rows:
         return
@@ -83,7 +95,7 @@ def append_output_csv(rows: list[dict]) -> None:
 
 # ── Job loading ────────────────────────────────────────────────────────────────
 
-def load_pending(applied: dict) -> list[dict]:
+def load_pending(applied: dict, failed: dict) -> list[dict]:
     if not MASTER_CSV.exists():
         print(f"[!] Master CSV not found: {MASTER_CSV}")
         return []
@@ -94,6 +106,8 @@ def load_pending(applied: dict) -> list[dict]:
         for row in csv.DictReader(f):
             key = f"{row.get('source','')}:{row.get('job_id','')}"
             if key in seen_ids or key in applied:
+                continue
+            if failed.get(key, 0) >= MAX_ATTEMPTS:
                 continue
             seen_ids.add(key)
             if not AUTOAPPLY_RE.search(row.get("title", "")):
@@ -756,7 +770,8 @@ def send_summary_email(results: list[dict]) -> None:
 
 async def run() -> None:
     applied = load_applied()
-    pending = load_pending(applied)
+    failed  = load_failed()
+    pending = load_pending(applied, failed)
     print(f"[i] {len(pending)} eligible job(s) across all sources")
 
     if not pending:
@@ -794,10 +809,20 @@ async def run() -> None:
                 else:
                     result["status"] = "failed"
                     result["note"]   = note
-                    print(f"    [-] failed: {note}")
+                    key = f"{source}:{job['job_id']}"
+                    failed[key] = failed.get(key, 0) + 1
+                    if failed[key] >= MAX_ATTEMPTS:
+                        print(f"    [-] failed: {note} (permanently skipped after {MAX_ATTEMPTS} attempts)")
+                    else:
+                        print(f"    [-] failed: {note} ({failed[key]}/{MAX_ATTEMPTS} attempts)")
             except Exception as e:
                 result["note"] = str(e)[:120]
-                print(f"    [!] error: {e}")
+                key = f"{source}:{job['job_id']}"
+                failed[key] = failed.get(key, 0) + 1
+                if failed[key] >= MAX_ATTEMPTS:
+                    print(f"    [!] error: {e} (permanently skipped after {MAX_ATTEMPTS} attempts)")
+                else:
+                    print(f"    [!] error: {e} ({failed[key]}/{MAX_ATTEMPTS} attempts)")
             finally:
                 await page.close()
 
@@ -807,6 +832,7 @@ async def run() -> None:
         await browser.close()
 
     save_applied(applied)
+    save_failed(failed)
     append_output_csv(results)
 
     n_ok = sum(1 for r in results if r["status"] == "applied")
