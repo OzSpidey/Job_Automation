@@ -171,7 +171,9 @@ def send_summary_email(all_jobs: list[dict]) -> None:
             f"</tr>"
         )
 
-    rows = "".join(_row(r) for r in all_jobs)
+    new_jobs = [r for r in all_jobs if r.get("is_new")]
+    old_jobs = [r for r in all_jobs if not r.get("is_new")]
+    rows = "".join(_row(r) for r in new_jobs + old_jobs)
 
     subject = f"Greenhouse Auto-Apply: {n_applied} applied | {n_failed} failed | {n_skipped} skipped — {len(all_jobs)} total"
     new_note = f" ({n_new} new this run)" if n_new else ""
