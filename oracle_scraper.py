@@ -125,7 +125,7 @@ else:
         r"software\s+engineer|software\s+developer|"
         r"ai\s+engineer|"
         r"business\s+intelligence|"
-        r"bi\s+(analyst|developer|engineer|specialist)|"
+        r"bi\s+\w+|"
         r"etl|insights)\b",
         re.I,
     )
@@ -169,7 +169,7 @@ _CLASSIFY_PATTERNS = [
     (re.compile(r"\bai\s+engineer\b",             re.I), "AI Engineer"),
     (re.compile(r"\bsoftware\s+engineer\b",       re.I), "Software Engineer"),
     (re.compile(r"\bsoftware\s+developer\b",      re.I), "Software Developer"),
-    (re.compile(r"\b(business\s+intelligence|bi\s+(analyst|developer|engineer|specialist))\b", re.I), "Business Intelligence"),
+    (re.compile(r"\b(business\s+intelligence|bi\s+\w+)\b", re.I), "Business Intelligence"),
     (re.compile(r"\b(data\b.{0,30}\banalyst|analyst\b.{0,30}\bdata\b)", re.I), "Data Analyst"),
     (re.compile(r"\b(analytics|analyst)\b",       re.I), "Analyst / Analytics"),
     (re.compile(r"\betl\b",                       re.I), "ETL Engineer"),
