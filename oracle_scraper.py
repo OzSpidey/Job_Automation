@@ -501,9 +501,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
             badges += "&nbsp;<span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span>"
         if j.get("entry_level"):
             badges += "&nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span>"
-        if j.get("is_new") and j.get("entry_level"):
-            bg = "#e3f2fd"
-        elif j.get("is_new"):
+        if j.get("is_new"):
             bg = "#f1f8e9"
         else:
             bg = ""

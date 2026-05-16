@@ -622,9 +622,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
         if j.get("entry_level"):
             badges += "&nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span>"
         posted_today = posted_days_ago(j.get("posted", "")) == 0
-        if j.get("is_new") and j.get("entry_level"):
-            bg = "#e3f2fd"
-        elif posted_today:
+        if posted_today:
             bg = "#f1f8e9"
         else:
             bg = ""
