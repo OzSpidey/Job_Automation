@@ -111,15 +111,19 @@ if _args.role:
     _csv_file    = _profile["output_csv"]
     _role_label  = _profile["label"]
 else:
-    # No --role: search all three (original behaviour)
-    SEARCH_TERMS = ["Data Engineer", "Data Analyst", "Business Intelligence Analyst"]
+    SEARCH_TERMS = [""]
     ALLOWED_TITLE_RE = re.compile(
-        r"\b(data\s+engineer|data\s+analyst|business\s+intelligence)\b",
+        r"\b(data|analytics|analyst|"
+        r"software\s+engineer|software\s+developer|"
+        r"ai\s+engineer|"
+        r"business\s+intelligence|"
+        r"bi\s+(analyst|developer|engineer|specialist)|"
+        r"etl|insights)\b",
         re.I,
     )
-    _seen_file  = "workday_seen_ids.json"
-    _csv_file   = "workday_jobs.csv"
-    _role_label = "DE / DA / BI"
+    _seen_file  = "workday_seen_all.json"
+    _csv_file   = "workday_jobs_all.csv"
+    _role_label = "All Roles"
 
 if _args.batch:
     _seen_file  = _seen_file.replace(".json", f"_{_args.batch}.json")
@@ -146,6 +150,30 @@ SKIP_TITLE_RE = re.compile(
     r"architect|consultant|iii|iv)\b",
     re.I,
 )
+NOISE_TITLE_RE = re.compile(
+    r"\b(data\s+center|payroll|medical\s+coding)\b",
+    re.I,
+)
+
+_CLASSIFY_PATTERNS = [
+    (re.compile(r"\bdata\s+engineer\b",          re.I), "Data Engineer"),
+    (re.compile(r"\bdata\s+scientist\b",          re.I), "Data Scientist"),
+    (re.compile(r"\bai\s+engineer\b",             re.I), "AI Engineer"),
+    (re.compile(r"\bsoftware\s+engineer\b",       re.I), "Software Engineer"),
+    (re.compile(r"\bsoftware\s+developer\b",      re.I), "Software Developer"),
+    (re.compile(r"\b(business\s+intelligence|bi\s+(analyst|developer|engineer|specialist))\b", re.I), "Business Intelligence"),
+    (re.compile(r"\b(data\b.{0,30}\banalyst|analyst\b.{0,30}\bdata\b)", re.I), "Data Analyst"),
+    (re.compile(r"\betl\b",                       re.I), "ETL Engineer"),
+    (re.compile(r"\binsights\b",                  re.I), "Insights"),
+    (re.compile(r"\b(analytics|analyst)\b",       re.I), "Analyst / Analytics"),
+    (re.compile(r"\bdata\b",                      re.I), "Data (Other)"),
+]
+
+def _classify(title: str) -> str:
+    for pat, label in _CLASSIFY_PATTERNS:
+        if pat.search(title):
+            return label
+    return "Other"
 
 # Titles with these signals are preferred entry-level roles
 ENTRY_LEVEL_RE = re.compile(
@@ -304,6 +332,8 @@ def load_companies() -> list[dict]:
 
 def is_allowed_title(title: str) -> bool:
     if SKIP_TITLE_RE.search(title):
+        return False
+    if NOISE_TITLE_RE.search(title):
         return False
     return bool(ALLOWED_TITLE_RE.search(title))
 
@@ -610,21 +640,31 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
             f"</tr>"
         )
 
-    rows    = "".join(_row(j) for j in all_jobs)
-    subject = (
-        f"[Workday] {new_count} new {_role_label} role(s) — "
-        f"{datetime.now(_EST).strftime('%b %d, %Y %H:%M')}"
-    )
-    body_html = f"""
-    <h2>Workday — {_role_label} Jobs (Last {MAX_AGE_DAYS} Day)</h2>
-    <p><b>{new_count} new role(s)</b> found. All listings from the last {MAX_AGE_DAYS} day(s) shown — <span style='background:#f1f8e9;padding:1px 4px'>green rows</span> posted today &nbsp;|&nbsp; <span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span> = new this run.</p>
+    by_role: dict[str, list[dict]] = {}
+    for j in all_jobs:
+        by_role.setdefault(j.get("role", "Other"), []).append(j)
+
+    sections = ""
+    for role_label, jobs in sorted(by_role.items()):
+        role_rows = "".join(_row(j) for j in jobs)
+        sections += f"""
+    <h3 style='margin-top:24px'>{role_label} ({len(jobs)})</h3>
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#e0e0e0">
         <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Experience</th><th>Link</th>
       </tr>
-      {rows}
-    </table>
+      {role_rows}
+    </table>"""
+
+    subject = (
+        f"[Workday] {new_count} new {_role_label} role(s) — "
+        f"{datetime.now(_EST).strftime('%b %d, %Y %H:%M')}"
+    )
+    body_html = f"""
+    <h2>Workday — {_role_label} Jobs (Last {MAX_AGE_DAYS} Days)</h2>
+    <p><b>{new_count} new role(s)</b> found. All listings from the last {MAX_AGE_DAYS} day(s) shown — <span style='background:#f1f8e9;padding:1px 4px'>green rows</span> posted today &nbsp;|&nbsp; <span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span> = new this run.</p>
+    {sections}
     """
     try:
         msg = MIMEMultipart("alternative")
@@ -725,6 +765,7 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             "title":        title,
             "company":      company["name"],
             "location":     location,
+            "role":         _classify(title),
             "posted":       posted_text,
             "posted_date":  derive_posted_date(posted_text),
             "experience":   experience,
