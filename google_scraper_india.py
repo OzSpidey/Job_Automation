@@ -52,18 +52,16 @@ SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "google_india_
 USER_AGENT      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
 TARGET_ROLES = [
-    "data engineer",
+    "data",
     "analyst",
     "analytics",
     "early grad",
     "software engineer",
-    "ai engineer",
     "software developer",
-    "data scientist",
-    "data transformation",
 ]
 
 BI_REGEX = re.compile(r"\bbusiness intelligence\b|\bbi\b", re.I)
+AI_REGEX = re.compile(r"\bai\b", re.I)
 
 EXCLUDE_SUBSTRINGS = ["senior", "staff", "lead"]
 
@@ -96,6 +94,8 @@ def is_target_role(title: str) -> bool:
     if any(role in t for role in TARGET_ROLES):
         return True
     if BI_REGEX.search(title):
+        return True
+    if AI_REGEX.search(title):
         return True
     return False
 

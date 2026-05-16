@@ -63,22 +63,17 @@ SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "google_api_se
 USER_AGENT      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
 TARGET_ROLES = [
-    "data engineer",
+    "data",
     "analyst",
     "analytics",
     "early grad",
     "software engineer",
-    "ai engineer",
     "software developer",
-    # Google-specific analog titles (Google's posting conventions, not industry standard)
-    "data scientist",
-    "data transformation",
 ]
 
-# Regex catches BI roles whose titles don't match a clean substring above.
-# `\bbi\b` matches BI as a standalone word so it doesn't false-positive
-# inside words like "Mobile" or "ambient".
+# Regex catches BI/AI roles where plain substring would false-positive inside other words.
 BI_REGEX = re.compile(r"\bbusiness intelligence\b|\bbi\b", re.I)
+AI_REGEX = re.compile(r"\bai\b", re.I)
 
 # Exclude senior+ levels — we want entry/mid only.
 EXCLUDE_SUBSTRINGS = ["senior", "staff", "lead"]
@@ -113,6 +108,8 @@ def is_target_role(title: str) -> bool:
     if any(role in t for role in TARGET_ROLES):
         return True
     if BI_REGEX.search(title):
+        return True
+    if AI_REGEX.search(title):
         return True
     return False
 

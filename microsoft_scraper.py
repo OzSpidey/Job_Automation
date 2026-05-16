@@ -23,6 +23,7 @@ Run: python microsoft_scraper.py
 
 import json
 import os
+import re
 import smtplib
 import sys
 import time
@@ -59,11 +60,14 @@ USER_AGENT      = "Mozilla/5.0 (compatible; MicrosoftJobsScanner/1.0)"
 
 TARGET_ROLES = [
     "software engineer",
-    "data engineer",
-    "data analyst",
-    "business intelligence analyst",
-    "bi analyst",
+    "data",
+    "analyst",
+    "analytics",
+    "applied scientist",
 ]
+
+BI_REGEX = re.compile(r"\bbusiness intelligence\b|\bbi\b", re.I)
+AI_REGEX = re.compile(r"\bai\b", re.I)
 
 EXCLUDE_LEVELS = ["senior", "principal"]
 
@@ -88,7 +92,11 @@ def is_target_role(title: str) -> bool:
     t = title.lower()
     if any(level in t for level in EXCLUDE_LEVELS):
         return False
-    return any(role in t for role in TARGET_ROLES)
+    if any(role in t for role in TARGET_ROLES):
+        return True
+    if BI_REGEX.search(title):
+        return True
+    return bool(AI_REGEX.search(title))
 
 
 def is_recent(posted_ts: int, max_days: int = NEW_MAX_DAYS) -> bool:

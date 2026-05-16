@@ -24,6 +24,7 @@ Run: python amazon_scraper.py
 
 import json
 import os
+import re
 import smtplib
 import sys
 import time
@@ -55,16 +56,19 @@ SEEN_JOBS_FILE = os.path.join(os.path.dirname(__file__), "json", "amazon_api_see
 USER_AGENT     = "Mozilla/5.0 (compatible; AmazonJobsScanner/1.0)"
 
 TARGET_ROLES = [
-    "data engineer",
+    "data",
     "business intelligence engineer",
     "business intelligence developer",
-    "business analyst",
+    "analyst",
+    "analytics",
     "bi engineer",
     "bi developer",
-    "data analyst",
     "early grad",
-    "ai engineer",
+    "applied scientist",
+    "research scientist",
 ]
+
+AI_REGEX = re.compile(r"\bai\b", re.I)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -85,7 +89,9 @@ def save_seen_urls(urls: set[str]) -> None:
 
 def is_target_role(title: str) -> bool:
     t = title.lower()
-    return any(role in t for role in TARGET_ROLES)
+    if any(role in t for role in TARGET_ROLES):
+        return True
+    return bool(AI_REGEX.search(title))
 
 
 def parse_posted_date(s: str) -> datetime:

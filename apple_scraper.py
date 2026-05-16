@@ -15,6 +15,7 @@ Run: python apple_scraper.py
 
 import json
 import os
+import re
 import smtplib
 import sys
 import time
@@ -47,20 +48,20 @@ SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "apple_api_see
 USER_AGENT      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 TARGET_ROLES = [
-    "data engineer",
-    "data scientist",
+    "data",
     "business intelligence engineer",
-    "business analyst",
+    "analyst",
+    "analytics",
     "bi engineer",
-    "data analyst",
     "software engineer",
-    "ai engineer",
     "software developer",
     "machine learning engineer",
     "new grad",
     "university graduate",
     "early career",
 ]
+
+AI_REGEX = re.compile(r"\bai\b", re.I)
 
 EXCLUDE_LEVELS = ["senior", "principal", "lead", "staff", "manager"]
 
@@ -85,7 +86,9 @@ def is_target_role(title: str) -> bool:
     t = title.lower()
     if any(level in t for level in EXCLUDE_LEVELS):
         return False
-    return any(role in t for role in TARGET_ROLES)
+    if any(role in t for role in TARGET_ROLES):
+        return True
+    return bool(AI_REGEX.search(title))
 
 
 def parse_gmt_date(s: str) -> datetime:
