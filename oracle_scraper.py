@@ -1,7 +1,8 @@
 """
 oracle_scraper.py
 
-Scrapes public Oracle Recruiting Cloud (ORC) career APIs for Data Engineer / Analyst / BI roles.
+Scrapes public Oracle Recruiting Cloud (ORC) career APIs — all target roles in one pass.
+Fetches all jobs per company (no keyword filter) then regex-classifies by role.
 No login or account required — uses the same REST endpoints that Oracle Cloud career pages call.
 
 To add a company:
@@ -66,8 +67,8 @@ _ROLES = {
     },
     "analyst": {
         "label":        "Analyst",
-        "search_terms": ["Reporting Analyst", "Analytics Analyst", "Business Analyst"],
-        "allow_re":     re.compile(r"\banalyst\b", re.I),
+        "search_terms": [""],
+        "allow_re":     re.compile(r"\b(data|analytics|analyst)\b", re.I),
         "seen_log":     "oracle_seen_analyst.json",
         "output_csv":   "oracle_jobs_analyst.csv",
     },
@@ -118,13 +119,18 @@ if _args.role:
     _csv_file    = _profile["output_csv"].replace(".csv",  f"{_batch_suffix}.csv")
     _role_label  = _profile["label"]
 else:
-    SEARCH_TERMS = ["Data Engineer", "Data Analyst", "Business Intelligence Analyst"]
+    SEARCH_TERMS = [""]
     ALLOWED_TITLE_RE = re.compile(
-        r"\b(data\s+engineer|data\s+analyst|business\s+intelligence)\b", re.I
+        r"\b(data|analytics|analyst|"
+        r"software\s+engineer|software\s+developer|"
+        r"ai\s+engineer|"
+        r"business\s+intelligence|"
+        r"bi\s+(analyst|developer|engineer|specialist))\b",
+        re.I,
     )
-    _seen_file  = f"oracle_seen_ids{_batch_suffix}.json"
-    _csv_file   = f"oracle_jobs{_batch_suffix}.csv"
-    _role_label = "DE / DA / BI"
+    _seen_file  = f"oracle_seen_all{_batch_suffix}.json"
+    _csv_file   = f"oracle_jobs_all{_batch_suffix}.csv"
+    _role_label = "All Roles"
 
 BATCH = _args.batch  # None = all companies, 1 = first 100, 2 = last 100
 
@@ -151,6 +157,24 @@ SKIP_TITLE_RE = re.compile(
 ENTRY_LEVEL_RE = re.compile(
     r"\b(junior|jr\.?|associate|entry[\s\-]level|new\s+grad|graduate)\b", re.I
 )
+
+_CLASSIFY_PATTERNS = [
+    (re.compile(r"\bdata\s+engineer\b",          re.I), "Data Engineer"),
+    (re.compile(r"\bdata\s+scientist\b",          re.I), "Data Scientist"),
+    (re.compile(r"\bai\s+engineer\b",             re.I), "AI Engineer"),
+    (re.compile(r"\bsoftware\s+engineer\b",       re.I), "Software Engineer"),
+    (re.compile(r"\bsoftware\s+developer\b",      re.I), "Software Developer"),
+    (re.compile(r"\b(business\s+intelligence|bi\s+(analyst|developer|engineer|specialist))\b", re.I), "Business Intelligence"),
+    (re.compile(r"\b(data\b.{0,30}\banalyst|analyst\b.{0,30}\bdata\b)", re.I), "Data Analyst"),
+    (re.compile(r"\b(analytics|analyst)\b",       re.I), "Analyst / Analytics"),
+    (re.compile(r"\bdata\b",                      re.I), "Data (Other)"),
+]
+
+def _classify(title: str) -> str:
+    for pat, label in _CLASSIFY_PATTERNS:
+        if pat.search(title):
+            return label
+    return "Other"
 
 # ── Location filter ────────────────────────────────────────────────────────────
 _US_STATES = (
@@ -186,7 +210,7 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-WORKERS = 10  # parallel company threads
+WORKERS = 20  # parallel company threads
 
 
 # ── Persistence ────────────────────────────────────────────────────────────────
@@ -479,13 +503,30 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
             f"<td>{j['title']}{badges}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
+            f"<td>{j.get('role','')}</td>"
             f"<td style='white-space:nowrap'>{j['posted']}<br>"
             f"<span style='font-size:11px;color:#666'>({j.get('posted_ago','')})</span></td>"
             f"<td><a href='{j['link']}'>Apply</a></td>"
             f"</tr>"
         )
 
-    rows    = "".join(_row(j) for j in all_jobs)
+    by_role: dict[str, list[dict]] = {}
+    for j in all_jobs:
+        by_role.setdefault(j.get("role", "Other"), []).append(j)
+
+    sections = ""
+    for role_label, jobs in sorted(by_role.items()):
+        role_rows = "".join(_row(j) for j in jobs)
+        sections += f"""
+    <h3 style='margin-top:24px'>{role_label} ({len(jobs)})</h3>
+    <table border="1" cellpadding="6" cellspacing="0"
+           style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
+      <tr style="background:#e0e0e0">
+        <th>Title</th><th>Company</th><th>Location</th><th>Role</th><th>Posted</th><th>Link</th>
+      </tr>
+      {role_rows}
+    </table>"""
+
     subject = (
         f"[Oracle] {new_count} new {_role_label} role(s) — "
         f"{datetime.now().strftime('%b %d, %Y %H:%M')}"
@@ -493,13 +534,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     body_html = f"""
     <h2>Oracle Recruiting Cloud — {_role_label} Jobs (Last {MAX_AGE_DAYS} Day)</h2>
     <p><b>{new_count} new role(s)</b> found. All listings from the last {MAX_AGE_DAYS} day(s) shown — new ones highlighted in green.</p>
-    <table border="1" cellpadding="6" cellspacing="0"
-           style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
-      <tr style="background:#e0e0e0">
-        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Link</th>
-      </tr>
-      {rows}
-    </table>
+    {sections}
     """
     try:
         msg = MIMEMultipart("alternative")
@@ -570,6 +605,7 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             "title":       title,
             "company":     company["name"],
             "location":    location,
+            "role":        _classify(title),
             "posted":      posted_text,
             "posted_ago":  posted_ago,
             "link":        job_url,
