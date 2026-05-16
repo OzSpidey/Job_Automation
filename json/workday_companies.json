@@ -4266,6 +4266,12 @@
     "career": "Lennar_Jobs"
   },
   {
+    "name": "LendingClub",
+    "tenant": "lendingclub",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
     "name": "Levi Strauss",
     "tenant": "levistraussandco",
     "instance": "wd5",

@@ -64,15 +64,14 @@ USER_AGENT      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 
 TARGET_ROLES = [
     "data engineer",
-    "business analyst",
-    "data analyst",
+    "analyst",
+    "analytics",
     "early grad",
     "software engineer",
     "ai engineer",
     "software developer",
     # Google-specific analog titles (Google's posting conventions, not industry standard)
     "data scientist",
-    "strategy and operations analyst",
     "data transformation",
 ]
 
