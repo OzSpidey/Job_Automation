@@ -125,7 +125,8 @@ else:
         r"software\s+engineer|software\s+developer|"
         r"ai\s+engineer|"
         r"business\s+intelligence|"
-        r"bi\s+(analyst|developer|engineer|specialist))\b",
+        r"bi\s+(analyst|developer|engineer|specialist)|"
+        r"etl|insights)\b",
         re.I,
     )
     _seen_file  = f"oracle_seen_all{_batch_suffix}.json"
@@ -154,6 +155,10 @@ SKIP_TITLE_RE = re.compile(
     r"architect|consultant|iii|iv)\b",
     re.I,
 )
+NOISE_TITLE_RE = re.compile(
+    r"\b(data\s+center|payroll|medical\s+coding)\b",
+    re.I,
+)
 ENTRY_LEVEL_RE = re.compile(
     r"\b(junior|jr\.?|associate|entry[\s\-]level|new\s+grad|graduate)\b", re.I
 )
@@ -167,6 +172,8 @@ _CLASSIFY_PATTERNS = [
     (re.compile(r"\b(business\s+intelligence|bi\s+(analyst|developer|engineer|specialist))\b", re.I), "Business Intelligence"),
     (re.compile(r"\b(data\b.{0,30}\banalyst|analyst\b.{0,30}\bdata\b)", re.I), "Data Analyst"),
     (re.compile(r"\b(analytics|analyst)\b",       re.I), "Analyst / Analytics"),
+    (re.compile(r"\betl\b",                       re.I), "ETL Engineer"),
+    (re.compile(r"\binsights\b",                  re.I), "Insights"),
     (re.compile(r"\bdata\b",                      re.I), "Data (Other)"),
 ]
 
@@ -254,6 +261,8 @@ def load_companies() -> list[dict]:
 
 def is_allowed_title(title: str) -> bool:
     if SKIP_TITLE_RE.search(title):
+        return False
+    if NOISE_TITLE_RE.search(title):
         return False
     return bool(ALLOWED_TITLE_RE.search(title))
 
@@ -516,6 +525,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
 
     sections = ""
     for role_label, jobs in sorted(by_role.items()):
+        jobs = sorted(jobs, key=lambda j: j.get("age_days", 999))
         role_rows = "".join(_row(j) for j in jobs)
         sections += f"""
     <h3 style='margin-top:24px'>{role_label} ({len(jobs)})</h3>

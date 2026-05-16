@@ -646,6 +646,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
 
     sections = ""
     for role_label, jobs in sorted(by_role.items()):
+        jobs = sorted(jobs, key=lambda j: j.get("posted_date", ""), reverse=True)
         role_rows = "".join(_row(j) for j in jobs)
         sections += f"""
     <h3 style='margin-top:24px'>{role_label} ({len(jobs)})</h3>
