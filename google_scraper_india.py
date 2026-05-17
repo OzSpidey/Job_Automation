@@ -61,9 +61,12 @@ TARGET_ROLES = [
 ]
 
 BI_REGEX = re.compile(r"\bbusiness intelligence\b|\bbi\b", re.I)
-AI_REGEX = re.compile(r"\bai\b", re.I)
+AI_REGEX = re.compile(r"\bai engineer\b", re.I)
 
-EXCLUDE_SUBSTRINGS = ["senior", "staff", "lead"]
+EXCLUDE_SUBSTRINGS = [
+    "senior", "sr.", " sr ", "staff", "lead", "principal",
+    "manager", "director", "avp", "vice president", "president",
+]
 
 DS1_PATTERN = re.compile(
     r"AF_initDataCallback\(\{key:\s*'ds:1'.*?data:(\[.*?\])\s*,\s*sideChannel",

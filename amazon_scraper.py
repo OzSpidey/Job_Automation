@@ -56,19 +56,28 @@ SEEN_JOBS_FILE = os.path.join(os.path.dirname(__file__), "json", "amazon_api_see
 USER_AGENT     = "Mozilla/5.0 (compatible; AmazonJobsScanner/1.0)"
 
 TARGET_ROLES = [
-    "data",
-    "business intelligence engineer",
-    "business intelligence developer",
-    "analyst",
-    "analytics",
+    "data engineer",
+    "data analyst",
+    "data scientist",
+    "business intelligence",
+    "business analyst",
     "bi engineer",
     "bi developer",
+    "bie",
     "early grad",
-    "applied scientist",
-    "research scientist",
 ]
 
-AI_REGEX = re.compile(r"\bai\b", re.I)
+AI_REGEX = re.compile(r"\bai engineer\b", re.I)
+
+EXCLUDE_SUBSTRINGS = [
+    "senior", "sr", "staff", "lead", "principal",
+    "manager", "director", "avp", "vice president", "president",
+    "data center",
+]
+
+# Compiled word-boundary regexes for precise matching.
+_TARGET_RE  = re.compile(r"\b(?:" + "|".join(re.escape(r) for r in TARGET_ROLES)  + r")\b", re.I)
+_EXCLUDE_RE = re.compile(r"\b(?:" + "|".join(re.escape(x) for x in EXCLUDE_SUBSTRINGS) + r")\b", re.I)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -88,8 +97,9 @@ def save_seen_urls(urls: set[str]) -> None:
 
 
 def is_target_role(title: str) -> bool:
-    t = title.lower()
-    if any(role in t for role in TARGET_ROLES):
+    if _EXCLUDE_RE.search(title):
+        return False
+    if _TARGET_RE.search(title):
         return True
     return bool(AI_REGEX.search(title))
 

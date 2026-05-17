@@ -63,13 +63,16 @@ TARGET_ROLES = [
     "data",
     "analyst",
     "analytics",
-    "applied scientist",
 ]
 
 BI_REGEX = re.compile(r"\bbusiness intelligence\b|\bbi\b", re.I)
-AI_REGEX = re.compile(r"\bai\b", re.I)
+AI_REGEX = re.compile(r"\bai engineer\b", re.I)
 
-EXCLUDE_LEVELS = ["senior", "principal"]
+EXCLUDE_LEVELS = [
+    "senior", "sr.", " sr ", "staff", "lead", "principal",
+    "manager", "director", "avp", "vice president", "president",
+    "data center", "architect",
+]
 
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
@@ -305,6 +308,9 @@ def main():
     previously_seen = load_seen_urls()
     new_jobs = [j for j in jobs if j["url"] not in previously_seen and is_recent(j["posted_ts"])]
     print(f"New roles (not seen before, posted < {NEW_MAX_DAYS} days ago): {len(new_jobs)}")
+
+    # Sort BEFORE saving so new jobs are correctly identified as unseen.
+    jobs.sort(key=lambda j: (j["url"] in previously_seen or not is_recent(j["posted_ts"]), -j["posted_ts"]))
 
     save_seen_urls(previously_seen | {j["url"] for j in jobs})
 

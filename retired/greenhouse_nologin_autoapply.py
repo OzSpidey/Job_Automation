@@ -1,4 +1,16 @@
 """
+RETIRED — 2026-05-16
+====================
+Retired by choice — owner prefers to review and apply to Greenhouse
+no-login jobs manually rather than auto-submitting. May be re-activated
+in the future if automated applying is reconsidered. The workflow
+(greenhouse_nologin_autoapply.yml) has been removed.
+
+Original script preserved here for reference only. Do not re-activate
+without reviewing the applicant info, resume path, and role patterns.
+
+────────────────────────────────────────────────────────────────────────────────
+
 greenhouse_nologin_autoapply.py
 --------------------------------
 Reads jobs from csv/greenhouse_nologin_jobs.csv, filters to roles matching
@@ -127,7 +139,6 @@ def load_pending_jobs(patterns: list[re.Pattern], applied: dict) -> list[dict]:
                 if dt < cutoff:
                     continue
             except Exception:
-                # No parseable timestamp — skip to avoid applying to stale jobs
                 continue
 
             pending.append(row)
@@ -507,7 +518,6 @@ async def fill_application(page: Page, info: dict) -> tuple[bool, str]:
     await page.evaluate("window.scrollTo(0, 0)")
     await page.wait_for_timeout(500)
 
-    # Personal details
     await safe_fill(page, 'input[id*="first_name"], input[name*="first_name"], input[autocomplete="given-name"]',  info["first_name"])
     await safe_fill(page, 'input[id*="last_name"],  input[name*="last_name"],  input[autocomplete="family-name"]', info["last_name"])
     await safe_fill(page, 'input[id*="email"],      input[name*="email"],      input[type="email"]',               info["email"])
@@ -518,13 +528,11 @@ async def fill_application(page: Page, info: dict) -> tuple[bool, str]:
     await fill_by_label(page, ["full legal name"],    f"{info['first_name']} {info['last_name']}")
     await fill_by_label(page, ["your location"],      f"{info.get('city', '')}, {info.get('state', '')}")
 
-    # Country / location
     await type_react_select(page, r"country", info.get("country", "United States"))
     await click_react_select_by_text(page, r"^country", "United States")
     await type_react_select(page, r"location.*city|city.*location|^location$",
                             f"{info.get('city', '')}, {info.get('state', '')}")
 
-    # Address fields
     for sel in ['input[id*="address"], input[name*="address"]',
                 'input[placeholder*="address" i]', 'input[placeholder*="street" i]']:
         await safe_fill(page, sel, info.get("address", ""))
@@ -537,7 +545,6 @@ async def fill_application(page: Page, info: dict) -> tuple[bool, str]:
     await fill_by_label(page, ["city"],            info.get("city", ""))
     await fill_by_label(page, ["notice period"],   "0")
 
-    # Resume upload
     if info.get("resume_path") and Path(info["resume_path"]).exists():
         try:
             resume_input = page.locator(
@@ -550,24 +557,19 @@ async def fill_application(page: Page, info: dict) -> tuple[bool, str]:
         except Exception as e:
             print(f"    [resume] upload failed: {e}")
 
-    # LinkedIn / website
     await safe_fill(page, 'input[id*="linkedin"], input[name*="linkedin"], input[placeholder*="LinkedIn" i]', info.get("linkedin_url", ""))
     await fill_by_label(page, ["linkedin"], info.get("linkedin_url", ""))
     await safe_fill(page, 'input[id*="website"], input[name*="website"]', info.get("website", ""))
 
-    # Cover letter
     if info.get("cover_letter"):
         await safe_fill(page, 'textarea[id*="cover"], textarea[name*="cover"]', info["cover_letter"])
 
-    # Common yes/no radio questions
     await click_yes_radio(page, r"legally authorized.*work|authorized.*work.*us")
     await click_no_radio(page,  r"require.*visa sponsorship|require.*sponsorship")
     await click_no_radio(page,  r"currently hold.*temporary|cpt|opt")
 
-    # React-select custom questions
     await fill_greenhouse_selects(page)
 
-    # Find and click submit
     submit = page.locator('button[type="submit"], input[type="submit"]').first
     if await submit.count() == 0:
         return False, "no submit button found"
@@ -579,7 +581,6 @@ async def fill_application(page: Page, info: dict) -> tuple[bool, str]:
     except Exception as e:
         return False, f"submit click failed: {e}"
 
-    # Confirm submission
     page_text = (await page.evaluate("document.body.innerText")).lower()
     success_phrases = ["application submitted", "thank you", "we've received", "successfully submitted",
                        "your application", "application received", "thanks for applying"]
@@ -590,7 +591,6 @@ async def fill_application(page: Page, info: dict) -> tuple[bool, str]:
     if any(ph in page_text for ph in error_phrases):
         return False, "form validation error after submit"
 
-    # No clear confirmation — treat as submitted (some forms redirect silently)
     return True, "no confirmation page detected"
 
 

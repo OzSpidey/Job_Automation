@@ -73,10 +73,13 @@ TARGET_ROLES = [
 
 # Regex catches BI/AI roles where plain substring would false-positive inside other words.
 BI_REGEX = re.compile(r"\bbusiness intelligence\b|\bbi\b", re.I)
-AI_REGEX = re.compile(r"\bai\b", re.I)
+AI_REGEX = re.compile(r"\bai engineer\b", re.I)
 
 # Exclude senior+ levels — we want entry/mid only.
-EXCLUDE_SUBSTRINGS = ["senior", "staff", "lead"]
+EXCLUDE_SUBSTRINGS = [
+    "senior", "sr.", " sr ", "staff", "lead", "principal",
+    "manager", "director", "avp", "vice president", "president",
+]
 
 # Matches the Boq initial-state block carrying the jobs list.
 DS1_PATTERN = re.compile(
