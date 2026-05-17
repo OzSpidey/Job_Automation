@@ -1,0 +1,38 @@
+name: Bulk ATS Probe (Greenhouse + Ashby + Lever)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # 6-hour ceiling; 37K slugs × 3 APIs takes ~90–120 min
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - run: pip install httpx
+
+      - name: Run bulk ATS probe
+        run: python _ats_bulk_probe.py _bulk_candidates.txt
+
+      - name: Commit results
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add _bulk_greenhouse.csv _bulk_ashby.csv _bulk_lever.csv
+          git diff --staged --quiet && echo "No new results to commit" && exit 0
+          git commit -m "chore: bulk ATS probe results (GH + Ashby + Lever)"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $i failed, retrying in $((i * 3))s..."
+            sleep $((i * 3))
+          done
