@@ -1,4 +1,35 @@
 """
+RETIRED — 2026-05-16
+====================
+Retired by choice — owner prefers to review matched jobs manually before
+applying rather than auto-submitting. May be re-activated in the future
+if automated applying is reconsidered. The workflow (master_autoapply.yml)
+has been removed.
+
+What this script did:
+  - Read csv/new_jobs.csv, which is the consolidated job feed written by
+    the Greenhouse, Lever, and Ashby scrapers.
+  - Filtered to Data Analyst, Data Engineer, and Business Intelligence
+    roles posted within the last 24 hours.
+  - Used Playwright (headless Chromium) to navigate to each job's
+    application form and auto-fill it: personal info, resume upload,
+    LinkedIn, work authorization radios, EEO/demographic dropdowns
+    (always answered "decline to self-identify"), and common screener
+    questions (visa sponsorship, relocation, salary, etc.).
+  - Supported three ATS platforms via platform-specific form fillers:
+      * Greenhouse  — public job-boards.greenhouse.io forms
+      * Lever       — jobs.lever.co forms
+      * Ashby       — jobs.ashbyhq.com forms
+  - Tracked applied IDs in json/master_applied_ids.json and failed
+    attempts in json/master_failed_ids.json (permanently skipped after
+    2 failed attempts).
+  - Emailed a colour-coded HTML summary (applied / failed / error) in EST.
+
+Original script preserved here for reference only. Do not re-activate
+without reviewing applicant info, resume path, and role filter regex.
+
+────────────────────────────────────────────────────────────────────────────────
+
 master_autoapply.py
 --------------------
 Reads csv/new_jobs.csv (written by Greenhouse / Lever / Ashby scrapers),
@@ -46,14 +77,14 @@ BASE_DIR     = Path(__file__).parent
 MASTER_CSV   = BASE_DIR / "csv"  / "new_jobs.csv"
 APPLIED_LOG  = BASE_DIR / "json" / "master_applied_ids.json"
 FAILED_LOG   = BASE_DIR / "json" / "master_failed_ids.json"
-MAX_ATTEMPTS = 2
+MAX_ATTEMPTS = 2          # permanently skip a job after this many failed attempts
 OUTPUT_CSV   = BASE_DIR / "csv"  / "master_applied.csv"
 
 EST          = ZoneInfo("America/New_York")
 PAGE_TIMEOUT = 60_000
-DELAY_BETWEEN = 5
+DELAY_BETWEEN = 5         # seconds between each application attempt
 
-# ── Role filter ────────────────────────────────────────────────────────────────
+# ── Role filter — only apply to these title patterns ───────────────────────────
 AUTOAPPLY_RE = re.compile(r'data\s+analyst|data\s+engineer|business\s+intelligence', re.I)
 
 
@@ -96,6 +127,7 @@ def append_output_csv(rows: list[dict]) -> None:
 # ── Job loading ────────────────────────────────────────────────────────────────
 
 def load_pending(applied: dict, failed: dict) -> list[dict]:
+    """Read new_jobs.csv, skip already-applied/permanently-failed, filter by role and age."""
     if not MASTER_CSV.exists():
         print(f"[!] Master CSV not found: {MASTER_CSV}")
         return []
@@ -125,6 +157,7 @@ def load_pending(applied: dict, failed: dict) -> list[dict]:
 # ── Shared Playwright helpers ──────────────────────────────────────────────────
 
 async def safe_fill(page: Page, selector: str, value: str) -> bool:
+    """Fill the first matching visible input; silently skip if not found."""
     if not value:
         return False
     try:
@@ -138,6 +171,7 @@ async def safe_fill(page: Page, selector: str, value: str) -> bool:
         return False
 
 async def fill_by_label(page: Page, keywords: list, value: str) -> bool:
+    """Fill an input whose associated label contains all keywords (in order)."""
     if not value:
         return False
     try:
@@ -155,6 +189,7 @@ async def fill_by_label(page: Page, keywords: list, value: str) -> bool:
     return False
 
 async def type_react_select(page: Page, label_pattern: str, text: str) -> bool:
+    """Type into a React-Select control found by its label, then pick the best match."""
     if not text:
         return False
     try:
@@ -164,7 +199,7 @@ async def type_react_select(page: Page, label_pattern: str, text: str) -> bool:
             if await ctrl.count() == 0:
                 continue
             if await ctrl.locator('[class*="select__single-value"]').count() > 0:
-                continue
+                continue  # already filled
             await ctrl.scroll_into_view_if_needed(timeout=2000)
             await ctrl.click(timeout=3000)
             await page.wait_for_timeout(400)
@@ -184,6 +219,7 @@ async def type_react_select(page: Page, label_pattern: str, text: str) -> bool:
     return False
 
 async def click_radio(page: Page, label_pattern: str, value: str) -> bool:
+    """Click a radio button whose containing label matches label_pattern and whose value/text matches value."""
     js = f"""() => {{
         const pat = new RegExp({repr(label_pattern)}, 'i');
         const val = {repr(value.lower())};
@@ -208,6 +244,12 @@ async def click_radio(page: Page, label_pattern: str, value: str) -> bool:
         return False
 
 async def fill_greenhouse_selects(page: Page) -> list:
+    """
+    Handle Greenhouse React-Select screener questions with pre-defined answers.
+    Rules are matched by regex against the question label text; the first match wins.
+    answer_fallbacks maps each canonical answer to a list of option-text substrings
+    tried in order so we handle different phrasing across companies.
+    """
     rules = [
         (r"referred.*current employee|current employee.*refer",                       "no"),
         (r"legally authorized.*work|authorized.*us.*canada",                          "yes"),
@@ -226,7 +268,7 @@ async def fill_greenhouse_selects(page: Page) -> list:
         (r"salary requirements",                                                       "70"),
         (r"opt in.*text mess|sms.*opt",                                               "no"),
         (r"accept.*terms.*application|please review.*accept",                         "i certify"),
-        (r"describe.*gender|i identify my gender|\bgender\b",                           "decline"),
+        (r"describe.*gender|i identify my gender|\bgender\b",                          "decline"),
         (r"describe.*racial|ethnic.*background|hispanic|latino|\brace\b",             "decline"),
         (r"have.*disability|identify.*disability|disability status|\bdisability\b",   "decline"),
         (r"military veteran|identify.*veteran|veteran status|\bveteran\b",            "decline"),
@@ -237,9 +279,9 @@ async def fill_greenhouse_selects(page: Page) -> list:
         (r"years.*data engineer",                                                      "yes"),
         (r"have.*worked.*data.*pipeline",                                              "yes"),
         (r"convicted.*felony|felony.*convict|criminal.*record",                       "no"),
-        (r"how.*find.*out|how.*hear.*about|how.*learn.*about|where.*hear|source.*opening|find.*position", "indeed"),
-        (r"related.*employee|related.*any.*employee|related.*any.*person",            "no"),
-        (r"require.*sponsorship|sponsorship.*work.*unit|future.*require.*sponsor",    "no"),
+        (r"how.*find.*out|how.*hear.*about|source.*opening|find.*position",           "indeed"),
+        (r"related.*employee|related.*any.*person",                                    "no"),
+        (r"require.*sponsorship|future.*require.*sponsor",                             "no"),
     ]
     answer_fallbacks = {
         "yes":      ["yes", "i verify", "i confirm", "i agree", "i certify", "authorized to work", "eligible"],
@@ -286,14 +328,11 @@ async def fill_greenhouse_selects(page: Page) -> list:
         answer = next((v for p, v in rules_compiled if p.search(label_text)), None)
         if not answer:
             continue
-        # Use attribute selector to avoid CSS syntax errors when input_id contains [] or other special chars.
-        # Fall back to a label-text-based locator when input has no id (e.g. EEO selects on some forms).
         if input_id:
             control = page.locator(
                 f'div[class*="select__control"]:has(input[id="{input_id}"])'
             ).first
         else:
-            # No id on input — locate via XPath: label containing label_text → sibling/cousin control
             escaped = label_text[:40].replace('"', '\\"')
             control = page.locator(
                 f'xpath=//label[contains(translate(., "ABCDEFGHIJKLMNOPQRSTUVWXYZ",'
@@ -322,7 +361,6 @@ async def fill_greenhouse_selects(page: Page) -> list:
                         break
                 if not clicked and texts:
                     if answer == "indeed":
-                        # "How did you find out" — any answer is acceptable; pick first option
                         await opts.first.click(timeout=3000)
                     else:
                         await page.keyboard.press("Escape")
@@ -334,7 +372,7 @@ async def fill_greenhouse_selects(page: Page) -> list:
 # ── Platform-specific form fillers ─────────────────────────────────────────────
 
 async def _fill_personal(page: Page, info: dict) -> None:
-    """Fill fields common to all three platforms."""
+    """Fill name/email/phone fields common to all three platforms."""
     await safe_fill(page, 'input[id*="first_name"], input[name*="first_name"], input[autocomplete="given-name"]',  info["first_name"])
     await safe_fill(page, 'input[id*="last_name"],  input[name*="last_name"],  input[autocomplete="family-name"]', info["last_name"])
     await safe_fill(page, 'input[id*="email"],      input[name*="email"],      input[type="email"]',               info["email"])
@@ -345,6 +383,7 @@ async def _fill_personal(page: Page, info: dict) -> None:
     await fill_by_label(page, ["phone"],       info["phone"])
 
 async def _upload_resume(page: Page, info: dict) -> None:
+    """Upload resume PDF to the first file input found on the page."""
     resume = info.get("resume_path", "")
     if not resume or not Path(resume).exists():
         return
@@ -363,12 +402,11 @@ _SUBMIT_SKIP = re.compile(r'^(dismiss|cancel|close|back|no|skip)$', re.I)
 
 async def _find_submit_btn(page: Page):
     """
-    Returns the real submit button. Priority:
-    1. Rendered button whose text contains 'submit' or 'apply' (>50px wide — not a CAPTCHA widget)
-    2. Rendered type="submit" / input[type="submit"] that isn't a tiny dismiss-style button
-    Lever and some other ATSes use type="button" for their main CTA.
+    Find the real submit button. Priority:
+      1. Visible button whose text contains 'submit' or 'apply' and is wide enough to be real (>80px).
+      2. Any rendered type="submit" that isn't a tiny dismiss-style button.
+    Lever uses type="button" for its main CTA, so we can't rely on type alone.
     """
-    # Priority 1: button with submit/apply text that is visibly on-page (y >= 0)
     cand = page.locator('button, input[type="submit"], input[type="button"]')
     for i in range(await cand.count()):
         b = cand.nth(i)
@@ -382,7 +420,6 @@ async def _find_submit_btn(page: Page):
         if re.search(r'\b(submit|apply)\b', txt) and not _SUBMIT_SKIP.match(txt):
             return b
 
-    # Priority 2: any rendered on-page type="submit" that isn't a tiny/dismiss button
     typed = page.locator('button[type="submit"], input[type="submit"]')
     for i in range(await typed.count()):
         b = typed.nth(i)
@@ -395,10 +432,10 @@ async def _find_submit_btn(page: Page):
             txt = ""
         if not _SUBMIT_SKIP.match(txt):
             return b
-
     return None
 
 async def _submit_and_confirm(page: Page) -> tuple[bool, str]:
+    """Click submit and check the result. Returns (success, note)."""
     btn = await _find_submit_btn(page)
     if btn is None:
         return False, "no submit button"
@@ -409,35 +446,29 @@ async def _submit_and_confirm(page: Page) -> tuple[bool, str]:
         await page.wait_for_timeout(4000)
     except Exception as e:
         return False, f"submit failed: {e}"
-    # URL changed → form submitted and navigated away (e.g. some ATS redirects)
     if page.url != original_url:
         return True, "submitted (URL changed)"
     text = (await page.evaluate("document.body.innerText")).lower()
     if any(p in text for p in ["application submitted", "thank you", "we've received",
                                 "successfully submitted", "application received", "thanks for applying"]):
         return True, ""
-    # Use specific multi-word phrases to avoid matching "error"/"invalid" in nav or footers
     if any(p in text for p in ["please fix", "required field", "field is required",
-                                "fields are required", "fix the following", "correct the following",
-                                "please correct", "must be filled"]):
-        # Only a real validation error if visible form inputs still exist on the page
+                                "fields are required", "fix the following", "must be filled"]):
         visible_inputs = await page.locator(
             'input[type="text"]:visible, input[type="email"]:visible, textarea:visible'
         ).count()
         if visible_inputs > 0:
-            snippet = text[:400].replace("\n", " ")
-            print(f"    [validation] page text snippet: {snippet!r}")
             return False, "validation error after submit"
         return True, "submitted (form gone - phrase in job description)"
     return True, "no confirmation detected"
 
 
 async def fill_greenhouse(page: Page, job: dict, info: dict) -> tuple[bool, str]:
-    """Navigate to and fill a Greenhouse public application form."""
+    """Navigate to and fill a Greenhouse public application form (job-boards.greenhouse.io)."""
     await page.goto(job["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
     await page.wait_for_timeout(2000)
 
-    # Click through to form if on job description page
+    # Some URLs land on the job description — click through to the actual form
     if await page.locator('button[type="submit"], input[type="submit"]').count() == 0:
         apply_btn = page.locator(
             'a:has-text("Apply for this Job"), a:has-text("Apply Now"), '
@@ -452,6 +483,7 @@ async def fill_greenhouse(page: Page, job: dict, info: dict) -> tuple[bool, str]
                 await apply_btn.click(timeout=5000)
             await page.wait_for_timeout(2000)
 
+    # Scroll to load lazy fields, then reset to top before filling
     for _ in range(8):
         await page.evaluate("window.scrollBy(0, 400)")
         await page.wait_for_timeout(150)
@@ -478,8 +510,7 @@ async def fill_greenhouse(page: Page, job: dict, info: dict) -> tuple[bool, str]
     await click_radio(page, r"require.*visa sponsorship",                     "no")
     await fill_greenhouse_selects(page)
 
-    # EEO/demographic react-selects: use JS to locate controls near matching labels,
-    # since some forms have no formal label[for=id] association (get_by_label won't find them).
+    # EEO selects that have no formal label[for=id] — locate via JS proximity search
     _decline_terms = ["decline", "prefer not", "choose not", "i don't wish"]
     for _label_kw in ["gender", "hispanic", "veteran", "disability"]:
         try:
@@ -517,11 +548,11 @@ async def fill_greenhouse(page: Page, job: dict, info: dict) -> tuple[bool, str]
 
 
 async def fill_lever(page: Page, job: dict, info: dict) -> tuple[bool, str]:
-    """Navigate to and fill a Lever application form."""
+    """Navigate to and fill a Lever application form (jobs.lever.co)."""
     await page.goto(job["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
     await page.wait_for_timeout(2000)
 
-    # Lever may show a job description — look for Apply button
+    # Lever may show the job description first — click Apply if the form isn't visible yet
     apply_btn = page.locator(
         'a:has-text("Apply"), a:has-text("Apply for this job"), '
         'a[class*="apply"], .posting-btn-apply'
@@ -540,36 +571,30 @@ async def fill_lever(page: Page, job: dict, info: dict) -> tuple[bool, str]:
     await page.evaluate("window.scrollTo(0, 0)")
     await page.wait_for_timeout(400)
 
-    # Lever full-name field (single field, not split)
-    full_name = f"{info['first_name']} {info['last_name']}"
-    await safe_fill(page, 'input[name="name"]', full_name)
-    # Fallback split fields
-    await _fill_personal(page, info)
+    # Lever uses a single "Full name" field rather than split first/last
+    await safe_fill(page, 'input[name="name"]', f"{info['first_name']} {info['last_name']}")
+    await _fill_personal(page, info)  # fallback split fields
 
     await safe_fill(page, 'input[name="email"]', info["email"])
     await safe_fill(page, 'input[name="phone"]', info["phone"])
     await safe_fill(page, 'input[name="org"]',   info.get("current_company", ""))
 
-    # LinkedIn / URLs
     await safe_fill(page, 'input[name="urls[LinkedIn]"]',  info.get("linkedin_url", ""))
     await safe_fill(page, 'input[name="urls[GitHub]"]',    info.get("github_url", ""))
     await safe_fill(page, 'input[name="urls[Portfolio]"]', info.get("website", ""))
     await fill_by_label(page, ["linkedin"], info.get("linkedin_url", ""))
 
-    # Location
     await safe_fill(page, 'input[name="location"]',
                     f"{info.get('city','')}, {info.get('state','')}")
     await fill_by_label(page, ["location"], f"{info.get('city','')}, {info.get('state','')}")
 
-    # Resume upload
     await _upload_resume(page, info)
 
-    # Cover letter / additional info textarea
     if info.get("cover_letter"):
         await safe_fill(page, 'textarea[name="comments"], textarea[id*="additional"]',
                         info["cover_letter"])
 
-    # Work authorization radios (Lever forms often gate submit button on these)
+    # Work authorization — Lever gates the submit button on these being answered
     await click_radio(page, r"legally authorized.*work|authorized.*work.*us|authorized to work", "yes")
     await click_radio(page, r"require.*visa sponsorship|require.*sponsorship|visa.*sponsor",     "no")
     await click_radio(page, r"currently hold.*temporary|cpt.*opt|opt.*cpt",                      "no")
@@ -589,19 +614,17 @@ async def fill_lever(page: Page, job: dict, info: dict) -> tuple[bool, str]:
             pass
 
     # Lever EEO — radio-based demographic questions
-    await click_radio(page, r"gender|identify.*gender",       "decline")
-    await click_radio(page, r"race|ethnicity|ethnic",         "decline")
-    await click_radio(page, r"veteran|military",              "decline")
-    await click_radio(page, r"disability|disabled",           "decline")
+    await click_radio(page, r"gender|identify.*gender", "decline")
+    await click_radio(page, r"race|ethnicity|ethnic",   "decline")
+    await click_radio(page, r"veteran|military",        "decline")
+    await click_radio(page, r"disability|disabled",     "decline")
 
-    # Lever disability section uses empty-label radio groups — JS fallback:
-    # find any unchecked radio group whose sibling text mentions disability/decline and click "I don't"
+    # JS fallback for disability radio groups that have no readable labels
     await page.evaluate("""() => {
         for (const radio of document.querySelectorAll('input[type="radio"]')) {
             const name = radio.name;
             const group = Array.from(document.querySelectorAll('input[type="radio"][name="' + name + '"]'));
             if (group.some(r => r.checked)) continue;
-            // Look for a "no" / "i don't" / "not disabled" option
             const target = group.find(r => {
                 const wrap = r.closest('label') || r.parentElement || {};
                 const t = ((r.value || '') + ' ' + (wrap.innerText || '')).toLowerCase();
@@ -615,7 +638,7 @@ async def fill_lever(page: Page, job: dict, info: dict) -> tuple[bool, str]:
 
 
 async def fill_ashby(page: Page, job: dict, info: dict) -> tuple[bool, str]:
-    """Navigate to and fill an Ashby application form."""
+    """Navigate to and fill an Ashby application form (jobs.ashbyhq.com)."""
     await page.goto(job["url"], wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
     await page.wait_for_timeout(2500)
 
@@ -627,25 +650,21 @@ async def fill_ashby(page: Page, job: dict, info: dict) -> tuple[bool, str]:
 
     await _fill_personal(page, info)
 
-    # Ashby location field (plain text or react-select)
     location_str = f"{info.get('city','')}, {info.get('state','')}"
-    await fill_by_label(page, ["location"],   location_str)
+    await fill_by_label(page, ["location"],    location_str)
     await fill_by_label(page, ["city"],        info.get("city", ""))
     await type_react_select(page, r"location", location_str)
 
-    # Resume upload
     await _upload_resume(page, info)
 
-    # LinkedIn
-    await fill_by_label(page, ["linkedin"],   info.get("linkedin_url", ""))
+    await fill_by_label(page, ["linkedin"],    info.get("linkedin_url", ""))
     await fill_by_label(page, ["linkedin url"], info.get("linkedin_url", ""))
     await safe_fill(page, 'input[placeholder*="LinkedIn" i]', info.get("linkedin_url", ""))
 
-    # Website / portfolio
-    await fill_by_label(page, ["website"],    info.get("website", ""))
-    await fill_by_label(page, ["portfolio"],  info.get("website", ""))
+    await fill_by_label(page, ["website"],     info.get("website", ""))
+    await fill_by_label(page, ["portfolio"],   info.get("website", ""))
 
-    # Ashby EEO / demographic selects — pick "Decline to self-identify" where available
+    # Ashby EEO — native <select> elements, pick "Decline to self-identify"
     decline_labels = ["decline", "prefer not", "choose not to", "i don't wish"]
     for label_kw in [["gender"], ["race"], ["ethnicity"], ["veteran"], ["disability"]]:
         try:
@@ -661,7 +680,7 @@ async def fill_ashby(page: Page, job: dict, info: dict) -> tuple[bool, str]:
         except Exception:
             pass
 
-    # Ashby react-select demographic dropdowns
+    # Ashby EEO — react-select demographic dropdowns
     for label_pat in [r"gender", r"race|ethnicity", r"veteran", r"disability"]:
         try:
             els = page.get_by_label(re.compile(label_pat, re.I))
@@ -684,7 +703,6 @@ async def fill_ashby(page: Page, job: dict, info: dict) -> tuple[bool, str]:
         except Exception:
             pass
 
-    # Work authorization
     await click_radio(page, r"authorized.*work|legally authorized", "yes")
     await click_radio(page, r"require.*sponsor",                    "no")
 
@@ -694,6 +712,7 @@ async def fill_ashby(page: Page, job: dict, info: dict) -> tuple[bool, str]:
 # ── Router ─────────────────────────────────────────────────────────────────────
 
 async def apply_to_job(page: Page, job: dict, info: dict) -> tuple[bool, str]:
+    """Dispatch to the correct platform filler based on the job's source field."""
     source = job.get("source", "").lower()
     if source == "greenhouse":
         return await fill_greenhouse(page, job, info)
@@ -799,7 +818,7 @@ async def run() -> None:
                 success, note = await apply_to_job(page, job, YOUR_INFO)
                 now_est = datetime.now(EST).isoformat()
                 if success:
-                    result["status"]       = "applied"
+                    result["status"]         = "applied"
                     result["applied_at_est"] = _est(now_est)
                     applied[f"{source}:{job['job_id']}"] = {
                         "title": title, "company": company,
@@ -811,18 +830,12 @@ async def run() -> None:
                     result["note"]   = note
                     key = f"{source}:{job['job_id']}"
                     failed[key] = failed.get(key, 0) + 1
-                    if failed[key] >= MAX_ATTEMPTS:
-                        print(f"    [-] failed: {note} (permanently skipped after {MAX_ATTEMPTS} attempts)")
-                    else:
-                        print(f"    [-] failed: {note} ({failed[key]}/{MAX_ATTEMPTS} attempts)")
+                    print(f"    [-] failed: {note} ({failed[key]}/{MAX_ATTEMPTS} attempts)")
             except Exception as e:
                 result["note"] = str(e)[:120]
                 key = f"{source}:{job['job_id']}"
                 failed[key] = failed.get(key, 0) + 1
-                if failed[key] >= MAX_ATTEMPTS:
-                    print(f"    [!] error: {e} (permanently skipped after {MAX_ATTEMPTS} attempts)")
-                else:
-                    print(f"    [!] error: {e} ({failed[key]}/{MAX_ATTEMPTS} attempts)")
+                print(f"    [!] error: {e} ({failed[key]}/{MAX_ATTEMPTS} attempts)")
             finally:
                 await page.close()
 
