@@ -1,4 +1,4 @@
-name: Greenhouse Auto-Apply
+name: Greenhouse Jobs Scraper
 
 on:
   workflow_dispatch:
@@ -11,9 +11,9 @@ permissions:
   contents: write
 
 jobs:
-  autoapply:
+  scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 20    # No form filling — just page visits for title/filtering
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repo
@@ -52,12 +52,12 @@ jobs:
             echo "No session secret found — run will fail if login is required."
           fi
 
-      - name: Run Greenhouse Auto-Apply
+      - name: Run Greenhouse Jobs Scraper
         env:
-          APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
           EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:             ${{ secrets.EMAIL_TO }}
+          GH_EMAIL:             ${{ secrets.GH_EMAIL }}
         run: python greenhouse_autoapply.py
 
       - name: Update session secret
@@ -73,12 +73,12 @@ jobs:
             echo "Session secret updated."
           fi
 
-      - name: Persist applied-jobs state
+      - name: Persist scraper state
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/greenhouse_applied_ids.json json/greenhouse_last_run_jobs.json csv/greenhouse_applied.csv 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "chore: update greenhouse applied jobs [skip ci]"
+          git add json/greenhouse_last_run_jobs.json csv/greenhouse_jobs.csv 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update greenhouse seen jobs [skip ci]"
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push && break
             echo "Push attempt $i failed, retrying in $((i * 3))s..."
