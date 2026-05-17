@@ -383,11 +383,8 @@ async def fetch_job_details(context: BrowserContext, jobs: list[dict]) -> None:
                 await pg.goto(job["apply_url"], wait_until="load", timeout=30_000)
                 await pg.wait_for_timeout(2500)
                 details = await pg.evaluate("""() => {
-                    // Title — try multiple selectors then fall back to <title>
                     let title = '';
-                    const titleEl = document.querySelector(
-                        'h1, [class*="app-title"], [class*="job-title"], [class*="posting-headline"]'
-                    );
+                    const titleEl = document.querySelector('h1, [class*="app-title"], [class*="job-title"], [class*="posting-headline"]');
                     if (titleEl) {
                         title = titleEl.innerText.trim();
                     } else {
@@ -395,12 +392,8 @@ async def fetch_job_details(context: BrowserContext, jobs: list[dict]) -> None:
                         if (t && !/^greenhouse/i.test(t)) title = t;
                     }
 
-                    // Company — page header or <title> "Role at Company"
                     let company = '';
-                    const coEl = document.querySelector(
-                        '[class*="company-name"], [class*="company_name"], [class*="employer-name"], '
-                        '[class*="org-name"], .company-name, header h2, header h3'
-                    );
+                    const coEl = document.querySelector('[class*="company-name"], [class*="company_name"], [class*="employer-name"], [class*="org-name"], .company-name, header h2, header h3');
                     if (coEl) {
                         company = coEl.innerText.trim();
                     } else {
@@ -409,22 +402,15 @@ async def fetch_job_details(context: BrowserContext, jobs: list[dict]) -> None:
                         if (atIdx !== -1) company = t.slice(atIdx + 4).split('|')[0].split('-')[0].trim();
                     }
 
-                    // Location
-                    const locEl = document.querySelector(
-                        '[class*="location"], [class*="job-location"], [data-qa="job-location"], '
-                        '[class*="posting-categories"] [class*="location"]'
-                    );
+                    const locEl = document.querySelector('[class*="location"], [class*="job-location"], [data-qa="job-location"]');
                     const location = locEl ? locEl.innerText.trim() : '';
 
-                    // Posted date — <time datetime="..."> is most reliable
                     let posted = '';
                     const timeEl = document.querySelector('time[datetime]');
                     if (timeEl) {
                         posted = timeEl.getAttribute('datetime') || timeEl.innerText.trim();
                     } else {
-                        const dateEl = document.querySelector(
-                            '[class*="posted-date"], [class*="post-date"], [class*="date-posted"]'
-                        );
+                        const dateEl = document.querySelector('[class*="posted-date"], [class*="post-date"], [class*="date-posted"]');
                         if (dateEl) posted = dateEl.innerText.trim();
                     }
 
