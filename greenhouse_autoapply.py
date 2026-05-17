@@ -23,7 +23,7 @@ import smtplib
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -67,7 +67,7 @@ PAGE_TIMEOUT  = 60_000
 
 SKIP_COMPANY_SLUGS = ["yipitdatajobs", "launch2"]
 
-SENIOR_TITLE_RE = re.compile(r'\b(senior|lead|manager)\b', re.I)
+SENIOR_TITLE_RE = re.compile(r'\b(senior|lead|manager|architect)\b', re.I)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -457,7 +457,16 @@ async def main() -> None:
 
         await fetch_job_details(jobs)
 
-        # Filter out skip list and senior/lead/manager roles
+        # Keep only jobs posted within the last 2 days (or no date available)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=2)
+        jobs = [
+            j for j in jobs
+            if not j.get("posted_ts")
+            or datetime.fromisoformat(j["posted_ts"]) >= cutoff
+        ]
+        print(f"[+] After 2-day filter: {len(jobs)} job(s)")
+
+        # Filter out skip list and senior/lead/manager/architect roles
         jobs = [
             j for j in jobs
             if not any(slug in j["apply_url"] for slug in SKIP_COMPANY_SLUGS)
