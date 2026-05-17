@@ -51,10 +51,18 @@ HEADERS = {
 
 # ── Filters ────────────────────────────────────────────────────────────────────
 ALLOWED_TITLE_RE = re.compile(
-    r"\b(data|analytics|analyst|"
-    r"ai\s+engineer|machine\s+learning|"
-    r"business\s+intelligence|bi\s+\w+|"
-    r"etl|insights)\b",
+    r"("
+    r"\bdata\b.{0,40}\banalyst\b"           # data [quality/reporting/…] analyst
+    r"|\banalyst\b.{0,40}\bdata\b"          # analyst […] data
+    r"|\bdata\b.{0,40}\bengineer\b"         # data [pipeline/…] engineer
+    r"|\bengineer\b.{0,40}\bdata\b"         # engineer […] data
+    r"|\bai\b.{0,20}\bengineer\b"           # AI [generative/…] engineer
+    r"|\bengineer\b.{0,20}\bai\b"           # engineer […] AI
+    r"|\banalytics\b"                        # anything with analytics
+    r"|\bBI\b"                               # BI Developer / Power BI / …
+    r"|\bbusiness\b.{0,30}\bintelligence\b" # business [process/…] intelligence
+    r"|\bintelligence\b.{0,30}\bbusiness\b" # intelligence […] business
+    r")",
     re.I,
 )
 SKIP_TITLE_RE = re.compile(
@@ -63,7 +71,7 @@ SKIP_TITLE_RE = re.compile(
     re.I,
 )
 NOISE_TITLE_RE = re.compile(
-    r"\b(data\s+center|payroll|medical\s+coding)\b",
+    r"\b(data\s+center|payroll|medical\s+coding|bilingual)\b",
     re.I,
 )
 ENTRY_LEVEL_RE = re.compile(
@@ -72,16 +80,12 @@ ENTRY_LEVEL_RE = re.compile(
 )
 
 _CLASSIFY_PATTERNS = [
-    (re.compile(r"\bdata\s+engineer\b",     re.I), "Data Engineer"),
-    (re.compile(r"\bdata\s+scientist\b",    re.I), "Data Scientist"),
-    (re.compile(r"\bmachine\s+learning\b",  re.I), "Machine Learning"),
-    (re.compile(r"\bai\s+engineer\b",       re.I), "AI Engineer"),
-    (re.compile(r"\b(business\s+intelligence|bi\s+\w+)\b", re.I), "Business Intelligence"),
-    (re.compile(r"\b(data\b.{0,30}\banalyst|analyst\b.{0,30}\bdata\b)", re.I), "Data Analyst"),
-    (re.compile(r"\betl\b",                 re.I), "ETL Engineer"),
-    (re.compile(r"\binsights\b",            re.I), "Insights"),
-    (re.compile(r"\b(analytics|analyst)\b", re.I), "Analyst / Analytics"),
-    (re.compile(r"\bdata\b",               re.I), "Data (Other)"),
+    (re.compile(r"\bdata\b.{0,40}\bengineer\b|\bengineer\b.{0,40}\bdata\b", re.I), "Data Engineer"),
+    (re.compile(r"\bai\b.{0,20}\bengineer\b|\bengineer\b.{0,20}\bai\b",     re.I), "AI Engineer"),
+    (re.compile(r"\bbusiness\b.{0,30}\bintelligence\b|\bBI\b",               re.I), "Business Intelligence"),
+    (re.compile(r"\bdata\b.{0,40}\banalyst\b|\banalyst\b.{0,40}\bdata\b",   re.I), "Data Analyst"),
+    (re.compile(r"\banalytics\b",                                             re.I), "Analytics"),
+    (re.compile(r"\bdata\b",                                                  re.I), "Data (Other)"),
 ]
 
 def _classify(title: str) -> str:
