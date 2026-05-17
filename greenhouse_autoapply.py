@@ -62,8 +62,9 @@ SEARCH_QUERIES = [
 ]
 SESSION_FILE  = Path(__file__).parent / "json" / "greenhouse_session.json"
 OUTPUT_CSV    = Path(__file__).parent / "csv" / "greenhouse_jobs.csv"
-LAST_RUN_FILE = Path(__file__).parent / "json" / "greenhouse_last_run_jobs.json"
+SEEN_LOG      = Path(__file__).parent / "json" / "greenhouse_last_run_jobs.json"
 PAGE_TIMEOUT  = 60_000
+PRUNE_DAYS    = 7
 
 SKIP_COMPANY_SLUGS = ["yipitdatajobs", "launch2"]
 
@@ -93,68 +94,45 @@ def format_posted(raw: str) -> str:
     return raw
 
 
-def load_last_run_jobs() -> set:
-    if LAST_RUN_FILE.exists():
-        return set(json.loads(LAST_RUN_FILE.read_text()))
-    return set()
+def load_seen() -> dict:
+    if not SEEN_LOG.exists():
+        return {}
+    raw = json.loads(SEEN_LOG.read_text(encoding="utf-8"))
+    if isinstance(raw, list):
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        raw = {jid: today for jid in raw}
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=PRUNE_DAYS)).strftime("%Y-%m-%d")
+    return {jid: dt for jid, dt in raw.items() if dt >= cutoff}
 
 
-def save_last_run_jobs(job_ids: set) -> None:
-    LAST_RUN_FILE.write_text(json.dumps(list(job_ids)))
+def save_seen(seen: dict) -> None:
+    SEEN_LOG.parent.mkdir(parents=True, exist_ok=True)
+    SEEN_LOG.write_text(json.dumps(seen, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def send_summary_email(jobs: list[dict], prev_run_ids: set) -> None:
-    """Email a table of found roles, highlighting new ones."""
+def send_summary_email(new_jobs: list[dict]) -> None:
+    """Email only genuinely new roles."""
     if not EMAIL_PASSWORD:
         print("[!] EMAIL_PASSWORD not set — skipping email notification.")
         return
 
-    if not jobs:
-        print("No jobs to email.")
-        return
-
-    n_new  = sum(1 for j in jobs if (j.get("job_id") or j["apply_url"]) not in prev_run_ids)
-    n_total = len(jobs)
-
-    NEW_BADGE = (
-        " <span style='background:#0c5460;color:white;font-size:10px;"
-        "padding:1px 5px;border-radius:3px;vertical-align:middle'>NEW</span>"
-    )
-
     def _row(j):
-        jid    = j.get("job_id") or j["apply_url"]
-        is_new = jid not in prev_run_ids
-        bg     = "#d4edda" if is_new else "#f5f5f5"
-        badge  = NEW_BADGE if is_new else ""
-        title  = j.get("title", "")
-        co     = j.get("company", "")
-        loc    = j.get("location", "")
-        posted = j.get("posted", "")
-        url    = j["apply_url"]
         return (
-            f"<tr style='background:{bg}'>"
-            f"<td style='padding:6px;border:1px solid #ddd'>{title}{badge}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd'>{co}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd'>{loc}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd'>{posted}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd'><a href='{url}'>Link</a></td>"
+            f"<tr>"
+            f"<td style='padding:6px;border:1px solid #ddd'>{j.get('title','')}</td>"
+            f"<td style='padding:6px;border:1px solid #ddd'>{j.get('company','')}</td>"
+            f"<td style='padding:6px;border:1px solid #ddd'>{j.get('location','')}</td>"
+            f"<td style='padding:6px;border:1px solid #ddd'>{j.get('posted','')}</td>"
+            f"<td style='padding:6px;border:1px solid #ddd'><a href='{j['apply_url']}'>Apply</a></td>"
             f"</tr>"
         )
 
-    # New jobs first, then old
-    new_jobs = [j for j in jobs if (j.get("job_id") or j["apply_url"]) not in prev_run_ids]
-    old_jobs = [j for j in jobs if (j.get("job_id") or j["apply_url"]) in prev_run_ids]
-    rows = "".join(_row(j) for j in new_jobs + old_jobs)
-
-    subject = f"Greenhouse Jobs: {n_total} found | {n_new} NEW — {n_total} total"
+    rows = "".join(_row(j) for j in new_jobs)
+    subject = f"[Greenhouse] {len(new_jobs)} new role(s) — {datetime.now().strftime('%b %d, %Y %H:%M')}"
     body_html = f"""
     <html><body style="font-family:sans-serif;color:#333;font-size:13px">
-    <h2>Greenhouse Jobs Summary</h2>
-    <p>
-      <b style="color:#155724">Found: {n_total}</b> &nbsp;|&nbsp;
-      <b style="color:#0c5460">New this run: {n_new}</b>
-    </p>
-    {f'<p style="color:#0c5460;font-size:13px">&#9733; {n_new} job(s) not seen in the previous run are marked <b>NEW</b>.</p>' if n_new else ''}
+    <h2>Greenhouse — New Roles</h2>
+    <p><b>{len(new_jobs)} new role(s)</b> found.</p>
     <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#e0e0e0">
         <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Link</th>
@@ -173,17 +151,19 @@ def send_summary_email(jobs: list[dict], prev_run_ids: set) -> None:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(EMAIL_SENDER, EMAIL_PASSWORD)
             server.sendmail(EMAIL_SENDER, recipients, msg.as_string())
-        print(f"[+] Summary email sent to {EMAIL_TO}")
+        print(f"[+] Email sent to {EMAIL_TO}")
     except Exception as e:
         print(f"[!] Email failed: {e}")
 
 
-def write_csv(jobs: list[dict]) -> None:
-    fieldnames = ["job_id", "title", "company", "location", "posted", "apply_url"]
+def append_csv(jobs: list[dict]) -> None:
+    fieldnames = ["job_id", "title", "company", "location", "posted", "apply_url", "found_on"]
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
+    write_header = not OUTPUT_CSV.exists()
+    with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writeheader()
+        if write_header:
+            writer.writeheader()
         writer.writerows(jobs)
 
 
@@ -477,33 +457,42 @@ async def main() -> None:
         # Sort newest-first (jobs without a posted date go to the end)
         jobs.sort(key=lambda j: j.get("posted_ts") or "", reverse=True)
 
-        prev_run_ids = load_last_run_jobs()
+        seen = load_seen()
 
-        # Update last-run and save session before emailing
+        # Identify new jobs and update seen dict
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        new_jobs = []
+        for j in jobs:
+            jid = j.get("job_id") or j["apply_url"]
+            if jid not in seen:
+                seen[jid] = today
+                j["found_on"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                new_jobs.append(j)
+
+        # Save session
         _state = await context.storage_state()
         _state["origins"] = []
         SESSION_FILE.write_text(json.dumps(_state))
-        save_last_run_jobs({(j.get("job_id") or j["apply_url"]) for j in jobs})
+        save_seen(seen)
 
-        # Write CSV (overwrite each run)
-        write_csv(jobs)
+        # Append new jobs to CSV
+        if new_jobs:
+            append_csv(new_jobs)
 
         # Print results
         print(f"\n{'='*60}")
-        print(f"[+] Done! Found: {len(jobs)} role(s)")
-        new_jobs = [j for j in jobs if (j.get("job_id") or j["apply_url"]) not in prev_run_ids]
-        for j in jobs:
-            jid    = j.get("job_id") or j["apply_url"]
-            is_new = jid not in prev_run_ids
-            print(f"  {'★' if is_new else '•'} {j.get('title', '')}{'  [NEW]' if is_new else ''}")
+        print(f"[+] Done! Found: {len(jobs)} total | {len(new_jobs)} new")
+        for j in new_jobs:
+            print(f"  [+] NEW: {j.get('title', '')} — {j.get('company', '')}")
             print(f"    {j['apply_url']}")
         print(f"{'='*60}")
-        print(f"New roles (not seen last run): {len(new_jobs)}")
 
-        if not EMAIL_TO:
+        if not new_jobs:
+            print("[i] No new jobs — skipping email.")
+        elif not EMAIL_TO:
             print("[warn] EMAIL_TO not configured — skipping email.")
         else:
-            send_summary_email(jobs, prev_run_ids)
+            send_summary_email(new_jobs)
 
         await browser.close()
 
