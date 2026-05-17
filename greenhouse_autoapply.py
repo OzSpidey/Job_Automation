@@ -87,11 +87,12 @@ def send_summary_email(jobs: list[dict], prev_run_ids: set) -> None:
         print("[!] EMAIL_PASSWORD not set — skipping email notification.")
         return
 
-    n_new = sum(1 for j in jobs if (j.get("job_id") or j["apply_url"]) not in prev_run_ids)
-
     if not jobs:
         print("No jobs to email.")
         return
+
+    n_new  = sum(1 for j in jobs if (j.get("job_id") or j["apply_url"]) not in prev_run_ids)
+    n_total = len(jobs)
 
     NEW_BADGE = (
         " <span style='background:#0c5460;color:white;font-size:10px;"
@@ -101,7 +102,7 @@ def send_summary_email(jobs: list[dict], prev_run_ids: set) -> None:
     def _row(j):
         jid    = j.get("job_id") or j["apply_url"]
         is_new = jid not in prev_run_ids
-        bg     = "#e8f5e9" if is_new else "#fff"
+        bg     = "#d4edda" if is_new else "#f5f5f5"
         badge  = NEW_BADGE if is_new else ""
         title  = j.get("title", "")
         co     = j.get("company", "")
@@ -112,28 +113,31 @@ def send_summary_email(jobs: list[dict], prev_run_ids: set) -> None:
             f"<td style='padding:6px;border:1px solid #ddd'>{title}{badge}</td>"
             f"<td style='padding:6px;border:1px solid #ddd'>{co}</td>"
             f"<td style='padding:6px;border:1px solid #ddd'>{loc}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd'><a href='{url}'>Apply</a></td>"
+            f"<td style='padding:6px;border:1px solid #ddd'><a href='{url}'>Link</a></td>"
             f"</tr>"
         )
 
-    rows = "".join(_row(j) for j in jobs)
-    subject = f"Greenhouse Jobs — {len(jobs)} role(s) found ({n_new} NEW)"
+    # New jobs first, then old
+    new_jobs = [j for j in jobs if (j.get("job_id") or j["apply_url"]) not in prev_run_ids]
+    old_jobs = [j for j in jobs if (j.get("job_id") or j["apply_url"]) in prev_run_ids]
+    rows = "".join(_row(j) for j in new_jobs + old_jobs)
+
+    subject = f"Greenhouse Jobs: {n_total} found | {n_new} NEW — {n_total} total"
+    new_note = f" ({n_new} new this run)" if n_new else ""
     body_html = f"""
-    <html><body style="font-family:Arial,sans-serif;color:#333">
-    <h2 style="color:#24a87a">Greenhouse — Matching Roles</h2>
-    <p>Found <strong>{len(jobs)}</strong> role(s){f" — <strong style='color:#0c5460'>{n_new} NEW</strong> since last run" if n_new else ""}.</p>
-    <table style="border-collapse:collapse;width:100%;max-width:1100px">
-      <tr style="background:#24a87a;color:#fff">
-        <th style="padding:8px;border:1px solid #1d8a65;text-align:left;width:35%">Title</th>
-        <th style="padding:8px;border:1px solid #1d8a65;text-align:left;width:20%">Company</th>
-        <th style="padding:8px;border:1px solid #1d8a65;text-align:left;width:20%">Location</th>
-        <th style="padding:8px;border:1px solid #1d8a65;text-align:left;width:10%">Link</th>
+    <html><body style="font-family:sans-serif;color:#333;font-size:13px">
+    <h2>Greenhouse Jobs Summary</h2>
+    <p>
+      <b style="color:#155724">Found: {n_total}</b> &nbsp;|&nbsp;
+      <b style="color:#0c5460">New this run: {n_new}</b>
+    </p>
+    {f'<p style="color:#0c5460;font-size:13px">&#9733; {n_new} job(s) not seen in the previous run are marked <b>NEW</b>.</p>' if n_new else ''}
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
+      <tr style="background:#e0e0e0">
+        <th>Title</th><th>Company</th><th>Location</th><th>Link</th>
       </tr>
       {rows}
     </table>
-    <p style="font-size:12px;color:#888;margin-top:20px">
-      Source: my.greenhouse.io · United States · Posted Today
-    </p>
     </body></html>
     """
     try:
@@ -449,9 +453,7 @@ async def main() -> None:
         print(f"{'='*60}")
         print(f"New roles (not seen last run): {len(new_jobs)}")
 
-        if not new_jobs:
-            print("No new roles — skipping email.")
-        elif not EMAIL_TO:
+        if not EMAIL_TO:
             print("[warn] EMAIL_TO not configured — skipping email.")
         else:
             send_summary_email(jobs, prev_run_ids)
