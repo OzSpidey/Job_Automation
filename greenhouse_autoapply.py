@@ -107,12 +107,14 @@ def send_summary_email(jobs: list[dict], prev_run_ids: set) -> None:
         title  = j.get("title", "")
         co     = j.get("company", "")
         loc    = j.get("location", "")
+        posted = j.get("posted", "")
         url    = j["apply_url"]
         return (
             f"<tr style='background:{bg}'>"
             f"<td style='padding:6px;border:1px solid #ddd'>{title}{badge}</td>"
             f"<td style='padding:6px;border:1px solid #ddd'>{co}</td>"
             f"<td style='padding:6px;border:1px solid #ddd'>{loc}</td>"
+            f"<td style='padding:6px;border:1px solid #ddd'>{posted}</td>"
             f"<td style='padding:6px;border:1px solid #ddd'><a href='{url}'>Link</a></td>"
             f"</tr>"
         )
@@ -123,7 +125,6 @@ def send_summary_email(jobs: list[dict], prev_run_ids: set) -> None:
     rows = "".join(_row(j) for j in new_jobs + old_jobs)
 
     subject = f"Greenhouse Jobs: {n_total} found | {n_new} NEW — {n_total} total"
-    new_note = f" ({n_new} new this run)" if n_new else ""
     body_html = f"""
     <html><body style="font-family:sans-serif;color:#333;font-size:13px">
     <h2>Greenhouse Jobs Summary</h2>
@@ -134,7 +135,7 @@ def send_summary_email(jobs: list[dict], prev_run_ids: set) -> None:
     {f'<p style="color:#0c5460;font-size:13px">&#9733; {n_new} job(s) not seen in the previous run are marked <b>NEW</b>.</p>' if n_new else ''}
     <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#e0e0e0">
-        <th>Title</th><th>Company</th><th>Location</th><th>Link</th>
+        <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Link</th>
       </tr>
       {rows}
     </table>
@@ -156,7 +157,7 @@ def send_summary_email(jobs: list[dict], prev_run_ids: set) -> None:
 
 
 def append_csv(row: dict) -> None:
-    fieldnames = ["job_id", "title", "company", "location", "apply_url"]
+    fieldnames = ["job_id", "title", "company", "location", "posted", "apply_url"]
     write_header = not OUTPUT_CSV.exists() or OUTPUT_CSV.stat().st_size == 0
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
@@ -362,39 +363,81 @@ async def collect_jobs(context: BrowserContext) -> list[dict]:
 # TITLE ENRICHMENT
 # ──────────────────────────────────────────────────────────────────────────────
 
-async def fetch_real_titles(context: BrowserContext, jobs: list[dict]) -> None:
+async def fetch_job_details(context: BrowserContext, jobs: list[dict]) -> None:
     """
-    For any job whose title is blank or the placeholder 'View job', open the
-    job page and scrape the real h1 title. Runs concurrently (up to 5 at a time).
+    Visit each job page to fill in missing title, company, location, and posted date.
+    Runs concurrently (up to 5 at a time).
     """
-    needs_title = [j for j in jobs if not j.get("title") or re.match(r'^view job$', j.get("title",""), re.I)]
-    if not needs_title:
-        return
-
-    print(f"[titles] Fetching real titles for {len(needs_title)} job(s)...")
-
+    print(f"[details] Fetching details for {len(jobs)} job(s)...")
     sem = asyncio.Semaphore(5)
 
     async def _fetch_one(job: dict) -> None:
         async with sem:
+            # Derive company from URL slug as a fast fallback
+            m = re.search(r'greenhouse\.io/([^/]+)/jobs/', job.get("apply_url", ""))
+            if m and not job.get("company"):
+                job["company"] = m.group(1).replace("-", " ").title()
+
             pg = await context.new_page()
             try:
                 await pg.goto(job["apply_url"], wait_until="domcontentloaded", timeout=30_000)
                 await pg.wait_for_timeout(1500)
-                title = await pg.evaluate("""() => {
+                details = await pg.evaluate("""() => {
+                    // Title
                     const h = document.querySelector('h1, [class*="app-title"], [class*="job-title"]');
-                    if (h && h.innerText.trim()) return h.innerText.trim();
-                    return document.title.split('|')[0].split('-')[0].trim();
+                    const title = (h && h.innerText.trim()) || document.title.split('|')[0].split(' at ')[0].trim();
+
+                    // Company — from page header or <title> "Role at Company"
+                    let company = '';
+                    const coEl = document.querySelector(
+                        '[class*="company-name"], [class*="company_name"], [class*="employer-name"], '
+                        '[class*="org-name"], header [class*="name"], .company-name'
+                    );
+                    if (coEl) {
+                        company = coEl.innerText.trim();
+                    } else {
+                        const titleTag = document.title || '';
+                        const atIdx = titleTag.indexOf(' at ');
+                        if (atIdx !== -1) company = titleTag.slice(atIdx + 4).split('|')[0].split('-')[0].trim();
+                    }
+
+                    // Location
+                    const locEl = document.querySelector(
+                        '[class*="location"], [class*="job-location"], [data-qa="job-location"]'
+                    );
+                    const location = locEl ? locEl.innerText.trim() : '';
+
+                    // Posted date
+                    let posted = '';
+                    const timeEl = document.querySelector('time');
+                    if (timeEl) {
+                        posted = timeEl.getAttribute('datetime') || timeEl.innerText.trim();
+                    } else {
+                        const dateEl = document.querySelector(
+                            '[class*="posted"], [class*="date"], [class*="post-date"]'
+                        );
+                        if (dateEl) posted = dateEl.innerText.trim();
+                    }
+
+                    return { title, company, location, posted };
                 }""")
-                if title and not re.match(r'^view job$', title, re.I):
-                    job["title"] = title
+
+                if details.get("title") and not re.match(r'^view job$', details["title"], re.I):
+                    job["title"] = details["title"]
+                if details.get("company") and not job.get("company"):
+                    job["company"] = details["company"]
+                if details.get("location") and not job.get("location"):
+                    job["location"] = details["location"]
+                if details.get("posted"):
+                    job["posted"] = details["posted"]
+
             except Exception:
                 pass
             finally:
                 await pg.close()
 
-    await asyncio.gather(*[_fetch_one(j) for j in needs_title])
-    print(f"[titles] Done.")
+    await asyncio.gather(*[_fetch_one(j) for j in jobs])
+    print(f"[details] Done.")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -420,7 +463,7 @@ async def main() -> None:
             await browser.close()
             return
 
-        await fetch_real_titles(context, jobs)
+        await fetch_job_details(context, jobs)
 
         # Filter out skip list and senior/lead/manager roles
         jobs = [
