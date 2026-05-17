@@ -373,48 +373,57 @@ async def fetch_job_details(context: BrowserContext, jobs: list[dict]) -> None:
 
     async def _fetch_one(job: dict) -> None:
         async with sem:
-            # Derive company from URL slug as a fast fallback
+            # Derive company from URL slug as a fast fallback (no page visit needed)
             m = re.search(r'greenhouse\.io/([^/]+)/jobs/', job.get("apply_url", ""))
             if m and not job.get("company"):
                 job["company"] = m.group(1).replace("-", " ").title()
 
             pg = await context.new_page()
             try:
-                await pg.goto(job["apply_url"], wait_until="domcontentloaded", timeout=30_000)
-                await pg.wait_for_timeout(1500)
+                await pg.goto(job["apply_url"], wait_until="load", timeout=30_000)
+                await pg.wait_for_timeout(2500)
                 details = await pg.evaluate("""() => {
-                    // Title
-                    const h = document.querySelector('h1, [class*="app-title"], [class*="job-title"]');
-                    const title = (h && h.innerText.trim()) || document.title.split('|')[0].split(' at ')[0].trim();
+                    // Title — try multiple selectors then fall back to <title>
+                    let title = '';
+                    const titleEl = document.querySelector(
+                        'h1, [class*="app-title"], [class*="job-title"], [class*="posting-headline"]'
+                    );
+                    if (titleEl) {
+                        title = titleEl.innerText.trim();
+                    } else {
+                        const t = (document.title || '').split('|')[0].split(' at ')[0].trim();
+                        if (t && !/^greenhouse/i.test(t)) title = t;
+                    }
 
-                    // Company — from page header or <title> "Role at Company"
+                    // Company — page header or <title> "Role at Company"
                     let company = '';
                     const coEl = document.querySelector(
                         '[class*="company-name"], [class*="company_name"], [class*="employer-name"], '
-                        '[class*="org-name"], header [class*="name"], .company-name'
+                        '[class*="org-name"], .company-name, header h2, header h3'
                     );
                     if (coEl) {
                         company = coEl.innerText.trim();
                     } else {
-                        const titleTag = document.title || '';
-                        const atIdx = titleTag.indexOf(' at ');
-                        if (atIdx !== -1) company = titleTag.slice(atIdx + 4).split('|')[0].split('-')[0].trim();
+                        const t = document.title || '';
+                        const atIdx = t.indexOf(' at ');
+                        if (atIdx !== -1) company = t.slice(atIdx + 4).split('|')[0].split('-')[0].trim();
                     }
 
                     // Location
                     const locEl = document.querySelector(
-                        '[class*="location"], [class*="job-location"], [data-qa="job-location"]'
+                        '[class*="location"], [class*="job-location"], [data-qa="job-location"], '
+                        '[class*="posting-categories"] [class*="location"]'
                     );
                     const location = locEl ? locEl.innerText.trim() : '';
 
-                    // Posted date
+                    // Posted date — <time datetime="..."> is most reliable
                     let posted = '';
-                    const timeEl = document.querySelector('time');
+                    const timeEl = document.querySelector('time[datetime]');
                     if (timeEl) {
                         posted = timeEl.getAttribute('datetime') || timeEl.innerText.trim();
                     } else {
                         const dateEl = document.querySelector(
-                            '[class*="posted"], [class*="date"], [class*="post-date"]'
+                            '[class*="posted-date"], [class*="post-date"], [class*="date-posted"]'
                         );
                         if (dateEl) posted = dateEl.innerText.trim();
                     }
@@ -431,8 +440,8 @@ async def fetch_job_details(context: BrowserContext, jobs: list[dict]) -> None:
                 if details.get("posted"):
                     job["posted"] = details["posted"]
 
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"  [details-err] {job.get('apply_url','')[:70]}: {e}")
             finally:
                 await pg.close()
 
