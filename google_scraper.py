@@ -77,7 +77,7 @@ AI_REGEX = re.compile(r"\bai engineer\b", re.I)
 
 # Exclude senior+ levels — we want entry/mid only.
 EXCLUDE_SUBSTRINGS = [
-    "senior", "sr.", " sr ", "staff", "lead", "principal",
+    "senior", "sr.", "sr ", "staff", "lead", "principal",
     "manager", "director", "avp", "vice president", "president",
 ]
 

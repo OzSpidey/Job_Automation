@@ -64,7 +64,7 @@ BI_REGEX = re.compile(r"\bbusiness intelligence\b|\bbi\b", re.I)
 AI_REGEX = re.compile(r"\bai engineer\b", re.I)
 
 EXCLUDE_SUBSTRINGS = [
-    "senior", "sr.", " sr ", "staff", "lead", "principal",
+    "senior", "sr.", "sr ", "staff", "lead", "principal",
     "manager", "director", "avp", "vice president", "president",
 ]
 
