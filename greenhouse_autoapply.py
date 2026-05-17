@@ -466,11 +466,12 @@ async def main() -> None:
         ]
         print(f"[+] After 2-day filter: {len(jobs)} job(s)")
 
-        # Filter out skip list and senior/lead/manager/architect roles
+        # Filter out skip list, senior/lead/manager/architect, and unenriched "View job" rows
         jobs = [
             j for j in jobs
             if not any(slug in j["apply_url"] for slug in SKIP_COMPANY_SLUGS)
             and not (j.get("title") and SENIOR_TITLE_RE.search(j["title"]))
+            and j.get("title", "").strip().lower() not in ("view job", "")
         ]
 
         # Sort newest-first (jobs without a posted date go to the end)
