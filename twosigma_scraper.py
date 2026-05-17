@@ -32,7 +32,7 @@ except ImportError:
     pass
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-BASE_URL      = "https://careers.twosigma.com/careers/SearchJobs"
+BASE_URL      = "https://careers.twosigma.com/careers/OpenRoles"
 PAGE_SIZE     = 25
 MAX_PAGES     = 20
 REQUEST_DELAY = 1.0
