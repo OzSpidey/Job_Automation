@@ -107,6 +107,7 @@ COMPANIES: dict[str, str] = {
     "deel":             "Deel",
     "persona":          "Persona",
     "sardine":          "Sardine",
+    "trulioo":          "Trulioo",
     "column":           "Column",
     "tripactions":      "Navan (TripActions)",
     "expensify":        "Expensify",

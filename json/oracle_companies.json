@@ -343,6 +343,13 @@
     "site_number": "CX_3002"
   },
   {
+    "name": "Goldman Sachs (Campus)",
+    "pod": "hdpc",
+    "region": "us2",
+    "site": "CampusHiring",
+    "site_number": "CX_3001"
+  },
+  {
     "name": "Citizens Financial Group",
     "pod": "eeab",
     "region": "us2",
