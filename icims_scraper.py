@@ -132,25 +132,29 @@ def parse_lastmod(s: str) -> datetime | None:
         return None
     try:
         if "T" in s:
-            return datetime.fromisoformat(s.replace("Z", "+00:00")).replace(tzinfo=None)
+            from datetime import timezone as _tz
+            return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(_tz.utc).replace(tzinfo=None)
         return datetime.strptime(s[:10], "%Y-%m-%d")
     except Exception:
         return None
 
-def format_age(date_str: str) -> str:
-    """'2026-05-14' → 'Posted 2 days ago'"""
-    if not date_str:
+def format_age(dt: datetime | None) -> str:
+    """Return relative posting age with hour/minute precision for recent posts."""
+    if not dt:
         return ""
-    try:
-        posted = datetime.strptime(date_str[:10], "%Y-%m-%d")
-        d = (datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - posted).days
-        if d <= 0:
-            return "Posted today"
-        if d == 1:
-            return "Posted 1 day ago"
-        return f"Posted {d} days ago"
-    except Exception:
-        return ""
+    delta = int((datetime.utcnow() - dt).total_seconds())
+    if delta < 0:
+        return "Posted just now"
+    if delta < 3600:
+        m = max(1, delta // 60)
+        return f"Posted {m} minute{'s' if m != 1 else ''} ago"
+    if delta < 86400:
+        h = delta // 3600
+        return f"Posted {h} hour{'s' if h != 1 else ''} ago"
+    d = delta // 86400
+    if d == 1:
+        return "Posted 1 day ago"
+    return f"Posted {d} days ago"
 
 def slug_to_title(slug: str) -> str:
     """'data-engineer---ai' → 'Data Engineer - Ai'"""
@@ -169,7 +173,7 @@ def fetch_sitemap_jobs(tenant: str) -> list:
         if resp.status_code != 200:
             return []
         tree    = ET.fromstring(resp.content)
-        cutoff  = datetime.now() - timedelta(days=MAX_AGE_DAYS + 1)
+        cutoff  = datetime.utcnow() - timedelta(days=MAX_AGE_DAYS + 1)
         jobs    = []
         for node in tree.findall("sm:url", _SITEMAP_NS):
             loc_el = node.find("sm:loc",     _SITEMAP_NS)
@@ -186,11 +190,15 @@ def fetch_sitemap_jobs(tenant: str) -> list:
             m = re.search(r"/jobs/(\d+)/([^/]+)/job", loc)
             if not m:
                 continue
+            raw_mod = mod_el.text if mod_el is not None else ""
+            has_time = lastmod is not None and "T" in raw_mod
             jobs.append({
-                "url":        loc,
-                "lastmod":    lastmod.strftime("%Y-%m-%d") if lastmod else "",
-                "job_id":     m.group(1),
-                "title_slug": m.group(2),
+                "url":          loc,
+                "lastmod":      lastmod.strftime("%Y-%m-%d") if lastmod else "",
+                "lastmod_time": lastmod.strftime("%H:%M UTC") if has_time else "",
+                "lastmod_dt":   lastmod,
+                "job_id":       m.group(1),
+                "title_slug":   m.group(2),
             })
         return jobs
     except Exception:
@@ -228,7 +236,8 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             "location":    "—",
             "role":        _classify(title),
             "posted":      sj["lastmod"],
-            "age":         format_age(sj["lastmod"]),
+            "posted_time": sj.get("lastmod_time", ""),
+            "age":         format_age(sj.get("lastmod_dt")),
             "link":        sj["url"],
             "found_on":    datetime.now().strftime("%Y-%m-%d %H:%M"),
             "is_new":      is_new,
@@ -267,6 +276,10 @@ def send_summary_email(all_jobs: list, new_count: int) -> None:
         if j.get("entry_level"):
             badges += "&nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span>"
         bg = "#f1f8e9" if j.get("posted") == today else ""
+        time_html = (
+            f"<br><span style='font-size:11px;color:#888'>{j['posted_time']}</span>"
+            if j.get("posted_time") else ""
+        )
         age_html = (
             f"<br><span style='font-size:11px;color:#666'>({j.get('age','')})</span>"
             if j.get("age") else ""
@@ -276,7 +289,7 @@ def send_summary_email(all_jobs: list, new_count: int) -> None:
             f"<td>{j['title']}{badges}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
-            f"<td style='white-space:nowrap'>{j.get('posted','')}{age_html}</td>"
+            f"<td style='white-space:nowrap'>{j.get('posted','')}{time_html}{age_html}</td>"
             f"<td><a href='{j['link']}'>Apply</a></td>"
             f"</tr>"
         )
