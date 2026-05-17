@@ -8152,5 +8152,29 @@
     "tenant": "usertesting",
     "instance": "wd12",
     "career": "usertesting"
+  },
+  {
+    "name": "Activision Blizzard",
+    "tenant": "activision",
+    "instance": "wd1",
+    "career": "External"
+  },
+  {
+    "name": "The Andersons",
+    "tenant": "andersonsinc",
+    "instance": "wd1",
+    "career": "TheAndersonsCareers"
+  },
+  {
+    "name": "Reinsurance Group of America (RGA)",
+    "tenant": "rgare",
+    "instance": "wd1",
+    "career": "Careers"
+  },
+  {
+    "name": "NGL Energy Partners",
+    "tenant": "nglenergypartners",
+    "instance": "wd5",
+    "career": "jobs"
   }
 ]
