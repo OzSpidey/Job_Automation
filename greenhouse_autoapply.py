@@ -355,6 +355,45 @@ async def collect_jobs(context: BrowserContext) -> list[dict]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# TITLE ENRICHMENT
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def fetch_real_titles(context: BrowserContext, jobs: list[dict]) -> None:
+    """
+    For any job whose title is blank or the placeholder 'View job', open the
+    job page and scrape the real h1 title. Runs concurrently (up to 5 at a time).
+    """
+    needs_title = [j for j in jobs if not j.get("title") or re.match(r'^view job$', j.get("title",""), re.I)]
+    if not needs_title:
+        return
+
+    print(f"[titles] Fetching real titles for {len(needs_title)} job(s)...")
+
+    sem = asyncio.Semaphore(5)
+
+    async def _fetch_one(job: dict) -> None:
+        async with sem:
+            pg = await context.new_page()
+            try:
+                await pg.goto(job["apply_url"], wait_until="domcontentloaded", timeout=30_000)
+                await pg.wait_for_timeout(1500)
+                title = await pg.evaluate("""() => {
+                    const h = document.querySelector('h1, [class*="app-title"], [class*="job-title"]');
+                    if (h && h.innerText.trim()) return h.innerText.trim();
+                    return document.title.split('|')[0].split('-')[0].trim();
+                }""")
+                if title and not re.match(r'^view job$', title, re.I):
+                    job["title"] = title
+            except Exception:
+                pass
+            finally:
+                await pg.close()
+
+    await asyncio.gather(*[_fetch_one(j) for j in needs_title])
+    print(f"[titles] Done.")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -376,6 +415,8 @@ async def main() -> None:
             await page.screenshot(path=str(Path(__file__).parent / "debug_greenhouse.png"))
             await browser.close()
             return
+
+        await fetch_real_titles(context, jobs)
 
         # Filter out skip list and senior/lead/manager roles
         jobs = [
