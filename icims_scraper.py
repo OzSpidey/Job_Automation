@@ -36,6 +36,7 @@ except ImportError:
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 MAX_AGE_DAYS   = 1
+PRUNE_DAYS     = 7
 WORKERS        = 20
 OUTPUT_CSV     = Path(__file__).parent / "csv"  / "icims_jobs.csv"
 SEEN_LOG       = Path(__file__).parent / "json" / "icims_seen_jobs.json"
@@ -105,14 +106,20 @@ def is_entry_level(title: str) -> bool:
     return bool(ENTRY_LEVEL_RE.search(title))
 
 # ── Persistence ────────────────────────────────────────────────────────────────
-def load_seen_ids() -> set:
-    if SEEN_LOG.exists():
-        return set(json.loads(SEEN_LOG.read_text(encoding="utf-8")))
-    return set()
+def load_seen_ids() -> dict:
+    """Returns {job_id: date_str}, pruning entries older than PRUNE_DAYS."""
+    if not SEEN_LOG.exists():
+        return {}
+    raw = json.loads(SEEN_LOG.read_text(encoding="utf-8"))
+    if isinstance(raw, list):                          # migrate from old flat-list format
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        raw = {jid: today for jid in raw}
+    cutoff = (datetime.utcnow() - timedelta(days=PRUNE_DAYS)).strftime("%Y-%m-%d")
+    return {jid: dt for jid, dt in raw.items() if dt >= cutoff}
 
-def save_seen_ids(ids: set) -> None:
+def save_seen_ids(seen: dict) -> None:
     SEEN_LOG.parent.mkdir(parents=True, exist_ok=True)
-    SEEN_LOG.write_text(json.dumps(sorted(ids), indent=2), encoding="utf-8")
+    SEEN_LOG.write_text(json.dumps(seen, indent=2, sort_keys=True), encoding="utf-8")
 
 def load_companies() -> list:
     return json.loads(COMPANIES_FILE.read_text(encoding="utf-8"))
@@ -232,7 +239,7 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
         with lock:
             is_new = job_id not in seen_ids
             if is_new:
-                seen_ids.add(job_id)
+                seen_ids[job_id] = datetime.utcnow().strftime("%Y-%m-%d")
 
         row = {
             "title":       title,
@@ -275,8 +282,6 @@ def send_summary_email(all_jobs: list, new_count: int) -> None:
 
     def _row(j):
         badges = ""
-        if j.get("is_new"):
-            badges += "&nbsp;<span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span>"
         if j.get("entry_level"):
             badges += "&nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span>"
         bg = "#f1f8e9" if j.get("posted") == today else ""
@@ -318,9 +323,9 @@ def send_summary_email(all_jobs: list, new_count: int) -> None:
 
     subject   = f"[iCIMS] {new_count} new role(s) — {datetime.now().strftime('%b %d, %Y %H:%M')}"
     body_html = f"""
-    <h2>iCIMS — All Roles (Last {MAX_AGE_DAYS} Day)</h2>
-    <p><b>{new_count} new role(s)</b> found. Green rows = posted today.
-    &nbsp;<span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span> = new this run.</p>
+    <h2>iCIMS — New Roles</h2>
+    <p><b>{new_count} new role(s)</b> found across 102 companies. Green rows = posted today.
+    &nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span> = entry-level.</p>
     {sections}
     """
     try:
@@ -367,7 +372,7 @@ def main() -> None:
 
     if new_count:
         with lock:
-            jobs_to_send = list(all_current_jobs)
+            jobs_to_send = [j for j in all_current_jobs if j.get("is_new")]
         jobs_to_send.sort(key=lambda j: j.get("posted", ""), reverse=True)
         send_summary_email(jobs_to_send, new_count)
     else:
