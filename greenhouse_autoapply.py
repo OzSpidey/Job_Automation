@@ -21,7 +21,9 @@ import os
 import re
 import smtplib
 import sys
-from datetime import datetime, timezone
+import urllib.error
+import urllib.request
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -73,18 +75,22 @@ SENIOR_TITLE_RE = re.compile(r'\b(senior|lead|manager)\b', re.I)
 # ──────────────────────────────────────────────────────────────────────────────
 
 def format_posted(raw: str) -> str:
-    """Parse an ISO datetime string or plain text into a readable date/time."""
+    """Parse an ISO datetime string into a readable date/time."""
     if not raw:
         return ""
-    # Try ISO 8601 (e.g. "2026-05-15T10:30:00.000Z" or "2026-05-15")
-    for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ",
-                "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+    try:
+        dt = datetime.fromisoformat(raw)
+        return dt.strftime("%b %d, %Y %I:%M %p").replace(" 0", " ").strip()
+    except ValueError:
+        pass
+    clean = re.sub(r'[+-]\d{2}:?\d{2}$|Z$', '', raw[:26])
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
         try:
-            dt = datetime.strptime(raw[:26], fmt)
+            dt = datetime.strptime(clean, fmt)
             return dt.strftime("%b %d, %Y %I:%M %p").replace(" 0", " ").strip()
         except ValueError:
             continue
-    return raw  # return as-is if we can't parse it
+    return raw
 
 
 def load_last_run_jobs() -> set:
@@ -172,15 +178,13 @@ def send_summary_email(jobs: list[dict], prev_run_ids: set) -> None:
         print(f"[!] Email failed: {e}")
 
 
-def append_csv(row: dict) -> None:
+def write_csv(jobs: list[dict]) -> None:
     fieldnames = ["job_id", "title", "company", "location", "posted", "apply_url"]
-    write_header = not OUTPUT_CSV.exists() or OUTPUT_CSV.stat().st_size == 0
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
+    with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        if write_header:
-            writer.writeheader()
-        writer.writerow(row)
+        writer.writeheader()
+        writer.writerows(jobs)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -379,73 +383,49 @@ async def collect_jobs(context: BrowserContext) -> list[dict]:
 # TITLE ENRICHMENT
 # ──────────────────────────────────────────────────────────────────────────────
 
-async def fetch_job_details(context: BrowserContext, jobs: list[dict]) -> None:
+async def fetch_job_details(jobs: list[dict]) -> None:
     """
-    Visit each job page to fill in missing title, company, location, and posted date.
-    Runs concurrently (up to 5 at a time).
+    Use the Greenhouse boards API to fill in title, company, location, and posted date.
+    No browser tabs needed — fast parallel HTTP requests.
     """
-    print(f"[details] Fetching details for {len(jobs)} job(s)...")
-    sem = asyncio.Semaphore(5)
+    print(f"[details] Fetching details for {len(jobs)} job(s) via API...")
+    sem = asyncio.Semaphore(10)
+
+    def _api_call(slug: str, job_id: str) -> dict | None:
+        url = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs/{job_id}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            raise
 
     async def _fetch_one(job: dict) -> None:
         async with sem:
-            # Derive company from URL slug as a fast fallback (no page visit needed)
-            m = re.search(r'greenhouse\.io/([^/]+)/jobs/', job.get("apply_url", ""))
-            if m and not job.get("company"):
-                job["company"] = m.group(1).replace("-", " ").title()
-
-            pg = await context.new_page()
+            m = re.search(r'greenhouse\.io/([^/]+)/jobs/(\d+)', job.get("apply_url", ""))
+            if not m:
+                return
+            slug, job_id = m.group(1), m.group(2)
+            if not job.get("company"):
+                job["company"] = slug.replace("-", " ").title()
             try:
-                await pg.goto(job["apply_url"], wait_until="load", timeout=30_000)
-                await pg.wait_for_timeout(2500)
-                details = await pg.evaluate("""() => {
-                    let title = '';
-                    const titleEl = document.querySelector('h1, [class*="app-title"], [class*="job-title"], [class*="posting-headline"]');
-                    if (titleEl) {
-                        title = titleEl.innerText.trim();
-                    } else {
-                        const t = (document.title || '').split('|')[0].split(' at ')[0].trim();
-                        if (t && !/^greenhouse/i.test(t)) title = t;
-                    }
-
-                    let company = '';
-                    const coEl = document.querySelector('[class*="company-name"], [class*="company_name"], [class*="employer-name"], [class*="org-name"], .company-name, header h2, header h3');
-                    if (coEl) {
-                        company = coEl.innerText.trim();
-                    } else {
-                        const t = document.title || '';
-                        const atIdx = t.indexOf(' at ');
-                        if (atIdx !== -1) company = t.slice(atIdx + 4).split('|')[0].split('-')[0].trim();
-                    }
-
-                    const locEl = document.querySelector('[class*="location"], [class*="job-location"], [data-qa="job-location"]');
-                    const location = locEl ? locEl.innerText.trim() : '';
-
-                    let posted = '';
-                    const timeEl = document.querySelector('time[datetime]');
-                    if (timeEl) {
-                        posted = timeEl.getAttribute('datetime') || timeEl.innerText.trim();
-                    } else {
-                        const dateEl = document.querySelector('[class*="posted-date"], [class*="post-date"], [class*="date-posted"]');
-                        if (dateEl) posted = dateEl.innerText.trim();
-                    }
-
-                    return { title, company, location, posted };
-                }""")
-
-                if details.get("title") and not re.match(r'^view job$', details["title"], re.I):
-                    job["title"] = details["title"]
-                if details.get("company") and not job.get("company"):
-                    job["company"] = details["company"]
-                if details.get("location") and not job.get("location"):
-                    job["location"] = details["location"]
-                if details.get("posted"):
-                    job["posted"] = format_posted(details["posted"])
-
+                data = await asyncio.to_thread(_api_call, slug, job_id)
+                if not data:
+                    return
+                if data.get("title"):
+                    job["title"] = data["title"]
+                if data.get("company_name"):
+                    job["company"] = data["company_name"]
+                loc = (data.get("location") or {}).get("name") or ""
+                if loc:
+                    job["location"] = loc
+                posted_raw = data.get("first_published") or data.get("updated_at") or ""
+                if posted_raw:
+                    job["posted"] = format_posted(posted_raw)
             except Exception as e:
                 print(f"  [details-err] {job.get('apply_url','')[:70]}: {e}")
-            finally:
-                await pg.close()
 
     await asyncio.gather(*[_fetch_one(j) for j in jobs])
     print(f"[details] Done.")
@@ -474,7 +454,7 @@ async def main() -> None:
             await browser.close()
             return
 
-        await fetch_job_details(context, jobs)
+        await fetch_job_details(jobs)
 
         # Filter out skip list and senior/lead/manager roles
         jobs = [
@@ -491,9 +471,8 @@ async def main() -> None:
         SESSION_FILE.write_text(json.dumps(_state))
         save_last_run_jobs({(j.get("job_id") or j["apply_url"]) for j in jobs})
 
-        # Write CSV
-        for j in jobs:
-            append_csv(j)
+        # Write CSV (overwrite each run)
+        write_csv(jobs)
 
         # Print results
         print(f"\n{'='*60}")
