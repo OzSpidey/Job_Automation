@@ -137,6 +137,21 @@ def parse_lastmod(s: str) -> datetime | None:
     except Exception:
         return None
 
+def format_age(date_str: str) -> str:
+    """'2026-05-14' → 'Posted 2 days ago'"""
+    if not date_str:
+        return ""
+    try:
+        posted = datetime.strptime(date_str[:10], "%Y-%m-%d")
+        d = (datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - posted).days
+        if d <= 0:
+            return "Posted today"
+        if d == 1:
+            return "Posted 1 day ago"
+        return f"Posted {d} days ago"
+    except Exception:
+        return ""
+
 def slug_to_title(slug: str) -> str:
     """'data-engineer---ai' → 'Data Engineer - Ai'"""
     import urllib.parse
@@ -213,6 +228,7 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
             "location":    "—",
             "role":        _classify(title),
             "posted":      sj["lastmod"],
+            "age":         format_age(sj["lastmod"]),
             "link":        sj["url"],
             "found_on":    datetime.now().strftime("%Y-%m-%d %H:%M"),
             "is_new":      is_new,
@@ -251,12 +267,16 @@ def send_summary_email(all_jobs: list, new_count: int) -> None:
         if j.get("entry_level"):
             badges += "&nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span>"
         bg = "#f1f8e9" if j.get("posted") == today else ""
+        age_html = (
+            f"<br><span style='font-size:11px;color:#666'>({j.get('age','')})</span>"
+            if j.get("age") else ""
+        )
         return (
             f"<tr style='background:{bg}'>"
             f"<td>{j['title']}{badges}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
-            f"<td style='white-space:nowrap'>{j.get('posted','')}</td>"
+            f"<td style='white-space:nowrap'>{j.get('posted','')}{age_html}</td>"
             f"<td><a href='{j['link']}'>Apply</a></td>"
             f"</tr>"
         )
