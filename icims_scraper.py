@@ -52,7 +52,6 @@ HEADERS = {
 # ── Filters ────────────────────────────────────────────────────────────────────
 ALLOWED_TITLE_RE = re.compile(
     r"\b(data|analytics|analyst|"
-    r"software\s+engineer|software\s+developer|"
     r"ai\s+engineer|machine\s+learning|"
     r"business\s+intelligence|bi\s+\w+|"
     r"etl|insights)\b",
@@ -77,8 +76,6 @@ _CLASSIFY_PATTERNS = [
     (re.compile(r"\bdata\s+scientist\b",    re.I), "Data Scientist"),
     (re.compile(r"\bmachine\s+learning\b",  re.I), "Machine Learning"),
     (re.compile(r"\bai\s+engineer\b",       re.I), "AI Engineer"),
-    (re.compile(r"\bsoftware\s+engineer\b", re.I), "Software Engineer"),
-    (re.compile(r"\bsoftware\s+developer\b",re.I), "Software Developer"),
     (re.compile(r"\b(business\s+intelligence|bi\s+\w+)\b", re.I), "Business Intelligence"),
     (re.compile(r"\b(data\b.{0,30}\banalyst|analyst\b.{0,30}\bdata\b)", re.I), "Data Analyst"),
     (re.compile(r"\betl\b",                 re.I), "ETL Engineer"),
