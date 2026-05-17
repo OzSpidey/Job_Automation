@@ -291,6 +291,7 @@ def main() -> None:
     for j in raw_jobs:
         title = j["title"]
         if not is_allowed(title):
+            print(f"  [–] skip: {title}")
             continue
         job_id = f"bloomberg_{j['id']}"
         if job_id in seen:

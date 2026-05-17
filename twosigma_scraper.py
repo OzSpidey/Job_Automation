@@ -32,7 +32,7 @@ except ImportError:
     pass
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-BASE_URL      = "https://careers.twosigma.com/careers/SearchJobs"
+BASE_URL      = "https://twosigma.avature.net/careers/SearchJobs"
 PAGE_SIZE     = 25
 MAX_PAGES     = 20
 REQUEST_DELAY = 1.0
@@ -150,7 +150,7 @@ def fetch_page(session: requests.Session, offset: int) -> list[dict]:
     for a in soup.find_all("a", href=re.compile(r"/(JobDetail|ViewJob)/", re.I)):
         href = a.get("href", "")
         if not href.startswith("http"):
-            href = "https://careers.twosigma.com" + href
+            href = "https://twosigma.avature.net" + href
 
         m = re.search(r"/(JobDetail|ViewJob)/([^/?#]+)", href, re.I)
         job_id = m.group(2) if m else href
@@ -176,7 +176,7 @@ def fetch_page(session: requests.Session, offset: int) -> list[dict]:
             if link and text:
                 href = link.get("href", "")
                 if not href.startswith("http"):
-                    href = "https://careers.twosigma.com" + href
+                    href = "https://twosigma.avature.net" + href
                 m = re.search(r"/(\d+)/?$", href)
                 job_id = m.group(1) if m else href
                 jobs.append({"id": job_id, "title": text, "location": "US", "url": href})
@@ -288,6 +288,7 @@ def main() -> None:
     for j in raw_jobs:
         title = j["title"]
         if not is_allowed(title):
+            print(f"  [–] skip: {title}")
             continue
         job_id = f"twosigma_{j['id']}"
         if job_id in seen:
