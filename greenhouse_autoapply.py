@@ -21,6 +21,7 @@ import os
 import re
 import smtplib
 import sys
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -45,7 +46,7 @@ GH_EMAIL       = os.environ.get("GH_EMAIL", EMAIL_TO)  # Greenhouse login email
 # ──────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ──────────────────────────────────────────────────────────────────────────────
-_GH = "https://my.greenhouse.io/jobs?{query}&location=United%20States&lat=39.71614&lon=-96.999246&location_type=country&country_short_name=US&date_posted=past_day"
+_GH = "https://my.greenhouse.io/jobs?{query}&location=United%20States&lat=39.71614&lon=-96.999246&location_type=country&country_short_name=US&date_posted=past_week"
 SEARCH_QUERIES = [
     {"url": _GH.format(query="query=data%20analyst"),           "type": "data_analyst"},
     {"url": _GH.format(query="query=data%20engineer"),          "type": "data_engineer"},
@@ -70,6 +71,21 @@ SENIOR_TITLE_RE = re.compile(r'\b(senior|lead|manager)\b', re.I)
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ──────────────────────────────────────────────────────────────────────────────
+
+def format_posted(raw: str) -> str:
+    """Parse an ISO datetime string or plain text into a readable date/time."""
+    if not raw:
+        return ""
+    # Try ISO 8601 (e.g. "2026-05-15T10:30:00.000Z" or "2026-05-15")
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ",
+                "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            dt = datetime.strptime(raw[:26], fmt)
+            return dt.strftime("%b %d, %Y %I:%M %p").replace(" 0", " ").strip()
+        except ValueError:
+            continue
+    return raw  # return as-is if we can't parse it
+
 
 def load_last_run_jobs() -> set:
     if LAST_RUN_FILE.exists():
@@ -424,7 +440,7 @@ async def fetch_job_details(context: BrowserContext, jobs: list[dict]) -> None:
                 if details.get("location") and not job.get("location"):
                     job["location"] = details["location"]
                 if details.get("posted"):
-                    job["posted"] = details["posted"]
+                    job["posted"] = format_posted(details["posted"])
 
             except Exception as e:
                 print(f"  [details-err] {job.get('apply_url','')[:70]}: {e}")

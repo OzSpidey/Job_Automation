@@ -71,7 +71,7 @@ AI_REGEX = re.compile(r"\bai engineer\b", re.I)
 EXCLUDE_LEVELS = [
     "senior", "sr.", " sr ", "staff", "lead", "principal",
     "manager", "director", "avp", "vice president", "president",
-    "data center", "architect", "consultant",
+    "data center", "architect",
 ]
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -134,15 +134,6 @@ def position_url(pos: dict) -> str:
     if rel.startswith("/"):
         return "https://apply.careers.microsoft.com" + rel
     return rel
-
-
-def is_target_location(pos: dict) -> bool:
-    """Keep only jobs with at least one location in US or India."""
-    locs = pos.get("standardizedLocations") or pos.get("locations") or []
-    for l in locs:
-        if isinstance(l, str) and (l.endswith(", US") or l.endswith(", IN")):
-            return True
-    return False
 
 
 def format_locations(pos: dict) -> str:
@@ -273,12 +264,10 @@ def scan() -> list[dict]:
     raw = fetch_recent_jobs(MAX_JOBS)
     print(f"  Total raw jobs: {len(raw)}")
 
-    print("[2] Filtering by location (US and India only) and target role title...")
+    print("[2] Filtering by target role title (excluding senior/principal)...")
     matched = []
     seen_urls = set()
     for pos in raw:
-        if not is_target_location(pos):
-            continue
         title = pos.get("name") or ""
         if not is_target_role(title):
             continue
