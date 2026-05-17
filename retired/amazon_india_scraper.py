@@ -1,4 +1,14 @@
 """
+RETIRED — 2026-05-16
+====================
+This script was handed off to an external collaborator who needed an Amazon
+India SWE job scanner for their own use. It is no longer run from this
+repository. The workflow (amazon_india_scraper.yml) has been removed.
+
+Original script preserved here for reference only. Do not re-activate.
+
+────────────────────────────────────────────────────────────────────────────────
+
 Amazon India Jobs Scraper
 =========================
 Hits Amazon's public JSON search endpoint directly:
