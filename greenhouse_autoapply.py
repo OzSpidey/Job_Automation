@@ -423,6 +423,7 @@ async def fetch_job_details(jobs: list[dict]) -> None:
                     job["location"] = loc
                 posted_raw = data.get("first_published") or data.get("updated_at") or ""
                 if posted_raw:
+                    job["posted_ts"] = posted_raw  # kept for sorting
                     job["posted"] = format_posted(posted_raw)
             except Exception as e:
                 print(f"  [details-err] {job.get('apply_url','')[:70]}: {e}")
@@ -462,6 +463,9 @@ async def main() -> None:
             if not any(slug in j["apply_url"] for slug in SKIP_COMPANY_SLUGS)
             and not (j.get("title") and SENIOR_TITLE_RE.search(j["title"]))
         ]
+
+        # Sort newest-first (jobs without a posted date go to the end)
+        jobs.sort(key=lambda j: j.get("posted_ts") or "", reverse=True)
 
         prev_run_ids = load_last_run_jobs()
 
