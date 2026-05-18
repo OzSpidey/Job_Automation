@@ -46,8 +46,8 @@ except ImportError:
 _ROLES = {
     "de": {
         "label":        "Data Engineer",
-        "search_terms": ["Data Engineer"],
-        "allow_re":     re.compile(r"\bdata\s+engineer\b", re.I),
+        "search_terms": ["Data Engineer", "Analytics Engineer"],
+        "allow_re":     re.compile(r"\b(data|analytics)\s+engineer\b", re.I),
         "seen_log":     "oracle_seen_de.json",
         "output_csv":   "oracle_jobs_de.csv",
     },
@@ -79,20 +79,6 @@ _ROLES = {
         "seen_log":     "oracle_seen_ds.json",
         "output_csv":   "oracle_jobs_ds.csv",
     },
-    "sd": {
-        "label":        "Software Developer",
-        "search_terms": ["Software Developer"],
-        "allow_re":     re.compile(r"\bsoftware\s+developer\b", re.I),
-        "seen_log":     "oracle_seen_sd.json",
-        "output_csv":   "oracle_jobs_sd.csv",
-    },
-    "se": {
-        "label":        "Software Engineer",
-        "search_terms": ["Software Engineer"],
-        "allow_re":     re.compile(r"\bsoftware\s+engineer\b", re.I),
-        "seen_log":     "oracle_seen_se.json",
-        "output_csv":   "oracle_jobs_se.csv",
-    },
     "aie": {
         "label":        "AI Engineer",
         "search_terms": ["AI Engineer"],
@@ -122,7 +108,6 @@ else:
     SEARCH_TERMS = [""]
     ALLOWED_TITLE_RE = re.compile(
         r"\b(data|analytics|analyst|"
-        r"software\s+engineer|software\s+developer|"
         r"ai\s+engineer|"
         r"business\s+intelligence|"
         r"bi\s+\w+|"

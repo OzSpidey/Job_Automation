@@ -81,13 +81,6 @@ _ROLES = {
         "seen_log":     "workday_seen_ds.json",
         "output_csv":   "workday_jobs_ds.csv",
     },
-    "swe": {
-        "label":        "Software Engineer/Developer",
-        "search_terms": ["Software Engineer", "Software Developer"],
-        "allow_re":     re.compile(r"\bsoftware\s+(engineer|developer)\b", re.I),
-        "seen_log":     "workday_seen_swe.json",
-        "output_csv":   "workday_jobs_swe.csv",
-    },
     "aie": {
         "label":        "AI Engineer",
         "search_terms": ["AI Engineer"],
@@ -99,7 +92,7 @@ _ROLES = {
 
 # ── Parse role argument ────────────────────────────────────────────────────────
 _parser = argparse.ArgumentParser(add_help=False)
-_parser.add_argument("--role", choices=["de", "da", "bi", "analyst", "ds", "swe", "aie"], default=None)
+_parser.add_argument("--role", choices=["de", "da", "bi", "analyst", "ds", "aie"], default=None)
 _parser.add_argument("--batch", choices=["1", "2"], default=None)
 _args, _ = _parser.parse_known_args()
 
@@ -114,7 +107,6 @@ else:
     SEARCH_TERMS = [""]
     ALLOWED_TITLE_RE = re.compile(
         r"\b(data|analytics|analyst|"
-        r"software\s+engineer|software\s+developer|"
         r"ai\s+engineer|"
         r"business\s+intelligence|"
         r"bi\s+\w+|"
