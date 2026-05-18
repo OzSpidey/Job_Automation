@@ -64,11 +64,12 @@ _ROLES = {
     },
     "analyst": {
         "label":        "Analyst",
-        "search_terms": ["Business Analyst", "Analytics Analyst", "Reporting Analyst", "Advanced Analytics"],
+        "search_terms": ["Business Analyst", "Analytics Analyst", "Reporting Analyst", "Advanced Analytics", "Insights Analyst"],
         "allow_re":     re.compile(
             r"\b(business|analytics|reporting|advanced)\s+(\w+\s+){0,2}(analyst|analytics)\b"
             r"|\banalyst\b.{0,40}\banalytics\b"
-            r"|\banalytics\b.{0,40}\banalyst\b",
+            r"|\banalytics\b.{0,40}\banalyst\b"
+            r"|\binsights\b",
             re.I,
         ),
         "seen_log":     "workday_seen_analyst.json",
@@ -135,6 +136,11 @@ COMPANIES_FILE = Path(__file__).parent / "json" / "workday_companies.json"
 EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 EMAIL_TO       = os.environ.get("EMAIL_TO", "")
+
+# ── Company ignore list (e.g. require clearance) ──────────────────────────────
+IGNORED_COMPANIES = {
+    "Guidehouse",
+}
 
 # ── Title filters ──────────────────────────────────────────────────────────────
 SKIP_TITLE_RE = re.compile(
@@ -678,6 +684,8 @@ WORKERS = 40  # parallel company threads
 
 def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter):
     """Fetch and process one company. Thread-safe via locks."""
+    if company["name"] in IGNORED_COMPANIES:
+        return
     print(f"[→] {company['name']}")
     all_postings = []
     seen_req_ids: set = set()
