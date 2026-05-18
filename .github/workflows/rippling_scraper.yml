@@ -41,9 +41,3 @@ jobs:
             echo "Push attempt $i failed, retrying..."
             sleep $((i * 3))
           done
-
-      - name: Trigger master autoapply if new jobs added
-        if: env.MASTER_CSV_UPDATED == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: gh workflow run master_autoapply.yml --repo OzSpidey/Job_Automation
