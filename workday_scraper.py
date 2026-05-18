@@ -140,6 +140,7 @@ EMAIL_TO       = os.environ.get("EMAIL_TO", "")
 # ── Company ignore list (e.g. require clearance) ──────────────────────────────
 IGNORED_COMPANIES = {
     "Guidehouse",
+    "Leidos",
 }
 
 # ── Title filters ──────────────────────────────────────────────────────────────
