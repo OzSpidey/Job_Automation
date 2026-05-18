@@ -72,6 +72,7 @@ SKIP_COMPANIES = {
     "tech consulting",
     "smart it frame llc",
     "winaxis llc",
+    "netrolynx ai",
 }
 
 
