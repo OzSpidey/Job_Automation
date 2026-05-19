@@ -339,7 +339,16 @@ def send_email(fresh_jobs: list[dict], reposted_jobs: list[dict]) -> None:
         print("[!] GMAIL_APP_PASSWORD not set — skipping email.")
         return
 
-    TABLE_HEADERS = "<th>Title</th><th>Company</th><th>Location</th><th>Exp</th><th>Easy Apply</th><th>Sponsorship</th><th>Work Type</th><th>Posted</th>"
+    TABLE_HEADERS = (
+        "<th style='min-width:160px'>Title</th>"
+        "<th style='min-width:110px'>Company</th>"
+        "<th style='min-width:110px'>Location</th>"
+        "<th style='min-width:45px'>Exp</th>"
+        "<th style='min-width:75px'>Easy Apply</th>"
+        "<th style='min-width:90px'>Sponsorship</th>"
+        "<th style='min-width:80px'>Work Type</th>"
+        "<th style='min-width:75px'>Posted</th>"
+    )
 
     def job_row(j):
         skipped     = j.get("detail_skipped", False)
@@ -389,10 +398,11 @@ def send_email(fresh_jobs: list[dict], reposted_jobs: list[dict]) -> None:
     def build_table(jobs: list[dict], header_color: str) -> str:
         rows = "".join(job_row(j) for j in jobs)
         return (
+            f"<div style='overflow-x:auto;-webkit-overflow-scrolling:touch'>"
             f"<table border='1' cellpadding='6' cellspacing='0'"
-            f" style='border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%'>"
+            f" style='border-collapse:collapse;font-family:sans-serif;font-size:13px;min-width:740px;width:100%'>"
             f"<tr style='background:{header_color};color:white'>{TABLE_HEADERS}</tr>"
-            f"{rows}</table>"
+            f"{rows}</table></div>"
         )
 
     total   = len(fresh_jobs) + len(reposted_jobs)
