@@ -254,8 +254,13 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
             '<span style="background:#0866ff;color:#fff;font-size:11px;'
             'font-weight:bold;padding:2px 6px;border-radius:3px;margin-right:6px;">NEW</span>'
         )
+        display_jobs = sorted(
+            jobs,
+            key=lambda j: (j["url"] not in previously_seen, parse_iso(j.get("raw_date", ""))),
+            reverse=True,
+        )
         rows = []
-        for j in jobs:
+        for j in display_jobs:
             is_new = j["url"] not in previously_seen
             row_bg = "background:#eef2ff;" if is_new else ""
             badge  = NEW_BADGE if is_new else ""
@@ -294,7 +299,7 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
             f"{j['title']} | {j.get('team', '')} | {j.get('location', '')}\n"
             f"  Posted: {j.get('date', 'unknown')}\n"
             f"  {j['url']}"
-            for j in jobs
+            for j in display_jobs
         )
 
     msg = MIMEMultipart("alternative")
