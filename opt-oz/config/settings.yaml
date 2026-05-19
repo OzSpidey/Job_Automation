@@ -1,0 +1,98 @@
+# ── Opt-Oz runtime settings ────────────────────────────────────────────────────
+# All tuneable parameters in one place. Override via env vars where marked.
+
+system:
+  mode: paper                   # paper | live
+  paper_nav: 25000              # starting NAV for paper account ($)
+  data_dir: /data               # overridden by DATA_DIR env var
+
+data:
+  chain_lookback_days: 365      # how many days of chain history to keep in store
+  snapshot_time: "16:15"        # EOD snapshot time (ET)
+  yfinance_delay_minutes: 15    # yfinance quote delay
+
+surface:
+  fit_method: svi               # svi | sabr (sabr stub, svi default)
+  min_contracts_per_slice: 5    # minimum strikes to attempt a fit
+  max_iv: 5.0                   # cap IV at 500% before fitting
+  min_iv: 0.01                  # floor at 1%
+
+greeks:
+  risk_free_rate: 0.0525        # annual, decimal; overridden by RISK_FREE_RATE env
+  dividend_yields:              # per underlying, annual decimal
+    SPY: 0.013
+    QQQ: 0.006
+    IWM: 0.012
+    AAPL: 0.005
+    MSFT: 0.007
+    NVDA: 0.001
+    AMZN: 0.000
+    GOOGL: 0.000
+    META: 0.004
+    TSLA: 0.000
+    default: 0.000
+
+portfolio:
+  max_positions: 20             # hard cap on concurrent open positions
+  max_nav_per_position: 0.05    # 5% NAV max loss per individual position
+  max_portfolio_vega_pct: 0.15  # net vega ≤ 15% NAV (in vol $)
+  max_portfolio_delta_pct: 0.10 # net delta ≤ 10% NAV
+  max_margin_utilization: 0.50  # never use more than 50% of buying power
+
+risk:
+  stress_down_pct: 0.10         # black swan underlying down 10%
+  stress_vol_multiplier: 2.0    # IV doubles in stress scenario
+  stress_max_loss_pct: 0.15     # if stress loss > 15% NAV → reject new trades
+  pin_risk_dte: 2               # flag positions within 2 DTE near strikes
+  assignment_risk_extrinsic: 0.10  # flag short calls/puts with extrinsic < $0.10
+
+execution:
+  limit_improvement_schedule:   # after N seconds, widen by this fraction of spread
+    0: 0.00                     # start at mid
+    30: 0.15                    # after 30s, move 15% toward unfavorable side
+    60: 0.30
+    120: 0.50                   # after 2min, at 50% — reassess
+  max_spread_pct_of_mid: 0.25   # reject order if spread > 25% of mid (too wide)
+  commission_per_contract: 0.65  # IBKR base commission per contract
+  exchange_fee_per_contract: 0.02
+
+strategies:
+  vrp_straddle:
+    enabled: true
+    underlyings: [SPY, QQQ, IWM]
+    target_dte: 30
+    iv_rv_threshold: 3.0        # enter when 30d IV > 30d RV by this many vol points
+    delta_hedge_threshold: 5    # re-hedge when net delta > 5 shares equivalent
+    profit_target_pct: 0.50
+    stop_loss_pct: 2.00         # stop if position loses 200% of initial premium
+    max_dte_exit: 21
+
+  iron_condor:
+    enabled: true
+    underlyings: [SPY, QQQ, IWM]
+    target_dte_min: 30
+    target_dte_max: 45
+    iv_rank_threshold: 50       # enter when IV rank ≥ 50
+    short_delta: 0.16           # sell 16-delta wings
+    wing_width: 5               # $ width of each wing (strikes apart × multiplier)
+    profit_target_pct: 0.50
+    max_dte_exit: 21
+
+  earnings_crush:
+    enabled: true
+    min_iv: 0.30                # underlying IV must be ≥ 30% before earnings
+    min_implied_move_premium: 1.10  # implied move ≥ 1.1× historical average
+    short_delta: 0.16           # sell 16-delta wings for the IC
+    wing_width: 5
+    max_underlying_price: 500   # avoid very high-priced names (capital intensive)
+    exit_minutes_after_open: 30 # exit 30 min after the open post-earnings
+
+  wheel:
+    enabled: true
+    underlyings: [AAPL, MSFT, NVDA, AMZN, SPY, QQQ]
+    csp_delta: 0.30             # sell 30-delta CSPs
+    csp_dte_min: 25
+    csp_dte_max: 40
+    cc_delta: 0.30              # sell 30-delta covered calls after assignment
+    profit_target_pct: 0.50
+    roll_dte: 21
