@@ -445,9 +445,15 @@ def fetch_posting_info(company: dict, external_path: str) -> dict:
     t = company["tenant"]
     i = company["instance"]
     c = company["career"]
+    origin = f"https://{t}.{i}.myworkdayjobs.com"
+    headers = {
+        **HEADERS,
+        "Origin":  origin,
+        "Referer": f"{origin}/en-US/{c}{external_path}",
+    }
     url = f"https://{t}.{i}.myworkdayjobs.com/wday/cxs/{t}/{c}{external_path}"
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
+        r = requests.get(url, headers=headers, timeout=10)
         if r.status_code == 200:
             return r.json().get("jobPostingInfo", {})
     except Exception:
@@ -515,7 +521,7 @@ def extract_experience(html: str) -> str:
     return _parse_exp_match(best)
 
 
-def _post(url: str, search: str, offset: int) -> tuple[int, list, int]:
+def _post(url: str, search: str, offset: int, extra_headers: dict | None = None) -> tuple[int, list, int]:
     """Single POST attempt. Returns (status_code, job_list, total)."""
     payload = {
         "limit":         RESULTS_LIMIT,
@@ -524,11 +530,14 @@ def _post(url: str, search: str, offset: int) -> tuple[int, list, int]:
         "locations":     [],
         "appliedFacets": {},
     }
+    headers = {**HEADERS, **(extra_headers or {})}
     try:
-        resp = requests.post(url, json=payload, headers=HEADERS, timeout=15)
+        resp = requests.post(url, json=payload, headers=headers, timeout=15)
         if resp.status_code == 200:
             data = resp.json()
             return 200, data.get("jobPostings", []), data.get("total", 0)
+        if resp.status_code == 400:
+            print(f"  [400 body] {resp.text[:300]}")
         return resp.status_code, [], 0
     except requests.exceptions.Timeout:
         return -1, [], 0
@@ -548,8 +557,14 @@ def fetch_jobs(company: dict, search: str) -> list[dict]:
     i = company["instance"]
     c = company["career"]
 
+    origin  = f"https://{t}.{i}.myworkdayjobs.com"
+    _origin_headers = {
+        "Origin":  origin,
+        "Referer": f"{origin}/en-US/{c}",
+    }
+
     url = build_api_url(t, i, c)
-    status, jobs, total = _post(url, search, 0)
+    status, jobs, total = _post(url, search, 0, _origin_headers)
 
     if status != 200:
         if status in (-1,):
@@ -563,13 +578,14 @@ def fetch_jobs(company: dict, search: str) -> list[dict]:
             return []
 
         # 422 = career path wrong, 404 = tenant/instance wrong — try discovery
-        if status in (422, 404):
+        if status in (400, 422, 404):
             found = False
             for fallback_career in CAREER_PATH_FALLBACKS:
                 if fallback_career == c:
                     continue
                 test_url = build_api_url(t, i, fallback_career)
-                s, jobs, total = _post(test_url, search, 0)
+                fh = {**_origin_headers, "Referer": f"{origin}/en-US/{fallback_career}"}
+                s, jobs, total = _post(test_url, search, 0, fh)
                 if s == 200:
                     print(f"  [discovered] {company['name']} career path: {fallback_career}")
                     company["career"] = fallback_career
@@ -581,9 +597,14 @@ def fetch_jobs(company: dict, search: str) -> list[dict]:
                 for fallback_instance in WD_INSTANCE_FALLBACKS:
                     if fallback_instance == i:
                         continue
+                    fi_origin = f"https://{t}.{fallback_instance}.myworkdayjobs.com"
                     for fallback_career in [c] + CAREER_PATH_FALLBACKS:
                         test_url = build_api_url(t, fallback_instance, fallback_career)
-                        s, jobs, total = _post(test_url, search, 0)
+                        fh = {
+                            "Origin":  fi_origin,
+                            "Referer": f"{fi_origin}/en-US/{fallback_career}",
+                        }
+                        s, jobs, total = _post(test_url, search, 0, fh)
                         if s == 200:
                             print(f"  [discovered] {company['name']} → {fallback_instance}/{fallback_career}")
                             company["instance"] = fallback_instance
