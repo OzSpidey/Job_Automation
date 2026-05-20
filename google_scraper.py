@@ -158,11 +158,12 @@ def parse_job(raw: list) -> dict | None:
     if len(raw) > 12 and isinstance(raw[12], list) and raw[12] and isinstance(raw[12][0], int):
         posted_ts = raw[12][0]
 
-    # Experience level: index 10 holds a small int (1=Early, 2=Mid, 3=Advanced, 4=Expert)
-    # Confirmed from live response mapping; falls back to None if absent or unexpected type.
+    # Experience level: index 20 holds a single int (1=Early, 2=Mid, 3=Advanced, 4=Expert/Director).
+    # Confirmed from live Boq dump: "Staff Architect" has raw[20]=3 ("Advanced") which matches the UI chip.
+    # raw[10] is a list (role summary HTML); raw[11] is a list of ints (job category codes) — both wrong.
     level = None
-    if len(raw) > 10 and isinstance(raw[10], int):
-        level = _LEVEL_MAP.get(raw[10])
+    if len(raw) > 20 and isinstance(raw[20], int):
+        level = _LEVEL_MAP.get(raw[20])
 
     return {
         "id":        job_id,
