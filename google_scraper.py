@@ -293,13 +293,10 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
             is_new = j["url"] not in previously_seen
             row_bg = 'background:#f0f6ff;' if is_new else ''
             badge  = NEW_BADGE if is_new else ''
-            level = j.get("level", "")
-            level_color = {"Early": "#34A853", "Mid": "#4285F4", "Advanced": "#EA4335", "Expert / Director": "#FBBC04"}.get(level, "#888")
-            level_badge = f'<span style="background:{level_color};color:#fff;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:3px;">{level}</span>' if level else ""
             rows.append(
                 f'<tr style="{row_bg}">'
                 f'<td style="padding:8px;border:1px solid #ddd;">{badge}{j["title"]}</td>'
-                f'<td style="padding:8px;border:1px solid #ddd;text-align:center;">{level_badge}</td>'
+                f'<td style="padding:8px;border:1px solid #ddd;">{j.get("level", "")}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;">{j.get("location", "")}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;"><a href="{j["url"]}">Apply</a></td>'
                 f'<td style="padding:8px;border:1px solid #ddd;white-space:nowrap;">'
