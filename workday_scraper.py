@@ -126,7 +126,7 @@ if _args.batch:
 # ── Config ─────────────────────────────────────────────────────────────────────
 MAX_AGE_DAYS  = 1    # skip jobs older than this (Workday shows "Posted X Days Ago")
 REQUEST_DELAY = 1.0  # seconds between company requests
-RESULTS_LIMIT = 50   # jobs to fetch per company (first page only)
+RESULTS_LIMIT = 20   # jobs to fetch per company (Workday API hard-caps limit at 20)
 
 OUTPUT_CSV     = Path(__file__).parent / "csv" / _csv_file
 SEEN_LOG       = Path(__file__).parent / "json" / _seen_file
@@ -536,8 +536,6 @@ def _post(url: str, search: str, offset: int, extra_headers: dict | None = None)
         if resp.status_code == 200:
             data = resp.json()
             return 200, data.get("jobPostings", []), data.get("total", 0)
-        if resp.status_code == 400:
-            print(f"  [400 body] {resp.text[:300]}")
         return resp.status_code, [], 0
     except requests.exceptions.Timeout:
         return -1, [], 0
