@@ -28,7 +28,7 @@ jobs:
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: python google_scraper.py
+        run: python google_scraper.py --dump-fields
 
       - name: Persist seen-jobs list
         run: |

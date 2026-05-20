@@ -117,13 +117,24 @@ def is_target_role(title: str) -> bool:
     return False
 
 
+_DUMP_FIELDS_DONE = False  # print raw indices for first job once per run
+
+# Google's internal level codes (observed from live responses — may shift)
+_LEVEL_MAP = {
+    1: "Early",
+    2: "Mid",
+    3: "Advanced",
+    4: "Expert / Director",
+}
+
 def parse_job(raw: list) -> dict | None:
-    """Pull (id, title, url, locations, posted_ts) from a Boq job array.
+    """Pull (id, title, url, locations, posted_ts, level) from a Boq job array.
 
     Indices are stable as of mapping but we double-check by structural cues
     (apply URL must contain '/signin?jobId='). If structure looks wrong we
     return None rather than emit garbage.
     """
+    global _DUMP_FIELDS_DONE
     if not isinstance(raw, list) or len(raw) < 10:
         return None
     job_id = raw[0] if isinstance(raw[0], str) else None
@@ -131,6 +142,13 @@ def parse_job(raw: list) -> dict | None:
     url    = raw[2] if isinstance(raw[2], str) and "/signin?jobId=" in raw[2] else None
     if not (job_id and title and url):
         return None
+
+    if "--dump-fields" in sys.argv and not _DUMP_FIELDS_DONE:
+        _DUMP_FIELDS_DONE = True
+        print(f"\n[dump-fields] Raw Boq array for: {title}")
+        for i, v in enumerate(raw):
+            print(f"  [{i}] {repr(v)[:120]}")
+        print()
 
     # Locations: list of [display, [display], city, null, state, country_code]
     locations = raw[9] if len(raw) > 9 and isinstance(raw[9], list) else []
@@ -140,12 +158,19 @@ def parse_job(raw: list) -> dict | None:
     if len(raw) > 12 and isinstance(raw[12], list) and raw[12] and isinstance(raw[12][0], int):
         posted_ts = raw[12][0]
 
+    # Experience level: index 10 holds a small int (1=Early, 2=Mid, 3=Advanced, 4=Expert)
+    # Confirmed from live response mapping; falls back to None if absent or unexpected type.
+    level = None
+    if len(raw) > 10 and isinstance(raw[10], int):
+        level = _LEVEL_MAP.get(raw[10])
+
     return {
         "id":        job_id,
         "title":     title,
         "url":       url,
         "locations": locations,
         "posted_ts": posted_ts,
+        "level":     level,
     }
 
 
@@ -267,9 +292,13 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
             is_new = j["url"] not in previously_seen
             row_bg = 'background:#f0f6ff;' if is_new else ''
             badge  = NEW_BADGE if is_new else ''
+            level = j.get("level", "")
+            level_color = {"Early": "#34A853", "Mid": "#4285F4", "Advanced": "#EA4335", "Expert / Director": "#FBBC04"}.get(level, "#888")
+            level_badge = f'<span style="background:{level_color};color:#fff;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:3px;">{level}</span>' if level else ""
             rows.append(
                 f'<tr style="{row_bg}">'
                 f'<td style="padding:8px;border:1px solid #ddd;">{badge}{j["title"]}</td>'
+                f'<td style="padding:8px;border:1px solid #ddd;text-align:center;">{level_badge}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;">{j.get("location", "")}</td>'
                 f'<td style="padding:8px;border:1px solid #ddd;"><a href="{j["url"]}">Apply</a></td>'
                 f'<td style="padding:8px;border:1px solid #ddd;white-space:nowrap;">'
@@ -287,8 +316,9 @@ def send_email(jobs: list[dict], previously_seen: set[str]) -> None:
         </p>
         <table style="border-collapse:collapse;width:100%;max-width:1100px">
           <tr style="background:#202124;color:#FBBC04">
-            <th style="padding:10px;border:1px solid #555;text-align:left;width:38%">Role</th>
-            <th style="padding:10px;border:1px solid #555;text-align:left;width:30%">Location</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:36%">Role</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:8%">Level</th>
+            <th style="padding:10px;border:1px solid #555;text-align:left;width:28%">Location</th>
             <th style="padding:10px;border:1px solid #555;text-align:left;width:10%">Link</th>
             <th style="padding:10px;border:1px solid #555;text-align:left;width:13%">Date Posted</th>
           </tr>
@@ -347,6 +377,7 @@ def scan() -> list[dict]:
             "date":     format_date(j["posted_ts"]),
             "ago":      format_ago(j["posted_ts"]),
             "posted_ts": j["posted_ts"] or 0,
+            "level":    j.get("level") or "",
         })
         print(f"  MATCH: {j['title']}  [{matched[-1]['location']}]")
 
