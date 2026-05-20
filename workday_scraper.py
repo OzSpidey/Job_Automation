@@ -793,12 +793,14 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
 
 
 def main() -> None:
-    seen_ids  = load_seen_ids()
-    companies = load_companies()
+    seen_ids      = load_seen_ids()
+    all_companies = load_companies()
     if _args.batch == "1":
-        companies = companies[:600]
+        companies = all_companies[:600]
     elif _args.batch == "2":
-        companies = companies[600:]
+        companies = all_companies[600:]
+    else:
+        companies = all_companies
     all_current_jobs: list[dict] = []
     counter  = [0]   # mutable int for thread-safe increment
     lock     = threading.Lock()
@@ -821,8 +823,9 @@ def main() -> None:
     new_count = counter[0]
     save_seen_ids(seen_ids)
 
-    # Persist any career paths/instances discovered during this run
-    COMPANIES_FILE.write_text(json.dumps(companies, indent=2), encoding="utf-8")
+    # Persist discovered career paths — write back the full list so batched runs
+    # don't clobber each other's slice when running sequentially.
+    COMPANIES_FILE.write_text(json.dumps(all_companies, indent=2), encoding="utf-8")
 
     print(f"\n{'='*65}")
     print(f"[+] Done — {new_count} new job(s) found across {len(companies)} companies")
