@@ -79,6 +79,7 @@ AI_REGEX = re.compile(r"\bai engineer\b", re.I)
 EXCLUDE_SUBSTRINGS = [
     "senior", "sr.", "sr ", "staff", "lead", "principal",
     "manager", "director", "avp", "vice president", "president",
+    "data center", "datacenter",
 ]
 
 # Matches the Boq initial-state block carrying the jobs list.
