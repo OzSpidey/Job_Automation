@@ -70,7 +70,9 @@ SKIP_COMPANIES = {
     "talent ally",
     "talentally",
     "tech consulting",
+    "agilegrid solutions",
     "smart it frame llc",
+    "teksystems",
     "winaxis llc",
     "netrolynx ai",
 }
