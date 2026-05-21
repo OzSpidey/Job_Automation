@@ -30,6 +30,7 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
           TIME_WINDOW:        r21600
+          SCRAPER_LABEL:      Catch-Up
         run: python linkedin_nologin_scraper.py
 
       - name: Persist seen jobs state

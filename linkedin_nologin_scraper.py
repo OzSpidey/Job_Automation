@@ -411,8 +411,9 @@ def send_email(fresh_jobs: list[dict], reposted_jobs: list[dict]) -> None:
         subject_parts.append(f"{len(fresh_jobs)} new")
     if reposted_jobs:
         subject_parts.append(f"{len(reposted_jobs)} repost(s)")
+    label = os.getenv("SCRAPER_LABEL", "No-Login")
     subject = (
-        f"LinkedIn (No-Login): {' + '.join(subject_parts)} — "
+        f"LinkedIn ({label}): {' + '.join(subject_parts)} — "
         f"{datetime.now(ET).strftime('%b %d %I:%M %p ET')}"
     )
 
