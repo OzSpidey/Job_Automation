@@ -270,7 +270,7 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
         print(f"    [–] {name} — no new matches")
 
 # ── Email ──────────────────────────────────────────────────────────────────────
-def send_summary_email(all_jobs: list, new_count: int) -> None:
+def send_summary_email(all_jobs: list, new_count: int, company_count: int = 0) -> None:
     if not EMAIL_PASSWORD:
         print("[!] GMAIL_APP_PASSWORD not set — skipping email.")
         return
@@ -324,7 +324,7 @@ def send_summary_email(all_jobs: list, new_count: int) -> None:
     subject   = f"[iCIMS] {new_count} new role(s) — {datetime.now().strftime('%b %d, %Y %H:%M')}"
     body_html = f"""
     <h2>iCIMS — New Roles</h2>
-    <p><b>{new_count} new role(s)</b> found across 102 companies. Green rows = posted today.
+    <p><b>{new_count} new role(s)</b> found across {company_count} companies. Green rows = posted today.
     &nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span> = entry-level.</p>
     {sections}
     """
@@ -374,7 +374,7 @@ def main() -> None:
         with lock:
             jobs_to_send = [j for j in all_current_jobs if j.get("is_new")]
         jobs_to_send.sort(key=lambda j: j.get("posted", ""), reverse=True)
-        send_summary_email(jobs_to_send, new_count)
+        send_summary_email(jobs_to_send, new_count, len(companies))
     else:
         print("[i] No new jobs — skipping email.")
 
