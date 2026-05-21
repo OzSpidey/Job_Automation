@@ -359,46 +359,38 @@ async def _scrape_builtin(page) -> list[dict]:
                         if (seen.has(jobId)) continue;
                         seen.add(jobId);
 
-                        // First line of innerText only to avoid nested company text
+                        // First line of innerText only
                         const rawText = (link.innerText || link.textContent || '').trim();
                         const title = rawText.split('\\n').map(s => s.trim()).filter(Boolean)[0] || '';
                         if (!title || title.length < 4) continue;
 
-                        // Walk up to card container
-                        let card = link.parentElement;
-                        for (let i = 0; i < 8 && card && card.tagName !== 'BODY'; i++) {
-                            if (card.children.length >= 3) break;
-                            card = card.parentElement;
-                        }
+                        // Use closest() to reliably find the card container
+                        const card = link.closest('article')
+                                  || link.closest('li')
+                                  || link.closest('[class*="card"]')
+                                  || link.closest('[class*="job"]');
+                        if (!card) continue;
 
-                        // Company name from /company/ link
-                        let company = '';
-                        if (card) {
-                            const compLink = card.querySelector('a[href*="/company/"]');
-                            if (compLink) company = (compLink.innerText || '').trim();
-                        }
+                        // Company — <a href="/company/..."> inside the card
+                        const compLink = card.querySelector('a[href*="/company/"]');
+                        const company  = compLink ? (compLink.innerText || '').trim() : '';
 
                         // Location
-                        let location = '';
-                        if (card) {
-                            const cardText = card.innerText || '';
-                            const locM = cardText.match(/\\b(remote|hybrid|in[- ]office)\\b/i);
-                            if (locM) location = locM[0];
-                        }
+                        const cardText = card.innerText || '';
+                        const locM = cardText.match(/\\b(remote|hybrid|in[- ]office)\\b/i);
+                        const location = locM ? locM[0] : '';
 
-                        // Posted time — <span class="font-barlow ...">Posted X Ago</span>
-                        // or from <i title="Job Posted X Ago">
+                        // Posted time — user-provided HTML:
+                        // <span class="font-barlow fs-md fw-regular">Posted 4 Hours Ago</span>
+                        // fallback: <i title="Job Posted 4 Hours Ago">
                         let posted = '';
-                        if (card) {
-                            for (const span of card.querySelectorAll('span')) {
-                                const t = (span.textContent || '').trim();
-                                if (/^Posted /i.test(t)) { posted = t; break; }
-                            }
-                            if (!posted) {
-                                const icon = card.querySelector('i[title*="Job Posted"]');
-                                if (icon) posted = (icon.getAttribute('title') || '')
-                                    .replace(/^Job Posted /i, 'Posted ');
-                            }
+                        const postedSpan = card.querySelector('span.font-barlow');
+                        if (postedSpan) {
+                            posted = (postedSpan.textContent || '').trim();
+                        } else {
+                            const icon = card.querySelector('i[title*="Job Posted"]');
+                            if (icon) posted = (icon.getAttribute('title') || '')
+                                .replace(/^Job Posted /i, 'Posted ');
                         }
 
                         results.push({
