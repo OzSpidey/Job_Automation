@@ -4,11 +4,10 @@ Startups Jobs Scraper
 Three sources in one script:
   1. HN "Who is Hiring"    — Algolia HN API (monthly thread)
   2. YC Work at a Startup  — Playwright (headless Chromium)
-  3. Builtin               — BeautifulSoup HTML scraping
+  3. Builtin               — Playwright (headless Chromium)
 
 Target roles: Data Analyst, Data Engineer, Analytics Engineer,
-              Business Intelligence, ML Engineer, Data Scientist,
-              Software Engineer, AI Engineer
+              Analytics Analyst, Business Intelligence, AI Engineer
 Filter:  US / Remote, entry-to-mid level (no senior/lead/manager)
 """
 
@@ -26,7 +25,6 @@ from email.mime.text import MIMEText
 from pathlib import Path
 
 import httpx
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
@@ -59,7 +57,6 @@ US_LOCATION_RE = re.compile(
     rf"\b(united\s+states|usa|u\.s\.a?\.?|remote|{_US_STATES})\b", re.I
 )
 
-# HN text is free-form — cast a wider net
 HN_ROLE_RE = re.compile(
     r"\b(data\s+engineer|data\s+analyst|analytics\s+engineer|analytics\s+analyst"
     r"|business\s+intelligence|\bBI\b|ai\s+engineer)\b",
@@ -155,8 +152,7 @@ def _strip_html(text: str) -> str:
 
 
 def _parse_hn_post(text: str) -> tuple[str, str, str]:
-    """Extract (title, company, location) from a free-form HN job post."""
-    lines = [l.strip() for l in text.replace("\n", "\n").splitlines() if l.strip()]
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
     first = lines[0] if lines else text[:200]
     parts = [p.strip() for p in re.split(r"\s*\|\s*", first)]
 
@@ -164,7 +160,6 @@ def _parse_hn_post(text: str) -> tuple[str, str, str]:
     title    = parts[1][:120] if len(parts) >= 2 else ""
     location = parts[2][:80]  if len(parts) >= 3 else ""
 
-    # If no pipe-separated format, try to pull role from body text
     if not title:
         m = HN_ROLE_RE.search(text)
         title = m.group(0) if m else first[:80]
@@ -216,22 +211,23 @@ async def fetch_hn_jobs(client: httpx.AsyncClient) -> list[dict]:
             continue
 
         title, company, location = _parse_hn_post(text)
+        ts = child.get("created_at_i", 0)
         jobs.append({
-            "_source":   "hn",
-            "id":        f"hn:{child['id']}",
-            "title":     title,
-            "company":   company,
-            "location":  location,
-            "url":       f"https://news.ycombinator.com/item?id={child['id']}",
-            "posted_ts": child.get("created_at_i", 0),
-            "snippet":   text[:220],
+            "_source":    "hn",
+            "id":         f"hn:{child['id']}",
+            "title":      title,
+            "company":    company,
+            "location":   location,
+            "url":        f"https://news.ycombinator.com/item?id={child['id']}",
+            "posted_ts":  ts,
+            "posted_str": posted_label(ts),
         })
 
     print(f"  [HN] {len(jobs)} matched")
     return jobs
 
 
-# ── Source 2: YC Work at a Startup (Playwright) ───────────────────────────────
+# ── Sources 2 & 3: YC + Builtin (shared Playwright session) ──────────────────
 
 YC_QUERIES = [
     "data analyst",
@@ -241,292 +237,300 @@ YC_QUERIES = [
     "ai engineer",
 ]
 
-async def fetch_yc_jobs() -> list[dict]:
-    print("  [YC] Launching Playwright...")
-    jobs: list[dict] = []
-    seen_yc_ids: set[str] = set()
+BUILTIN_CATEGORIES = ["data-analytics", "data-engineering"]
+BUILTIN_PAGES      = 3
 
-    try:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
-            context = await browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-                )
-            )
-            page = await context.new_page()
+_PW_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
 
-            for query in YC_QUERIES:
-                url = (
-                    "https://www.workatastartup.com/jobs"
-                    f"?q={query.replace(' ', '+')}"
-                    "&jobType=fulltime&location=US"
-                )
-                print(f"  [YC] Searching: {query!r}")
-                try:
-                    await page.goto(url, wait_until="networkidle", timeout=30_000)
-                except Exception:
-                    # networkidle timeout is common on React apps — proceed anyway
-                    await page.wait_for_timeout(4000)
 
-                # Scroll to trigger lazy-loaded content
-                for _ in range(3):
-                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    await page.wait_for_timeout(1200)
+async def _scrape_yc(page) -> list[dict]:
+    jobs: list[dict]     = []
+    seen_ids: set[str]   = set()
 
-                # Extract all job links and their card context via JS
-                raw: list[dict] = await page.evaluate("""
-                    () => {
-                        const results = [];
-                        const seen = new Set();
-                        for (const link of document.querySelectorAll('a[href]')) {
-                            const href = link.getAttribute('href') || '';
-                            const m = href.match(/\\/jobs\\/(\\d+)/);
-                            if (!m) continue;
-                            const jobId = m[1];
-                            if (seen.has(jobId)) continue;
-                            seen.add(jobId);
-                            // Use innerText split by newline to get only the visible
-                            // first line — avoids concatenating nested company name text
-                            const rawText = (link.innerText || link.textContent || '').trim();
-                            const title = rawText.split('\\n').map(s => s.trim()).filter(Boolean)[0] || '';
-                            if (!title || title.length < 4) continue;
-                            // Walk up DOM to find the containing card
-                            let card = link.parentElement;
-                            for (let i = 0; i < 7 && card && card.tagName !== 'BODY'; i++) {
-                                if (card.children.length >= 2) break;
-                                card = card.parentElement;
-                            }
-                            results.push({
-                                id:        jobId,
-                                title:     title,
-                                card_text: card ? card.innerText : '',
-                                url:       'https://www.workatastartup.com/jobs/' + jobId,
-                            });
-                        }
-                        return results;
+    for query in YC_QUERIES:
+        url = (
+            "https://www.workatastartup.com/jobs"
+            f"?q={query.replace(' ', '+')}&jobType=fulltime&location=US"
+        )
+        print(f"  [YC] Searching: {query!r}")
+        try:
+            await page.goto(url, wait_until="networkidle", timeout=30_000)
+        except Exception:
+            await page.wait_for_timeout(4000)
+
+        for _ in range(3):
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await page.wait_for_timeout(1200)
+
+        raw: list[dict] = await page.evaluate("""
+            () => {
+                const results = [];
+                const seen = new Set();
+                for (const link of document.querySelectorAll('a[href]')) {
+                    const href = link.getAttribute('href') || '';
+                    const m = href.match(/\\/jobs\\/(\\d+)/);
+                    if (!m) continue;
+                    const jobId = m[1];
+                    if (seen.has(jobId)) continue;
+                    seen.add(jobId);
+                    const rawText = (link.innerText || link.textContent || '').trim();
+                    const title = rawText.split('\\n').map(s => s.trim()).filter(Boolean)[0] || '';
+                    if (!title || title.length < 4) continue;
+                    let card = link.parentElement;
+                    for (let i = 0; i < 7 && card && card.tagName !== 'BODY'; i++) {
+                        if (card.children.length >= 2) break;
+                        card = card.parentElement;
                     }
-                """)
+                    results.push({
+                        id:        jobId,
+                        title:     title,
+                        card_text: card ? card.innerText : '',
+                        url:       'https://www.workatastartup.com/jobs/' + jobId,
+                    });
+                }
+                return results;
+            }
+        """)
 
-                for item in raw:
-                    job_id = f"yc:{item['id']}"
-                    if job_id in seen_yc_ids:
-                        continue
-                    seen_yc_ids.add(job_id)
+        for item in raw:
+            job_id = f"yc:{item['id']}"
+            if job_id in seen_ids:
+                continue
+            seen_ids.add(job_id)
 
-                    title     = item["title"].strip()
-                    card_text = item.get("card_text", "")
-                    lines     = [l.strip() for l in card_text.splitlines() if l.strip()]
+            title     = item["title"].strip()
+            card_text = item.get("card_text", "")
+            lines     = [l.strip() for l in card_text.splitlines() if l.strip()]
 
-                    # First non-title line that isn't the job title is usually company name
-                    company = ""
-                    for line in lines:
-                        if line.lower() != title.lower() and len(line) > 1:
-                            company = line[:80]
-                            break
+            company = ""
+            for line in lines:
+                if line.lower() != title.lower() and len(line) > 1:
+                    company = line[:80]
+                    break
 
-                    # Extract location from card text
-                    location = ""
-                    for line in lines:
-                        if US_LOCATION_RE.search(line) or "remote" in line.lower():
-                            location = line[:80]
-                            break
+            location = ""
+            for line in lines:
+                if US_LOCATION_RE.search(line) or "remote" in line.lower():
+                    location = line[:80]
+                    break
 
-                    jobs.append({
-                        "_source":   "yc",
-                        "id":        job_id,
-                        "title":     title,
-                        "company":   company,
-                        "location":  location,
-                        "url":       item["url"],
-                        "posted_ts": 0,
-                        "snippet":   card_text[:220],
-                    })
-
-            await browser.close()
-
-    except Exception as e:
-        print(f"  [YC] Fatal error: {e}")
+            jobs.append({
+                "_source":    "yc",
+                "id":         job_id,
+                "title":      title,
+                "company":    company,
+                "location":   location,
+                "url":        item["url"],
+                "posted_ts":  0,
+                "posted_str": "—",
+            })
 
     print(f"  [YC] {len(jobs)} candidates extracted")
     return jobs
 
 
-# ── Source 3: Builtin (BeautifulSoup) ─────────────────────────────────────────
-
-BUILTIN_CATEGORIES = ["data-analytics", "data-engineering"]
-BUILTIN_PAGES      = 3
-
-async def fetch_builtin_jobs(client: httpx.AsyncClient) -> list[dict]:
-    print("  [Builtin] Scraping job listings...")
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        ),
-        "Accept-Language": "en-US,en;q=0.9",
-    }
+async def _scrape_builtin(page) -> list[dict]:
     jobs: list[dict]     = []
-    seen_builtin: set[str] = set()
+    seen_ids: set[str]   = set()
 
     for category in BUILTIN_CATEGORIES:
         for page_num in range(1, BUILTIN_PAGES + 1):
             url = f"https://builtin.com/jobs/{category}?page={page_num}"
+            print(f"  [Builtin] {url}")
             try:
-                resp = await client.get(url, headers=headers, timeout=15)
-                if resp.status_code != 200:
-                    print(f"  [Builtin] {url} → HTTP {resp.status_code}")
+                await page.goto(url, wait_until="networkidle", timeout=30_000)
+            except Exception:
+                await page.wait_for_timeout(3000)
+
+            await page.wait_for_timeout(1500)
+
+            raw: list[dict] = await page.evaluate("""
+                () => {
+                    const results = [];
+                    const seen = new Set();
+                    for (const link of document.querySelectorAll('a[href]')) {
+                        const href = link.getAttribute('href') || '';
+                        const m = href.match(/\\/job\\/[^/]+\\/(\\d+)/);
+                        if (!m) continue;
+                        const jobId = m[1];
+                        if (seen.has(jobId)) continue;
+                        seen.add(jobId);
+
+                        // First line of innerText only to avoid nested company text
+                        const rawText = (link.innerText || link.textContent || '').trim();
+                        const title = rawText.split('\\n').map(s => s.trim()).filter(Boolean)[0] || '';
+                        if (!title || title.length < 4) continue;
+
+                        // Walk up to card container
+                        let card = link.parentElement;
+                        for (let i = 0; i < 8 && card && card.tagName !== 'BODY'; i++) {
+                            if (card.children.length >= 3) break;
+                            card = card.parentElement;
+                        }
+
+                        // Company name from /company/ link
+                        let company = '';
+                        if (card) {
+                            const compLink = card.querySelector('a[href*="/company/"]');
+                            if (compLink) company = (compLink.innerText || '').trim();
+                        }
+
+                        // Location
+                        let location = '';
+                        if (card) {
+                            const cardText = card.innerText || '';
+                            const locM = cardText.match(/\\b(remote|hybrid|in[- ]office)\\b/i);
+                            if (locM) location = locM[0];
+                        }
+
+                        // Posted time — <span class="font-barlow ...">Posted X Ago</span>
+                        // or from <i title="Job Posted X Ago">
+                        let posted = '';
+                        if (card) {
+                            for (const span of card.querySelectorAll('span')) {
+                                const t = (span.textContent || '').trim();
+                                if (/^Posted /i.test(t)) { posted = t; break; }
+                            }
+                            if (!posted) {
+                                const icon = card.querySelector('i[title*="Job Posted"]');
+                                if (icon) posted = (icon.getAttribute('title') || '')
+                                    .replace(/^Job Posted /i, 'Posted ');
+                            }
+                        }
+
+                        results.push({
+                            id: jobId, title, company, location, posted,
+                            url: 'https://builtin.com' + href,
+                        });
+                    }
+                    return results;
+                }
+            """)
+
+            for item in raw:
+                job_id = f"builtin:{item['id']}"
+                if job_id in seen_ids:
                     continue
-            except Exception as e:
-                print(f"  [Builtin] Fetch error ({url}): {e}")
-                continue
-
-            soup = BeautifulSoup(resp.text, "lxml")
-
-            # Job links follow the pattern /job/{slug}/{numeric-id}
-            job_links = soup.find_all("a", href=re.compile(r"/job/[^/]+/\d+"))
-            for link in job_links:
-                href = link.get("href", "")
-                m = re.search(r"/job/[^/]+/(\d+)", href)
-                if not m:
-                    continue
-                job_id_str = f"builtin:{m.group(1)}"
-                if job_id_str in seen_builtin:
-                    continue
-                seen_builtin.add(job_id_str)
-
-                # get_text on a complex link element can concatenate company name +
-                # title — split by newline and take the first non-empty line only
-                title = link.get_text(separator="\n", strip=True).split("\n")[0].strip()
-                if not title:
-                    continue
-
-                # Walk up to a meaningful card container
-                card = link.parent
-                for _ in range(6):
-                    if card is None:
-                        break
-                    if len(card.get_text(strip=True)) > 60:
-                        break
-                    card = card.parent
-
-                card_text = card.get_text(" ", strip=True) if card else ""
-
-                # Company name is usually the first /company/ link inside the card
-                company_el = card.find("a", href=re.compile(r"/company/")) if card else None
-                company    = company_el.get_text(strip=True) if company_el else ""
-
-                # Location: look for Remote / Hybrid / city, ST pattern
-                loc_m = re.search(
-                    r"\b(remote|hybrid|in.office|[A-Z][a-z]+(?: [A-Z][a-z]+)?,\s*[A-Z]{2})\b",
-                    card_text,
-                    re.I,
-                )
-                location = loc_m.group(0) if loc_m else ""
-
+                seen_ids.add(job_id)
                 jobs.append({
-                    "_source":   "builtin",
-                    "id":        job_id_str,
-                    "title":     title,
-                    "company":   company,
-                    "location":  location,
-                    "url":       f"https://builtin.com{href}",
-                    "posted_ts": 0,
-                    "snippet":   card_text[:220],
+                    "_source":    "builtin",
+                    "id":         job_id,
+                    "title":      item["title"].strip(),
+                    "company":    item.get("company", ""),
+                    "location":   item.get("location", ""),
+                    "url":        item["url"],
+                    "posted_ts":  0,
+                    "posted_str": item.get("posted", "—") or "—",
                 })
-
-            await asyncio.sleep(0.6)
 
     print(f"  [Builtin] {len(jobs)} candidates extracted")
     return jobs
 
 
-# ── Email ─────────────────────────────────────────────────────────────────────
+async def fetch_playwright_jobs() -> tuple[list[dict], list[dict]]:
+    print("  [Playwright] Launching browser...")
+    yc_jobs:      list[dict] = []
+    builtin_jobs: list[dict] = []
+    try:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            context = await browser.new_context(user_agent=_PW_UA)
+            page    = await context.new_page()
 
-_SRC_LABEL = {"hn": "HN", "yc": "YC", "builtin": "Builtin"}
-_SRC_COLOR = {"hn": "#ff6600", "yc": "#fb651e", "builtin": "#0066cc"}
+            yc_jobs      = await _scrape_yc(page)
+            builtin_jobs = await _scrape_builtin(page)
+
+            await browser.close()
+    except Exception as e:
+        print(f"  [Playwright] Fatal error: {e}")
+    return yc_jobs, builtin_jobs
 
 
-def send_email(all_jobs: list[dict], new_ids: set) -> None:
-    new_count  = len(new_ids)
-    seen_count = len(all_jobs) - new_count
-    subject    = f"[Startups Scanner] {new_count} New Role(s) Found"
+# ── Email (3 tables) ──────────────────────────────────────────────────────────
 
-    all_jobs = sorted(
-        all_jobs,
-        key=lambda j: (j["id"] in new_ids, j.get("posted_ts", 0)),
-        reverse=True,
-    )
+def _make_table(jobs: list[dict], new_ids: set, show_posted_str: bool = False) -> str:
+    if not jobs:
+        return '<p style="color:#888;font-size:13px;">No matching roles found.</p>'
 
-    rows_html = []
-    for j in all_jobs:
-        src      = j.get("_source", "")
-        is_new   = j["id"] in new_ids
-        src_badge = (
-            f'<span style="background:{_SRC_COLOR.get(src, "#888")};color:#fff;'
-            f'padding:2px 6px;border-radius:3px;font-size:10px;'
-            f'font-weight:bold;margin-right:5px;">'
-            f'{_SRC_LABEL.get(src, src.upper())}</span>'
-        )
+    rows = []
+    for j in sorted(jobs, key=lambda x: (x["id"] in new_ids, x.get("posted_ts", 0)), reverse=True):
+        is_new    = j["id"] in new_ids
         new_badge = (
-            '<span style="background:#2ecc71;color:#fff;padding:2px 7px;'
+            '<span style="background:#2ecc71;color:#fff;padding:2px 6px;'
             'border-radius:4px;font-size:11px;font-weight:bold;margin-left:5px;">NEW</span>'
             if is_new else ""
         )
-        row_bg = "background:#f0fff4;" if is_new else ""
-        rows_html.append(
+        row_bg  = "background:#f0fff4;" if is_new else ""
+        posted  = j.get("posted_str", "—") if show_posted_str else posted_label(j.get("posted_ts", 0))
+        rows.append(
             f'<tr style="{row_bg}">'
-            f'<td style="padding:8px;border:1px solid #ddd;">{src_badge}{j["title"]}{new_badge}</td>'
-            f'<td style="padding:8px;border:1px solid #ddd;">{j.get("company", "")}</td>'
-            f'<td style="padding:8px;border:1px solid #ddd;">{j.get("location", "")}</td>'
-            f'<td style="padding:8px;border:1px solid #ddd;">{posted_label(j.get("posted_ts", 0))}</td>'
+            f'<td style="padding:8px;border:1px solid #ddd;">{j["title"]}{new_badge}</td>'
+            f'<td style="padding:8px;border:1px solid #ddd;">{j.get("company","")}</td>'
+            f'<td style="padding:8px;border:1px solid #ddd;">{j.get("location","")}</td>'
+            f'<td style="padding:8px;border:1px solid #ddd;">{posted}</td>'
             f'<td style="padding:8px;border:1px solid #ddd;"><a href="{j["url"]}">View</a></td>'
             f'</tr>'
         )
 
-    counts_by_src = {
-        "HN":      sum(1 for j in all_jobs if j.get("_source") == "hn"),
-        "YC":      sum(1 for j in all_jobs if j.get("_source") == "yc"),
-        "Builtin": sum(1 for j in all_jobs if j.get("_source") == "builtin"),
-    }
+    header = (
+        '<tr style="background:#4a4a4a;color:#fff">'
+        '<th style="padding:10px;border:1px solid #555;text-align:left;">Role</th>'
+        '<th style="padding:10px;border:1px solid #555;text-align:left;">Company</th>'
+        '<th style="padding:10px;border:1px solid #555;text-align:left;">Location</th>'
+        '<th style="padding:10px;border:1px solid #555;text-align:left;">Posted</th>'
+        '<th style="padding:10px;border:1px solid #555;text-align:left;">Link</th>'
+        '</tr>'
+    )
+    return (
+        f'<table style="border-collapse:collapse;width:100%;max-width:1300px;margin-bottom:30px">'
+        f'{header}{"".join(rows)}</table>'
+    )
+
+
+def _section(title: str, color: str, jobs: list[dict], new_ids: set, show_posted_str: bool = False) -> str:
+    new_count = sum(1 for j in jobs if j["id"] in new_ids)
+    return (
+        f'<h3 style="color:{color};margin-top:30px;margin-bottom:6px;">'
+        f'{title} &nbsp;<span style="font-size:13px;color:#555;font-weight:normal;">'
+        f'{new_count} new · {len(jobs)} total</span></h3>'
+        + _make_table(jobs, new_ids, show_posted_str)
+    )
+
+
+def send_email(hn_jobs: list[dict], yc_jobs: list[dict], builtin_jobs: list[dict], new_ids: set) -> None:
+    total_new = len(new_ids)
+    subject   = f"[Startups Scanner] {total_new} New Role(s) Found"
+
+    roles_line = (
+        "Data Engineer &nbsp;·&nbsp; Data Analyst &nbsp;·&nbsp; Analytics Engineer &nbsp;·&nbsp;"
+        "Analytics Analyst &nbsp;·&nbsp; Business Intelligence &nbsp;·&nbsp; AI Engineer"
+    )
 
     html = f"""
-    <html><body style="font-family:Arial,sans-serif;color:#333">
+    <html><body style="font-family:Arial,sans-serif;color:#333;max-width:1350px">
     <h2 style="color:#4a4a4a">Startups Jobs — Digest</h2>
-    <p><strong style="color:#2ecc71">{new_count} new</strong> role(s) &nbsp;|&nbsp;
-       {seen_count} already seen &nbsp;|&nbsp; US / Remote</p>
-    <p style="font-size:12px;color:#666;">
-       HN: {counts_by_src['HN']} &nbsp;·&nbsp;
-       YC: {counts_by_src['YC']} &nbsp;·&nbsp;
-       Builtin: {counts_by_src['Builtin']}</p>
-    <p style="font-size:12px;color:#666;">
-       Data Engineer &nbsp;·&nbsp; Data Analyst &nbsp;·&nbsp; Analytics Engineer &nbsp;·&nbsp;
-       Analytics Analyst &nbsp;·&nbsp; Business Intelligence &nbsp;·&nbsp; AI Engineer</p>
-    <table style="border-collapse:collapse;width:100%;max-width:1300px">
-      <tr style="background:#4a4a4a;color:#fff">
-        <th style="padding:10px;border:1px solid #555;text-align:left;">Role</th>
-        <th style="padding:10px;border:1px solid #555;text-align:left;">Company</th>
-        <th style="padding:10px;border:1px solid #555;text-align:left;">Location</th>
-        <th style="padding:10px;border:1px solid #555;text-align:left;">Posted</th>
-        <th style="padding:10px;border:1px solid #555;text-align:left;">Link</th>
-      </tr>
-      {"".join(rows_html)}
-    </table>
+    <p><strong style="color:#2ecc71">{total_new} new</strong> role(s) &nbsp;|&nbsp; US / Remote</p>
+    <p style="font-size:12px;color:#666;">{roles_line}</p>
+
+    {_section("HN — Who's Hiring", "#ff6600", hn_jobs, new_ids, show_posted_str=False)}
+    {_section("YC Work at a Startup", "#fb651e", yc_jobs, new_ids, show_posted_str=False)}
+    {_section("Builtin", "#0066cc", builtin_jobs, new_ids, show_posted_str=True)}
+
     <p style="font-size:12px;color:#888;margin-top:20px">
       Sources: HN Who's Hiring · YC Work at a Startup · Builtin
     </p>
     </body></html>
     """
 
-    plain = f"Startups Jobs — {new_count} new role(s):\n\n"
-    for j in all_jobs:
+    all_jobs = hn_jobs + yc_jobs + builtin_jobs
+    plain    = f"Startups Jobs — {total_new} new role(s):\n\n"
+    for j in sorted(all_jobs, key=lambda x: x["id"] in new_ids, reverse=True):
         tag = "[NEW] " if j["id"] in new_ids else "      "
-        src = _SRC_LABEL.get(j.get("_source", ""), "?")
-        plain += (
-            f"{tag}[{src}] {j['title']} @ {j.get('company', '?')} "
-            f"| {j.get('location', '')}\n  {j['url']}\n\n"
-        )
+        src = {"hn": "HN", "yc": "YC", "builtin": "Builtin"}.get(j.get("_source", ""), "?")
+        plain += f"{tag}[{src}] {j['title']} @ {j.get('company','?')} | {j.get('location','')}\n  {j['url']}\n\n"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -539,7 +543,7 @@ def send_email(all_jobs: list[dict], new_ids: set) -> None:
         srv.login(SENDER_EMAIL, SENDER_PASSWORD)
         srv.sendmail(SENDER_EMAIL, RECIPIENTS, msg.as_string())
 
-    print(f"[email] Sent — {new_count} new role(s).")
+    print(f"[email] Sent — {total_new} new role(s).")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -552,59 +556,47 @@ async def main():
 
     previously_seen = load_seen()
 
-    # HN and Builtin share an httpx client; YC runs Playwright separately
     async with httpx.AsyncClient(follow_redirects=True) as client:
-        hn_jobs, builtin_jobs = await asyncio.gather(
-            fetch_hn_jobs(client),
-            fetch_builtin_jobs(client),
-        )
+        hn_jobs = await fetch_hn_jobs(client)
 
-    yc_jobs = await fetch_yc_jobs()
+    yc_jobs, builtin_jobs = await fetch_playwright_jobs()
 
-    all_raw = hn_jobs + yc_jobs + builtin_jobs
-    print(f"\n  Raw totals — HN: {len(hn_jobs)}  YC: {len(yc_jobs)}  Builtin: {len(builtin_jobs)}")
+    print(f"\n  Raw — HN: {len(hn_jobs)}  YC: {len(yc_jobs)}  Builtin: {len(builtin_jobs)}")
 
-    # Filter and dedup
-    matched:    list[dict] = []
-    seen_dedup: set[str]   = set()
-
-    for j in all_raw:
-        title    = j.get("title", "").strip()
-        location = j.get("location", "")
-        src      = j.get("_source", "")
-        job_id   = j["id"]
-
-        if job_id in seen_dedup:
-            continue
-
-        # HN: role was already filtered inside fetch_hn_jobs
-        if src != "hn":
-            if not is_allowed_title(title):
+    def _filter(jobs: list[dict]) -> list[dict]:
+        out: list[dict] = []
+        seen_dedup: set[str] = set()
+        for j in jobs:
+            if j["id"] in seen_dedup:
                 continue
-            if not is_us_location(location):
-                continue
+            if j.get("_source") != "hn":
+                if not is_allowed_title(j.get("title", "")):
+                    continue
+                if not is_us_location(j.get("location", "")):
+                    continue
+            seen_dedup.add(j["id"])
+            out.append(j)
+        return out
 
-        seen_dedup.add(job_id)
-        matched.append(j)
+    hn_jobs      = _filter(hn_jobs)
+    yc_jobs      = _filter(yc_jobs)
+    builtin_jobs = _filter(builtin_jobs)
 
-    new_ids = {j["id"] for j in matched if j["id"] not in previously_seen}
+    all_matched = hn_jobs + yc_jobs + builtin_jobs
+    new_ids     = {j["id"] for j in all_matched if j["id"] not in previously_seen}
 
-    print(f"  Matched (after filters): {len(matched)}")
-    print(f"  Already seen:            {len(matched) - len(new_ids)}")
-    print(f"  New:                     {len(new_ids)}")
+    print(f"  Matched — HN: {len(hn_jobs)}  YC: {len(yc_jobs)}  Builtin: {len(builtin_jobs)}")
+    print(f"  New: {len(new_ids)}")
 
-    for j in matched:
-        src = _SRC_LABEL.get(j.get("_source", ""), "?")
+    for j in sorted(all_matched, key=lambda x: x["id"] in new_ids, reverse=True):
+        src = {"hn": "HN", "yc": "YC", "builtin": "Builtin"}.get(j.get("_source", ""), "?")
         tag = "[NEW]" if j["id"] in new_ids else "     "
-        print(f"\n  {tag} [{src}] {j['title']}")
-        print(f"    Company:  {j.get('company', '')}")
-        print(f"    Location: {j.get('location', '')}")
-        print(f"    URL:      {j['url']}")
+        print(f"  {tag} [{src}] {j['title']} @ {j.get('company','')} | {j.get('location','')} | {j.get('posted_str','')}")
 
-    # Master CSV — DA/DE/BI new jobs only
+    # Master CSV
     now_str     = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     master_rows = []
-    for j in matched:
+    for j in all_matched:
         if j["id"] not in new_ids:
             continue
         title = j.get("title", "")
@@ -617,7 +609,7 @@ async def main():
             "company":  j.get("company", ""),
             "location": j.get("location", ""),
             "role":     _classify_master_role(title),
-            "posted":   "",
+            "posted":   j.get("posted_str", ""),
             "url":      j["url"],
             "found_at": now_str,
         })
@@ -626,8 +618,8 @@ async def main():
     if not new_ids:
         print("\n  No new roles since last run — skipping email.")
     else:
-        print(f"\n  Sending email ({len(new_ids)} new, {len(matched)} total)...")
-        send_email(matched, new_ids)
+        print(f"\n  Sending email ({len(new_ids)} new)...")
+        send_email(hn_jobs, yc_jobs, builtin_jobs, new_ids)
         save_seen(previously_seen | new_ids)
 
     print("\nDone.")
