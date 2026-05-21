@@ -351,50 +351,49 @@ async def _scrape_builtin(page) -> list[dict]:
                 () => {
                     const results = [];
                     const seen = new Set();
-                    for (const link of document.querySelectorAll('a[href]')) {
-                        const href = link.getAttribute('href') || '';
+
+                    // Anchor on span.font-barlow "Posted X Ago" — guaranteed to be
+                    // inside each job card. Walk up from there to find the container
+                    // that holds both the job link and the company link.
+                    for (const span of document.querySelectorAll('span.font-barlow')) {
+                        const postedText = (span.textContent || '').trim();
+                        if (!/^Posted /i.test(postedText)) continue;
+
+                        // Walk up until we find a node containing both /job/ and /company/ links
+                        let card = span.parentElement;
+                        while (card && card.tagName !== 'BODY') {
+                            if (card.querySelector('a[href*="/job/"]') &&
+                                card.querySelector('a[href*="/company/"]')) break;
+                            card = card.parentElement;
+                        }
+                        if (!card || card.tagName === 'BODY') continue;
+
+                        const jobLink = card.querySelector('a[href*="/job/"]');
+                        if (!jobLink) continue;
+                        const href = jobLink.getAttribute('href') || '';
                         const m = href.match(/\\/job\\/[^/]+\\/(\\d+)/);
                         if (!m) continue;
                         const jobId = m[1];
                         if (seen.has(jobId)) continue;
                         seen.add(jobId);
 
-                        // First line of innerText only
-                        const rawText = (link.innerText || link.textContent || '').trim();
+                        // Title — first non-empty line of the job link text
+                        const rawText = (jobLink.innerText || jobLink.textContent || '').trim();
                         const title = rawText.split('\\n').map(s => s.trim()).filter(Boolean)[0] || '';
                         if (!title || title.length < 4) continue;
 
-                        // Use closest() to reliably find the card container
-                        const card = link.closest('article')
-                                  || link.closest('li')
-                                  || link.closest('[class*="card"]')
-                                  || link.closest('[class*="job"]');
-                        if (!card) continue;
-
-                        // Company — <a href="/company/..."> inside the card
+                        // Company
                         const compLink = card.querySelector('a[href*="/company/"]');
-                        const company  = compLink ? (compLink.innerText || '').trim() : '';
+                        const company  = compLink ? (compLink.innerText || compLink.textContent || '').trim() : '';
 
                         // Location
                         const cardText = card.innerText || '';
                         const locM = cardText.match(/\\b(remote|hybrid|in[- ]office)\\b/i);
                         const location = locM ? locM[0] : '';
 
-                        // Posted time — user-provided HTML:
-                        // <span class="font-barlow fs-md fw-regular">Posted 4 Hours Ago</span>
-                        // fallback: <i title="Job Posted 4 Hours Ago">
-                        let posted = '';
-                        const postedSpan = card.querySelector('span.font-barlow');
-                        if (postedSpan) {
-                            posted = (postedSpan.textContent || '').trim();
-                        } else {
-                            const icon = card.querySelector('i[title*="Job Posted"]');
-                            if (icon) posted = (icon.getAttribute('title') || '')
-                                .replace(/^Job Posted /i, 'Posted ');
-                        }
-
                         results.push({
-                            id: jobId, title, company, location, posted,
+                            id: jobId, title, company, location,
+                            posted: postedText,
                             url: 'https://builtin.com' + href,
                         });
                     }
