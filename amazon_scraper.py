@@ -58,7 +58,7 @@ USER_AGENT     = "Mozilla/5.0 (compatible; AmazonJobsScanner/1.0)"
 TARGET_ROLES = [
     "data engineer",
     "data analyst",
-    "data scientist",
+    # "data scientist",
     "business intelligence",
     "business analyst",
     "bi engineer",
