@@ -44,8 +44,7 @@ MASTER_CSV = Path(__file__).parent / "csv"  / "new_jobs.csv"
 # ── Filters ───────────────────────────────────────────────────────────────────
 ALLOWED_TITLES = re.compile(
     r"\b(data\s+engineer|data\s+analyst|analytics\s+engineer|analytics\s+analyst"
-    r"|business\s+intelligence|machine\s+learning\s+engineer|ml\s+engineer"
-    r"|data\s+scientist|ai\s+engineer|software\s+developer|software\s+engineer)\b",
+    r"|business\s+intelligence|ai\s+engineer)\b",
     re.I,
 )
 SKIP_TITLE_RE = re.compile(
@@ -63,8 +62,7 @@ US_LOCATION_RE = re.compile(
 # HN text is free-form — cast a wider net
 HN_ROLE_RE = re.compile(
     r"\b(data\s+engineer|data\s+analyst|analytics\s+engineer|analytics\s+analyst"
-    r"|business\s+intelligence|\bBI\b|machine\s+learning|ml\s+engineer"
-    r"|data\s+scientist|ai\s+engineer|software\s+engineer|software\s+developer)\b",
+    r"|business\s+intelligence|\bBI\b|ai\s+engineer)\b",
     re.I,
 )
 HN_US_RE = re.compile(
@@ -240,8 +238,7 @@ YC_QUERIES = [
     "data engineer",
     "analytics engineer",
     "business intelligence",
-    "data scientist",
-    "machine learning engineer",
+    "ai engineer",
 ]
 
 async def fetch_yc_jobs() -> list[dict]:
@@ -290,7 +287,10 @@ async def fetch_yc_jobs() -> list[dict]:
                             const jobId = m[1];
                             if (seen.has(jobId)) continue;
                             seen.add(jobId);
-                            const title = link.textContent.trim();
+                            // Use innerText split by newline to get only the visible
+                            // first line — avoids concatenating nested company name text
+                            const rawText = (link.innerText || link.textContent || '').trim();
+                            const title = rawText.split('\\n').map(s => s.trim()).filter(Boolean)[0] || '';
                             if (!title || title.length < 4) continue;
                             // Walk up DOM to find the containing card
                             let card = link.parentElement;
@@ -396,7 +396,9 @@ async def fetch_builtin_jobs(client: httpx.AsyncClient) -> list[dict]:
                     continue
                 seen_builtin.add(job_id_str)
 
-                title = link.get_text(strip=True)
+                # get_text on a complex link element can concatenate company name +
+                # title — split by newline and take the first non-empty line only
+                title = link.get_text(separator="\n", strip=True).split("\n")[0].strip()
                 if not title:
                     continue
 
@@ -500,8 +502,7 @@ def send_email(all_jobs: list[dict], new_ids: set) -> None:
        Builtin: {counts_by_src['Builtin']}</p>
     <p style="font-size:12px;color:#666;">
        Data Engineer &nbsp;·&nbsp; Data Analyst &nbsp;·&nbsp; Analytics Engineer &nbsp;·&nbsp;
-       BI &nbsp;·&nbsp; ML Engineer &nbsp;·&nbsp; Data Scientist &nbsp;·&nbsp;
-       AI Engineer &nbsp;·&nbsp; SWE</p>
+       Analytics Analyst &nbsp;·&nbsp; Business Intelligence &nbsp;·&nbsp; AI Engineer</p>
     <table style="border-collapse:collapse;width:100%;max-width:1300px">
       <tr style="background:#4a4a4a;color:#fff">
         <th style="padding:10px;border:1px solid #555;text-align:left;">Role</th>
