@@ -50,7 +50,7 @@ SMTP_PORT       = 465
 
 API_URL        = "https://www.amazon.jobs/en/search.json"
 PAGE_SIZE      = 100         # API max per request
-MAX_JOBS       = 3100        # how deep into "most recent" to scan
+MAX_JOBS       = 5000        # how deep into "most recent" to scan
 MAX_WORKERS    = 5           # parallel page fetches
 SEEN_JOBS_FILE = os.path.join(os.path.dirname(__file__), "json", "amazon_api_seen_jobs.json")
 USER_AGENT     = "Mozilla/5.0 (compatible; AmazonJobsScanner/1.0)"
