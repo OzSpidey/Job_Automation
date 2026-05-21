@@ -347,20 +347,47 @@ async def _scrape_builtin(page) -> list[dict]:
 
             await page.wait_for_timeout(1500)
 
+            # Debug: check what the page actually has
+            debug = await page.evaluate("""
+                () => ({
+                    jobLinks:     document.querySelectorAll('a[href*="/job/"]').length,
+                    compLinks:    document.querySelectorAll('a[href*="/company/"]').length,
+                    clockIcons:   document.querySelectorAll('i[title*="Job Posted"]').length,
+                    fontBarlowSpans: document.querySelectorAll('span.font-barlow').length,
+                    samplePosted: (() => {
+                        const icon = document.querySelector('i[title*="Job Posted"]');
+                        return icon ? icon.getAttribute('title') : null;
+                    })(),
+                })
+            """)
+            print(f"  [Builtin] debug {url}: {debug}")
+
             raw: list[dict] = await page.evaluate("""
                 () => {
                     const results = [];
                     const seen = new Set();
 
-                    // Anchor on span.font-barlow "Posted X Ago" — guaranteed to be
-                    // inside each job card. Walk up from there to find the container
-                    // that holds both the job link and the company link.
-                    for (const span of document.querySelectorAll('span.font-barlow')) {
-                        const postedText = (span.textContent || '').trim();
-                        if (!/^Posted /i.test(postedText)) continue;
+                    // Strategy: anchor on <i title="Job Posted X Ago"> which is
+                    // content-based and immune to class name changes.
+                    // Fall back to any span whose text matches "Posted X Ago".
+                    const anchors = [
+                        ...document.querySelectorAll('i[title*="Job Posted"]'),
+                    ];
+                    if (anchors.length === 0) {
+                        // fallback: scan all spans for "Posted X ago" text
+                        for (const s of document.querySelectorAll('span')) {
+                            if (/^Posted \\d/i.test((s.textContent || '').trim())) anchors.push(s);
+                        }
+                    }
 
-                        // Walk up until we find a node containing both /job/ and /company/ links
-                        let card = span.parentElement;
+                    for (const anchor of anchors) {
+                        const postedRaw = anchor.getAttribute
+                            ? (anchor.getAttribute('title') || '').replace(/^Job Posted /i, 'Posted ')
+                            : (anchor.textContent || '').trim();
+                        const postedText = postedRaw.trim();
+
+                        // Walk up until we find a node with both /job/ and /company/ links
+                        let card = anchor.parentElement;
                         while (card && card.tagName !== 'BODY') {
                             if (card.querySelector('a[href*="/job/"]') &&
                                 card.querySelector('a[href*="/company/"]')) break;
@@ -377,16 +404,13 @@ async def _scrape_builtin(page) -> list[dict]:
                         if (seen.has(jobId)) continue;
                         seen.add(jobId);
 
-                        // Title — first non-empty line of the job link text
                         const rawText = (jobLink.innerText || jobLink.textContent || '').trim();
                         const title = rawText.split('\\n').map(s => s.trim()).filter(Boolean)[0] || '';
                         if (!title || title.length < 4) continue;
 
-                        // Company
                         const compLink = card.querySelector('a[href*="/company/"]');
                         const company  = compLink ? (compLink.innerText || compLink.textContent || '').trim() : '';
 
-                        // Location
                         const cardText = card.innerText || '';
                         const locM = cardText.match(/\\b(remote|hybrid|in[- ]office)\\b/i);
                         const location = locM ? locM[0] : '';
