@@ -37,3 +37,4 @@ rich>=13.7
 # Testing
 pytest>=8.0
 pytest-asyncio>=0.23
+pytest-timeout>=2.3

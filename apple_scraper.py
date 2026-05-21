@@ -1,4 +1,4 @@
-"""
+c"""
 Apple Jobs Scraper
 ==================
 Hits Apple's internal JSON search endpoint directly:
