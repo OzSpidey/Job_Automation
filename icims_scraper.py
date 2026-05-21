@@ -18,11 +18,14 @@ import smtplib
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from xml.etree import ElementTree as ET
+from zoneinfo import ZoneInfo
+
+_EASTERN = ZoneInfo("America/New_York")
 
 import requests
 
@@ -206,7 +209,9 @@ def fetch_sitemap_jobs(tenant: str) -> list:
             jobs.append({
                 "url":          loc,
                 "lastmod":      lastmod.strftime("%Y-%m-%d") if lastmod else "",
-                "lastmod_time": lastmod.strftime("%H:%M UTC") if has_time else "",
+                "lastmod_time": (
+                lambda e: f"{e.strftime('%H:%M')} {'EDT' if e.dst() else 'EST'}"
+            )(lastmod.replace(tzinfo=timezone.utc).astimezone(_EASTERN)) if has_time else "",
                 "lastmod_dt":   lastmod,
                 "job_id":       m.group(1),
                 "title_slug":   m.group(2),
@@ -321,7 +326,7 @@ def send_summary_email(all_jobs: list, new_count: int, company_count: int = 0) -
       {role_rows}
     </table>"""
 
-    subject   = f"[iCIMS] {new_count} new role(s) — {datetime.now().strftime('%b %d, %Y %H:%M')}"
+    subject   = f"[iCIMS] {new_count} new role(s) — {datetime.now(_EASTERN).strftime('%b %d, %Y %H:%M %Z')}"
     body_html = f"""
     <h2>iCIMS — New Roles</h2>
     <p><b>{new_count} new role(s)</b> found across {company_count} companies. Green rows = posted today.
