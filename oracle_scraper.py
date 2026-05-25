@@ -343,7 +343,9 @@ def format_posted_ago(posted_date_str: str) -> str:
 # ── Oracle Cloud API ───────────────────────────────────────────────────────────
 
 def build_base_url(pod: str, region: str) -> str:
-    return f"https://{pod}.fa.{region}.oraclecloud.com"
+    if region:
+        return f"https://{pod}.fa.{region}.oraclecloud.com"
+    return f"https://{pod}.fa.oraclecloud.com"
 
 
 def build_jobs_url(pod: str, region: str, site_number: str, keyword: str, limit: int, offset: int) -> str:
