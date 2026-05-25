@@ -50,11 +50,9 @@ BASE_URL        = "https://lifeattiktok.com/search"
 LOCATION_FILTER = "United States"
 SEEN_JOBS_FILE  = Path(__file__).parent / "json" / "tiktok_seen_jobs.json"
 
-SEARCH_KEYWORDS = ["software engineer", "data", "analytics"]
+SEARCH_KEYWORDS = ["data", "analytics"]
 
 TARGET_ROLES = [
-    "software engineer",
-    "software developer",
     "data engineer",
     "data analyst",
     "data scientist",
