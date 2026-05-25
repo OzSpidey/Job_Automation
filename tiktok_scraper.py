@@ -91,6 +91,21 @@ def is_target(title: str) -> bool:
     return any(role in t for role in TARGET_ROLES)
 
 
+def _fmt_posted(raw) -> str:
+    """Convert a Unix timestamp (ms or s) to a readable UTC string, or return raw."""
+    if not raw:
+        return ""
+    try:
+        ts = int(str(raw).strip())
+        if ts > 1_000_000_000_000:   # milliseconds
+            ts //= 1000
+        if ts > 1_000_000_000:       # sanity check: must be after 2001
+            return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    except (ValueError, OSError):
+        pass
+    return str(raw).strip()
+
+
 def extract_id(url: str) -> str:
     """Pull the numeric job ID out of a TikTok careers URL."""
     m = re.search(r"/(\d{10,})", url)
@@ -141,15 +156,17 @@ def parse_api_response(data) -> list[dict]:
                item.get("city") or item.get("area") or "")
         if isinstance(loc, list):
             loc = ", ".join(str(x) for x in loc if x)
-        posted = (item.get("postDate") or item.get("publishTime") or
-                  item.get("createTime") or item.get("postedDate") or "")
+        posted = _fmt_posted(
+            item.get("postDate") or item.get("publishTime") or
+            item.get("createTime") or item.get("postedDate") or ""
+        )
         url = (item.get("url") or item.get("detailUrl") or
                (job_url(job_id) if job_id else ""))
         jobs.append({
             "id":       job_id,
             "title":    str(title).strip(),
             "location": str(loc).strip(),
-            "posted":   str(posted).strip(),
+            "posted":   posted,
             "url":      url,
         })
     return jobs
