@@ -21,7 +21,7 @@ jobs:
           cache: 'pip'
 
       - name: Install Python dependencies
-        run: pip install beautifulsoup4 playwright python-dotenv
+        run: pip install playwright python-dotenv
 
       - name: Install Playwright browsers
         run: playwright install chromium --with-deps

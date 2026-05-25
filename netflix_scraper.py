@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -97,40 +96,43 @@ def parse_timestamp(ts) -> str:
 
 # ── Fetch ──────────────────────────────────────────────────────────────────────
 async def fetch_all_jobs_async() -> list[dict]:
+    captured: list[dict] = []
+
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        page    = await browser.new_page()
+        context = await browser.new_context()
+        page    = await context.new_page()
+
+        # Intercept responses from Phenom's /widgets endpoint
+        async def handle_response(response):
+            url = response.url
+            if "/widgets" in url or "positions" in url.lower():
+                print(f"  [intercept] {response.status} {url[:80]}")
+                try:
+                    data = await response.json()
+                    hits = (
+                        data.get("positions")
+                        or data.get("jobs")
+                        or data.get("results")
+                        or []
+                    )
+                    if hits:
+                        print(f"  [intercept] captured {len(hits)} positions from {url[:60]}")
+                        captured.extend(hits)
+                except Exception:
+                    pass
+
+        page.on("response", handle_response)
 
         print(f"  [browser] navigating to {CAREERS_URL}")
-        await page.goto(CAREERS_URL, wait_until="domcontentloaded", timeout=60_000)
-        # Give JS time to populate the DOM
-        await page.wait_for_timeout(8_000)
-
-        html = await page.content()
+        await page.goto(CAREERS_URL, wait_until="networkidle", timeout=60_000)
+        await page.wait_for_timeout(3_000)
         await browser.close()
 
-    soup  = BeautifulSoup(html, "html.parser")
-    tags  = soup.find_all("script")
-    print(f"  [debug] {len(tags)} script tags in rendered page")
+    if captured:
+        return captured
 
-    for i, tag in enumerate(tags):
-        text    = (tag.string or "").strip()
-        has_pos = '"positions"' in text
-        if has_pos:
-            print(f"  [debug] script[{i}] len={len(text)} HAS positions")
-        if not has_pos:
-            continue
-        try:
-            data      = json.loads(text)
-            positions = data.get("positions")
-            if isinstance(positions, list) and positions:
-                print(f"  [page] extracted {len(positions)} positions")
-                return positions
-            print(f"  [debug] script[{i}] parsed OK but positions={type(positions)}")
-        except (json.JSONDecodeError, AttributeError) as e:
-            print(f"  [debug] script[{i}] JSON error: {e}")
-
-    print("  [!] Could not find positions in rendered page")
+    print("  [!] No positions intercepted from network requests")
     return []
 
 
