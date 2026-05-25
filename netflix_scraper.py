@@ -102,15 +102,23 @@ async def fetch_all_jobs_async() -> list[dict]:
         page    = await browser.new_page()
 
         print(f"  [browser] navigating to {CAREERS_URL}")
-        await page.goto(CAREERS_URL, wait_until="networkidle", timeout=60_000)
+        await page.goto(CAREERS_URL, wait_until="domcontentloaded", timeout=60_000)
+        # Give JS time to populate the DOM
+        await page.wait_for_timeout(8_000)
 
         html = await page.content()
         await browser.close()
 
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup.find_all("script"):
-        text = (tag.string or "").strip()
-        if '"positions"' not in text:
+    soup  = BeautifulSoup(html, "html.parser")
+    tags  = soup.find_all("script")
+    print(f"  [debug] {len(tags)} script tags in rendered page")
+
+    for i, tag in enumerate(tags):
+        text    = (tag.string or "").strip()
+        has_pos = '"positions"' in text
+        if has_pos:
+            print(f"  [debug] script[{i}] len={len(text)} HAS positions")
+        if not has_pos:
             continue
         try:
             data      = json.loads(text)
@@ -118,8 +126,9 @@ async def fetch_all_jobs_async() -> list[dict]:
             if isinstance(positions, list) and positions:
                 print(f"  [page] extracted {len(positions)} positions")
                 return positions
-        except (json.JSONDecodeError, AttributeError):
-            pass
+            print(f"  [debug] script[{i}] parsed OK but positions={type(positions)}")
+        except (json.JSONDecodeError, AttributeError) as e:
+            print(f"  [debug] script[{i}] JSON error: {e}")
 
     print("  [!] Could not find positions in rendered page")
     return []
