@@ -1,12 +1,12 @@
 """
 Netflix Jobs Scraper
 ====================
-Hits Netflix's public JSON search endpoint:
+Fetches Netflix's careers page (Phenom SSR) which embeds all ~575 positions
+as JSON in a <script> tag under the key "positions".
 
-    GET https://jobs.netflix.com/api/search?page={n}
+    GET https://explore.jobs.netflix.net/careers?domain=netflix.com
 
-No auth required. Pages through results, filters by title against TARGET_ROLES,
-and emails new matches.
+No auth required. All jobs are in a single page load.
 
 Run: python netflix_scraper.py
 """
@@ -22,6 +22,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import requests
+from bs4 import BeautifulSoup
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -36,9 +37,7 @@ TARGET_EMAIL    = os.environ.get("EMAIL_TO", "")
 SENDER_EMAIL    = os.environ.get("EMAIL_SENDER", "")
 SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
-API_URL         = "https://jobs.netflix.com/api/search"
-MAX_PAGES       = 50
-REQUEST_DELAY_S = 0.5
+CAREERS_URL     = "https://explore.jobs.netflix.net/careers?domain=netflix.com"
 SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "netflix_seen_jobs.json")
 
 TARGET_ROLES = [
@@ -65,7 +64,8 @@ EXCLUDE_LEVELS = [
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/json",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
 }
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -92,47 +92,47 @@ def is_target_role(title: str) -> bool:
 
 
 def job_url(posting: dict) -> str:
-    ext_id = posting.get("external_id") or posting.get("id") or ""
-    return f"https://jobs.netflix.com/jobs/{ext_id}"
+    job_id = posting.get("id") or ""
+    return f"https://explore.jobs.netflix.net/careers/job/{job_id}"
 
 
-def parse_date(s: str) -> str:
-    if not s:
+def parse_timestamp(ts) -> str:
+    if not ts:
         return ""
     try:
-        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-        return dt.strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d")
     except Exception:
-        return s[:10] if len(s) >= 10 else s
+        return ""
 
 
 # ── Fetch ──────────────────────────────────────────────────────────────────────
-def fetch_page(session: requests.Session, page: int) -> list[dict]:
+def fetch_all_jobs() -> list[dict]:
     try:
-        resp = session.get(API_URL, params={"page": page}, headers=HEADERS, timeout=30)
-        if resp.status_code != 200:
-            print(f"  [!] HTTP {resp.status_code} at page {page}")
-            return []
-        data = resp.json()
-        return data.get("records", {}).get("postings", [])
+        resp = requests.get(CAREERS_URL, headers=HEADERS, timeout=30)
+        resp.raise_for_status()
     except Exception as e:
-        print(f"  [!] Request failed at page {page}: {e}")
+        print(f"  [!] Request failed: {e}")
         return []
 
+    soup = BeautifulSoup(resp.text, "html.parser")
 
-def fetch_all_jobs() -> list[dict]:
-    session = requests.Session()
-    results = []
-    for page in range(1, MAX_PAGES + 1):
-        postings = fetch_page(session, page)
-        if not postings:
-            print(f"  [api] page={page} returned 0 — stopping.")
-            break
-        results.extend(postings)
-        print(f"  [api] page={page:2d}  fetched={len(postings):3d}  cumulative={len(results)}")
-        if page < MAX_PAGES:
-            time.sleep(REQUEST_DELAY_S)
-    return results
+    # Phenom embeds all positions as JSON in a <script> tag
+    for tag in soup.find_all("script"):
+        text = tag.string or ""
+        if '"positions"' not in text:
+            continue
+        # Extract the JSON object or array that contains "positions"
+        m = re.search(r'"positions"\s*:\s*(\[.*?\])\s*[,}]', text, re.DOTALL)
+        if m:
+            try:
+                positions = json.loads(m.group(1))
+                print(f"  [page] extracted {len(positions)} positions from embedded JSON")
+                return positions
+            except json.JSONDecodeError:
+                pass
+
+    print("  [!] Could not find positions in page source")
+    return []
 
 
 # ── Email ──────────────────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ def main():
     seen_urls: set = set()
 
     for posting in raw:
-        title = posting.get("text", "")
+        title = posting.get("name", "")
         if not is_target_role(title):
             continue
         url = job_url(posting)
@@ -224,7 +224,7 @@ def main():
             "title":    title,
             "url":      url,
             "location": posting.get("location", ""),
-            "date":     parse_date(posting.get("created_at", "")),
+            "date":     parse_timestamp(posting.get("t_create")),
         })
         print(f"  MATCH: {title}  [{posting.get('location', '')}]")
 

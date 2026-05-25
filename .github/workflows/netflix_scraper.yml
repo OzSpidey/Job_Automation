@@ -21,7 +21,7 @@ jobs:
           cache: 'pip'
 
       - name: Install Python dependencies
-        run: pip install requests python-dotenv
+        run: pip install requests beautifulsoup4 python-dotenv
 
       - name: Run Netflix Scraper
         env:
