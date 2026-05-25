@@ -103,22 +103,27 @@ async def fetch_all_jobs_async() -> list[dict]:
         context = await browser.new_context()
         page    = await context.new_page()
 
-        # Intercept responses from Phenom's /widgets endpoint
+        # Log ALL XHR/fetch responses to find the jobs endpoint
         async def handle_response(response):
             url = response.url
-            if "/widgets" in url or "positions" in url.lower():
-                print(f"  [intercept] {response.status} {url[:80]}")
+            ct  = response.headers.get("content-type", "")
+            # Log any JSON response that isn't a static asset
+            if "json" in ct and not any(x in url for x in ["google", "gtag", "analytics", "vscdn.net/images", "fonts"]):
+                print(f"  [intercept] {response.status} {url[:100]}")
                 try:
                     data = await response.json()
-                    hits = (
-                        data.get("positions")
-                        or data.get("jobs")
-                        or data.get("results")
-                        or []
-                    )
-                    if hits:
-                        print(f"  [intercept] captured {len(hits)} positions from {url[:60]}")
-                        captured.extend(hits)
+                    if isinstance(data, dict):
+                        keys = list(data.keys())[:8]
+                        print(f"  [intercept] keys={keys}")
+                        hits = (
+                            data.get("positions")
+                            or data.get("jobs")
+                            or data.get("results")
+                            or []
+                        )
+                        if hits:
+                            print(f"  [intercept] captured {len(hits)} positions!")
+                            captured.extend(hits)
                 except Exception:
                     pass
 
