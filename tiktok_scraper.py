@@ -278,11 +278,15 @@ async def scrape_jobs() -> list[dict]:
 
                     title    = lines[0]
                     location = lines[1] if len(lines) > 1 else ""
-                    posted   = next(
-                        (l for l in lines
-                         if re.search(r"\d{4}|\bday\b|\bhour\b|\bweek\b", l, re.I)),
+                    posted   = _fmt_posted(next(
+                        (l for l in lines[2:]
+                         if re.search(
+                             r"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b"
+                             r"|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b"
+                             r"|\bday(s)?\b|\bhour(s)?\b|\bweek(s)?\b|\bmonth(s)?\b",
+                             l, re.I)),
                         "",
-                    )
+                    ))
                     collected[job_id] = {
                         "id":       job_id,
                         "title":    title,
