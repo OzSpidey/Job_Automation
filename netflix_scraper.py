@@ -87,6 +87,8 @@ def job_url(posting: dict) -> str:
     return f"https://explore.jobs.netflix.net/careers/job/{job_id}"
 
 
+MAX_AGE_DAYS = 7
+
 def parse_timestamp(ts) -> str:
     if not ts:
         return ""
@@ -94,6 +96,23 @@ def parse_timestamp(ts) -> str:
         return datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d")
     except Exception:
         return ""
+
+
+def to_dt(ts) -> datetime:
+    if not ts:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    try:
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc)
+    except Exception:
+        return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def is_within_max_age(ts) -> bool:
+    dt = to_dt(ts)
+    if dt == datetime.min.replace(tzinfo=timezone.utc):
+        return True
+    age_days = (datetime.now(timezone.utc) - dt).total_seconds() / 86400
+    return age_days <= MAX_AGE_DAYS
 
 
 # ── Fetch ──────────────────────────────────────────────────────────────────────
@@ -228,6 +247,8 @@ def main():
         title = posting.get("name", "")
         if not is_target_role(title):
             continue
+        if not is_within_max_age(posting.get("t_create")):
+            continue
         url = job_url(posting)
         if url in seen_urls:
             continue
@@ -237,8 +258,14 @@ def main():
             "url":      url,
             "location": posting.get("location", ""),
             "date":     parse_timestamp(posting.get("t_create")),
+            "_ts":      posting.get("t_create") or 0,
         })
         print(f"  MATCH: {title}  [{posting.get('location', '')}]")
+
+    # Sort most recent first
+    matched.sort(key=lambda j: int(j["_ts"]), reverse=True)
+    for j in matched:
+        del j["_ts"]
 
     print(f"\n{'='*60}")
     print(f"Total matches: {len(matched)}")
