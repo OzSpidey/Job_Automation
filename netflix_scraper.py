@@ -8,17 +8,17 @@ embedded JSON in a <script> tag under the key "positions".
 Run: python netflix_scraper.py
 """
 
-import asyncio
 import json
 import os
 import re
 import smtplib
 import sys
+import time
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from playwright.async_api import async_playwright
+import requests
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -34,6 +34,8 @@ SENDER_EMAIL    = os.environ.get("EMAIL_SENDER", "")
 SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 CAREERS_URL    = "https://explore.jobs.netflix.net/careers?domain=netflix.com"
+# Discovered via Playwright intercept: the search API backing the careers page
+JOBS_API_URL   = "https://explore.jobs.netflix.net/api/apply/v2/jobs"
 SEEN_JOBS_FILE = os.path.join(os.path.dirname(__file__), "json", "netflix_seen_jobs.json")
 
 TARGET_ROLES = [
@@ -95,54 +97,54 @@ def parse_timestamp(ts) -> str:
 
 
 # ── Fetch ──────────────────────────────────────────────────────────────────────
-async def fetch_all_jobs_async() -> list[dict]:
-    captured: list[dict] = []
-
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context()
-        page    = await context.new_page()
-
-        # Log ALL XHR/fetch responses to find the jobs endpoint
-        async def handle_response(response):
-            url = response.url
-            ct  = response.headers.get("content-type", "")
-            # Log any JSON response that isn't a static asset
-            if "json" in ct and not any(x in url for x in ["google", "gtag", "analytics", "vscdn.net/images", "fonts"]):
-                print(f"  [intercept] {response.status} {url[:100]}")
-                try:
-                    data = await response.json()
-                    if isinstance(data, dict):
-                        keys = list(data.keys())[:8]
-                        print(f"  [intercept] keys={keys}")
-                        hits = (
-                            data.get("positions")
-                            or data.get("jobs")
-                            or data.get("results")
-                            or []
-                        )
-                        if hits:
-                            print(f"  [intercept] captured {len(hits)} positions!")
-                            captured.extend(hits)
-                except Exception:
-                    pass
-
-        page.on("response", handle_response)
-
-        print(f"  [browser] navigating to {CAREERS_URL}")
-        await page.goto(CAREERS_URL, wait_until="networkidle", timeout=60_000)
-        await page.wait_for_timeout(3_000)
-        await browser.close()
-
-    if captured:
-        return captured
-
-    print("  [!] No positions intercepted from network requests")
-    return []
-
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Referer": CAREERS_URL,
+}
 
 def fetch_all_jobs() -> list[dict]:
-    return asyncio.run(fetch_all_jobs_async())
+    """Hit the discovered Netflix/Phenom jobs API directly — no Playwright needed."""
+    session  = requests.Session()
+    results  = []
+    page_num = 0
+    page_size = 10  # API default
+
+    while True:
+        params = {
+            "domain": "netflix.com",
+            "start":  page_num * page_size,
+            "num":    page_size,
+            "hl":     "en",
+        }
+        try:
+            resp = session.get(JOBS_API_URL, params=params, headers=HEADERS, timeout=30)
+            if resp.status_code != 200:
+                print(f"  [!] HTTP {resp.status_code} at page {page_num}")
+                break
+            data      = resp.json()
+            positions = data.get("positions", [])
+            total     = data.get("count", 0)
+        except Exception as e:
+            print(f"  [!] Request error at page {page_num}: {e}")
+            break
+
+        if not positions:
+            break
+
+        results.extend(positions)
+        print(f"  [api] page={page_num:3d}  fetched={len(positions):3d}  cumulative={len(results)}  total={total}")
+
+        if len(results) >= total:
+            break
+        if len(positions) < page_size:
+            break
+
+        page_num += 1
+        time.sleep(0.4)
+
+    return results
 
 
 # ── Email ──────────────────────────────────────────────────────────────────────
@@ -213,7 +215,7 @@ def main():
     print("Netflix Jobs Scraper")
     print("=" * 60)
 
-    print("[1] Fetching jobs via Playwright...")
+    print("[1] Fetching jobs from Netflix API...")
     raw = fetch_all_jobs()
     print(f"  Total raw jobs fetched: {len(raw)}")
 

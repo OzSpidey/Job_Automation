@@ -21,10 +21,7 @@ jobs:
           cache: 'pip'
 
       - name: Install Python dependencies
-        run: pip install playwright python-dotenv
-
-      - name: Install Playwright browsers
-        run: playwright install chromium --with-deps
+        run: pip install requests python-dotenv
 
       - name: Run Netflix Scraper
         env:
