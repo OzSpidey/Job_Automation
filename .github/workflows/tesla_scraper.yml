@@ -23,7 +23,10 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install curl_cffi python-dotenv
+        run: pip install playwright python-dotenv
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
 
       - name: Run Tesla Jobs Scraper
         env:

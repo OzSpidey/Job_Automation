@@ -6,13 +6,10 @@ Fetches Tesla's public job catalog via the internal CUA API endpoint:
     GET https://www.tesla.com/cua-api/apps/careers/state
 
 Returns all ~6,000 global jobs in one JSON response (no pagination).
-Uses curl_cffi to impersonate Chrome's TLS fingerprint, which is what
-Akamai CDN checks — bypassing the hard 403 that blocks urllib and
-standard headless Playwright.
-
-Two-step Akamai bypass:
-  1. GET tesla.com/careers/search to establish Akamai session cookies
-  2. GET cua-api/apps/careers/state using that same session + Referer
+Uses Playwright (headless Chromium) to navigate tesla.com/careers/search
+and intercept the XHR response for /cua-api/apps/careers/state — the same
+technique used for TikTok/Bloomberg. Playwright executes Akamai's JS
+challenge natively, which plain HTTP requests cannot.
 
 Response shape:
   listings[]:  each entry has id, t (title), dp (dept_id), l (loc_id), y (type_id)
@@ -26,6 +23,7 @@ Recency proxy: listings are sorted by job ID descending (higher = newer).
 Run: python tesla_scraper.py
 """
 
+import asyncio
 import json
 import os
 import re
@@ -35,6 +33,12 @@ import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
+
+try:
+    from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
+except ImportError:
+    print("playwright not installed — run: pip install playwright && playwright install chromium")
+    sys.exit(1)
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -54,13 +58,15 @@ SMTP_PORT       = 465
 BASE_DIR     = Path(__file__).parent
 SEEN_FILE    = BASE_DIR / "json" / "tesla_seen_jobs.json"
 
-CAREERS_URL  = "https://www.tesla.com/careers/search"
-STATE_URL    = "https://www.tesla.com/cua-api/apps/careers/state"
+CAREERS_URL  = "https://www.tesla.com/careers/search/?site=US"
+STATE_PATH   = "cua-api/apps/careers/state"
 USER_AGENT   = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
 )
+NAV_TIMEOUT  = 60_000   # ms
+WAIT_TIMEOUT = 35       # seconds to wait for state XHR after page load
 
 TARGET_ROLES = [
     "data engineer",
@@ -117,37 +123,62 @@ def make_url(title: str, job_id) -> str:
 
 # ── Fetch ─────────────────────────────────────────────────────────────────────
 
+async def _fetch_state_async() -> dict:
+    captured: dict = {}
+    ready = asyncio.Event()
+
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+            ],
+        )
+        ctx = await browser.new_context(
+            user_agent=USER_AGENT,
+            viewport={"width": 1280, "height": 900},
+            locale="en-US",
+            extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
+        )
+        page = await ctx.new_page()
+
+        async def on_response(response):
+            if STATE_PATH in response.url and not ready.is_set():
+                print(f"  [intercept] {response.status} {response.url[:120]}")
+                if response.status == 200:
+                    try:
+                        captured.update(await response.json())
+                        ready.set()
+                    except Exception as e:
+                        print(f"  [warn] JSON parse failed: {e}")
+
+        page.on("response", on_response)
+
+        print(f"  [browser] navigating to {CAREERS_URL}")
+        try:
+            await page.goto(CAREERS_URL, wait_until="domcontentloaded", timeout=NAV_TIMEOUT)
+        except PlaywrightTimeout:
+            print("  [warn] Page load timed out — checking if state XHR was captured anyway")
+        except Exception as e:
+            print(f"  [warn] Navigation error: {e}")
+
+        # Wait for the state XHR (it fires shortly after page JS initialises)
+        try:
+            await asyncio.wait_for(ready.wait(), timeout=WAIT_TIMEOUT)
+            print("  [ok] State XHR captured.")
+        except asyncio.TimeoutError:
+            print("  [warn] Timed out waiting for state XHR — Akamai may have blocked the page load")
+
+        await browser.close()
+
+    return captured
+
+
 def fetch_state() -> dict:
-    from curl_cffi import requests as curl_requests
-
-    session = curl_requests.Session(impersonate="chrome124")
-
-    print("  [1] Establishing Akamai session via careers/search...")
-    r1 = session.get(
-        CAREERS_URL,
-        headers={"User-Agent": USER_AGENT},
-        timeout=30,
-    )
-    print(f"      status={r1.status_code}  cookies={len(session.cookies)}")
-    if r1.status_code not in (200, 304):
-        print(f"  [warn] Unexpected status from careers page: {r1.status_code}")
-
-    time.sleep(2)
-
-    print("  [2] Fetching full job catalog from cua-api/apps/careers/state...")
-    r2 = session.get(
-        STATE_URL,
-        headers={
-            "User-Agent":      USER_AGENT,
-            "Accept":          "application/json, text/plain, */*",
-            "Referer":         CAREERS_URL,
-            "Accept-Language": "en-US,en;q=0.9",
-        },
-        timeout=60,
-    )
-    print(f"      status={r2.status_code}  size={len(r2.content):,} bytes")
-    r2.raise_for_status()
-    return r2.json()
+    return asyncio.run(_fetch_state_async())
 
 
 # ── Parse ─────────────────────────────────────────────────────────────────────
