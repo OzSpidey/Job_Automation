@@ -1,28 +1,25 @@
 """
 Netflix Jobs Scraper
 ====================
-Fetches Netflix's careers page (Phenom SSR) which embeds all ~575 positions
-as JSON in a <script> tag under the key "positions".
-
-    GET https://explore.jobs.netflix.net/careers?domain=netflix.com
-
-No auth required. All jobs are in a single page load.
+Netflix's careers site (explore.jobs.netflix.net) is a Phenom JS SPA.
+Uses Playwright to render the page, then extracts all positions from the
+embedded JSON in a <script> tag under the key "positions".
 
 Run: python netflix_scraper.py
 """
 
+import asyncio
 import json
 import os
 import re
 import smtplib
 import sys
-import time
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-import requests
 from bs4 import BeautifulSoup
+from playwright.async_api import async_playwright
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -37,8 +34,8 @@ TARGET_EMAIL    = os.environ.get("EMAIL_TO", "")
 SENDER_EMAIL    = os.environ.get("EMAIL_SENDER", "")
 SENDER_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
-CAREERS_URL     = "https://explore.jobs.netflix.net/careers?domain=netflix.com"
-SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "netflix_seen_jobs.json")
+CAREERS_URL    = "https://explore.jobs.netflix.net/careers?domain=netflix.com"
+SEEN_JOBS_FILE = os.path.join(os.path.dirname(__file__), "json", "netflix_seen_jobs.json")
 
 TARGET_ROLES = [
     "data engineer",
@@ -60,13 +57,6 @@ EXCLUDE_LEVELS = [
     "senior", "sr.", "principal", "lead", "staff",
     "manager", "director", "head", "vp", "architect",
 ]
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                  "Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 def load_seen() -> set:
@@ -106,37 +96,37 @@ def parse_timestamp(ts) -> str:
 
 
 # ── Fetch ──────────────────────────────────────────────────────────────────────
-def fetch_all_jobs() -> list[dict]:
-    try:
-        resp = requests.get(CAREERS_URL, headers=HEADERS, timeout=30)
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"  [!] Request failed: {e}")
-        return []
+async def fetch_all_jobs_async() -> list[dict]:
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page    = await browser.new_page()
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    all_scripts = soup.find_all("script")
-    print(f"  [debug] {len(all_scripts)} script tag(s) found")
+        print(f"  [browser] navigating to {CAREERS_URL}")
+        await page.goto(CAREERS_URL, wait_until="networkidle", timeout=60_000)
 
-    # Phenom embeds positions as a raw JSON object in an inline <script> tag
-    for i, tag in enumerate(all_scripts):
+        html = await page.content()
+        await browser.close()
+
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup.find_all("script"):
         text = (tag.string or "").strip()
-        has_pos = '"positions"' in text
-        snippet = text[:120].replace("\n", " ")
-        print(f"  [debug] script[{i}] len={len(text)} has_positions={has_pos} preview={snippet!r}")
-        if not text or '"positions"' not in text:
+        if '"positions"' not in text:
             continue
         try:
-            data = json.loads(text)
+            data      = json.loads(text)
             positions = data.get("positions")
             if isinstance(positions, list) and positions:
-                print(f"  [page] extracted {len(positions)} positions from embedded JSON")
+                print(f"  [page] extracted {len(positions)} positions")
                 return positions
-        except (json.JSONDecodeError, AttributeError) as e:
-            print(f"  [debug] script[{i}] JSON parse error: {e}")
+        except (json.JSONDecodeError, AttributeError):
+            pass
 
-    print("  [!] Could not find positions in page source")
+    print("  [!] Could not find positions in rendered page")
     return []
+
+
+def fetch_all_jobs() -> list[dict]:
+    return asyncio.run(fetch_all_jobs_async())
 
 
 # ── Email ──────────────────────────────────────────────────────────────────────
@@ -178,7 +168,7 @@ def send_email(jobs: list[dict], previously_seen: set) -> None:
       {"".join(rows)}
     </table>
     <p style="font-size:12px;color:#888;margin-top:20px">
-      Source: jobs.netflix.com/api/search
+      Source: explore.jobs.netflix.net
     </p>
     </body></html>
     """
@@ -207,13 +197,13 @@ def main():
     print("Netflix Jobs Scraper")
     print("=" * 60)
 
-    print("[1] Fetching jobs from Netflix API...")
+    print("[1] Fetching jobs via Playwright...")
     raw = fetch_all_jobs()
     print(f"  Total raw jobs fetched: {len(raw)}")
 
     print("[2] Filtering by target roles...")
     previously_seen = load_seen()
-    matched = []
+    matched   = []
     seen_urls: set = set()
 
     for posting in raw:
