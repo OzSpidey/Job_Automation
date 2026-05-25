@@ -116,20 +116,19 @@ def fetch_all_jobs() -> list[dict]:
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # Phenom embeds all positions as JSON in a <script> tag
+    # Phenom embeds positions as a raw JSON object in an inline <script> tag
     for tag in soup.find_all("script"):
-        text = tag.string or ""
-        if '"positions"' not in text:
+        text = (tag.string or "").strip()
+        if not text or '"positions"' not in text:
             continue
-        # Extract the JSON object or array that contains "positions"
-        m = re.search(r'"positions"\s*:\s*(\[.*?\])\s*[,}]', text, re.DOTALL)
-        if m:
-            try:
-                positions = json.loads(m.group(1))
+        try:
+            data = json.loads(text)
+            positions = data.get("positions")
+            if isinstance(positions, list) and positions:
                 print(f"  [page] extracted {len(positions)} positions from embedded JSON")
                 return positions
-            except json.JSONDecodeError:
-                pass
+        except (json.JSONDecodeError, AttributeError):
+            pass
 
     print("  [!] Could not find positions in page source")
     return []
