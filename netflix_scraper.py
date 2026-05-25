@@ -121,8 +121,9 @@ def fetch_all_jobs() -> list[dict]:
     # Phenom embeds positions as a raw JSON object in an inline <script> tag
     for i, tag in enumerate(all_scripts):
         text = (tag.string or "").strip()
+        has_pos = '"positions"' in text
         snippet = text[:120].replace("\n", " ")
-        print(f"  [debug] script[{i}] len={len(text)} has_positions={'\"positions\"' in text} preview={snippet!r}")
+        print(f"  [debug] script[{i}] len={len(text)} has_positions={has_pos} preview={snippet!r}")
         if not text or '"positions"' not in text:
             continue
         try:
