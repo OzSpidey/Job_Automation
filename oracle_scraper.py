@@ -494,13 +494,12 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
             bg = ""
         return (
             f"<tr style='background:{bg}'>"
-            f"<td>{j['title']}{badges}</td>"
+            f"<td><a href='{j['link']}'>{j['title']}</a>{badges}</td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
             f"<td>{j.get('role','')}</td>"
             f"<td style='white-space:nowrap'>{j['posted']}<br>"
             f"<span style='font-size:11px;color:#666'>({j.get('posted_ago','')})</span></td>"
-            f"<td><a href='{j['link']}'>Apply</a></td>"
             f"</tr>"
         )
 
@@ -517,7 +516,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#e0e0e0">
-        <th>Title</th><th>Company</th><th>Location</th><th>Role</th><th>Posted</th><th>Link</th>
+        <th>Title</th><th>Company</th><th>Location</th><th>Role</th><th>Posted</th>
       </tr>
       {role_rows}
     </table>"""
