@@ -6708,6 +6708,12 @@
     "career": "NXTPoint"
   },
   {
+    "name": "Suddath",
+    "tenant": "suddath",
+    "instance": "wd5",
+    "career": "Suddath"
+  },
+  {
     "name": "Sullivan & Cromwell",
     "tenant": "stblaw",
     "instance": "wd1",
@@ -7060,6 +7066,12 @@
     "tenant": "topcon",
     "instance": "wd1",
     "career": "TopconPositioningCareers"
+  },
+  {
+    "name": "Topgolf",
+    "tenant": "topgolf",
+    "instance": "wd501",
+    "career": "TopgolfCareers"
   },
   {
     "name": "Toppan Merrill",
