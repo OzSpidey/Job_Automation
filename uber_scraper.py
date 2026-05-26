@@ -50,14 +50,9 @@ BASE_DIR        = Path(__file__).parent
 SEEN_FILE       = BASE_DIR / "json" / "uber_seen_jobs.json"
 CSV_FILE        = BASE_DIR / "csv"  / "uber_jobs.csv"
 
-# The landing page doesn't fire job-loading API calls; the careers/list
-# pages do. We hit multiple department filters so we get all relevant roles
-# rather than just the 10 shown on the unfiltered default page.
-JOBS_URLS = [
-    "https://www.uber.com/us/en/careers/list/?department=Engineering",
-    "https://www.uber.com/us/en/careers/list/?department=Data+Science+%26+Analytics",
-    "https://www.uber.com/us/en/careers/list/?department=Product+%26+Design",
-]
+# Query both locales: us/en for region-specific postings, global/en for
+# globally-posted roles that don't appear under the US locale.
+LOCALES = ["us/en", "global/en"]
 PAGE_TIMEOUT_MS = 60_000
 
 TARGET_ROLES = [
@@ -230,38 +225,27 @@ def _normalise(raw: dict) -> dict | None:
 
 
 # API: POST https://www.uber.com/api/loadSearchJobsResults?localeCode=en
-# Body: {"limit": N, "page": 0, "params": {"department": [...]}}
-# We use page.evaluate() so the fetch inherits the page's session/cookies.
-API_PATH   = "/api/loadSearchJobsResults?localeCode=en"
-SEED_URL   = "https://www.uber.com/us/en/careers/list/"
+# Body: {"limit": N, "page": 0, "params": {}}  — no department filter
 PAGE_LIMIT = 100   # max per request; Uber returns fewer if exhausted
-
-DEPARTMENTS = [
-    "Engineering",
-    "Data Science",    # Data Scientist, Data Analyst, Product Analyst
-    "University",      # New grad / early career roles
-]
 
 # ── Playwright fetch ──────────────────────────────────────────────────────────
 
-async def _fetch_dept(context, department: str) -> list[dict]:
+async def _fetch_locale(context, locale: str) -> list[dict]:
     """
-    For each page offset, spin up a fresh page, install a route handler that
-    intercepts the loadSearchJobsResults POST and replaces the body with our
-    desired limit/page values, then navigate — the browser handles CSRF/cookies
-    automatically and we capture the response via the response handler.
+    Paginate through all jobs for a given locale with no department filter so
+    every department is covered. Title/location filtering handles relevance.
     """
-    dept_jobs: list[dict] = []
+    locale_jobs: list[dict] = []
 
-    for pg in range(20):   # up to 20 pages × 100 = 2000 jobs per dept
+    for pg in range(20):   # up to 20 pages × 100 = 2000 jobs per locale
         captured: list[dict] = []
         page = await context.new_page()
 
-        async def _route_handler(route, request, _pg=pg, _dept=department):
+        async def _route_handler(route, request, _pg=pg):
             new_body = json.dumps({
                 "limit":  PAGE_LIMIT,
                 "page":   _pg,
-                "params": {"department": [_dept]},
+                "params": {},
             })
             await route.continue_(post_data=new_body)
 
@@ -278,7 +262,7 @@ async def _fetch_dept(context, department: str) -> list[dict]:
         await page.route("**/loadSearchJobsResults**", _route_handler)
         page.on("response", _resp_handler)
 
-        url = f"https://www.uber.com/us/en/careers/list/?department={department.replace(' ', '+').replace('&', '%26')}"
+        url = f"https://www.uber.com/{locale}/careers/list/"
         try:
             await page.goto(url, wait_until="networkidle", timeout=PAGE_TIMEOUT_MS)
         except Exception as exc:
@@ -290,13 +274,13 @@ async def _fetch_dept(context, department: str) -> list[dict]:
             print(f"    page {pg}: 0 results — done")
             break
 
-        dept_jobs.extend(captured)
-        print(f"    page {pg}: {len(captured)} jobs  (dept total: {len(dept_jobs)})")
+        locale_jobs.extend(captured)
+        print(f"    page {pg}: {len(captured)} jobs  (locale total: {len(locale_jobs)})")
 
         if len(captured) < PAGE_LIMIT:
             break   # partial page = last page
 
-    return dept_jobs
+    return locale_jobs
 
 
 async def _fetch_jobs() -> list[dict]:
@@ -316,9 +300,9 @@ async def _fetch_jobs() -> list[dict]:
             viewport={"width": 1280, "height": 800},
         )
 
-        for dept in DEPARTMENTS:
-            print(f"  [dept] {dept}")
-            jobs = await _fetch_dept(context, dept)
+        for locale in LOCALES:
+            print(f"  [locale] {locale}")
+            jobs = await _fetch_locale(context, locale)
             all_raw.extend(jobs)
 
         await browser.close()
@@ -461,15 +445,18 @@ def main():
                 writer.writerow({**j, "found_at": now})
         print(f"[+] Appended {len(new_jobs)} row(s) to {CSV_FILE}")
 
-    save_seen(previously_seen | {j["job_id"] for j in jobs})
-
+    # Only mark jobs seen once they've been emailed — jobs that matched but
+    # weren't recent enough stay unseen so they're reconsidered next run.
     if not recent_jobs:
         print("No jobs posted in the last 3 days — skipping email.")
+        save_seen(previously_seen | {j["job_id"] for j in jobs if j["job_id"] in previously_seen})
     elif not TARGET_EMAIL:
         print("[warn] EMAIL_TO not set — skipping email.")
+        save_seen(previously_seen | {j["job_id"] for j in jobs if j["job_id"] in previously_seen})
     else:
         print(f"\nSending email ({len(recent_jobs)} recent role(s))...")
         send_email(recent_jobs, previously_seen)
+        save_seen(previously_seen | {j["job_id"] for j in recent_jobs})
     print("Done.")
 
 
