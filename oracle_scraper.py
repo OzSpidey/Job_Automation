@@ -17,6 +17,7 @@ To add a company:
 
 import argparse
 import csv
+import html as _html
 import json
 import os
 import re
@@ -485,21 +486,25 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     def _row(j):
         badges = ""
         if j.get("is_new"):
-            badges += "&nbsp;<span style='background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span>"
+            badges += '&nbsp;<span style="background:#2e7d32;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px">NEW</span>'
         if j.get("entry_level"):
-            badges += "&nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span>"
-        if j.get("age_days", 999) == 0:
-            bg = "#f1f8e9"
-        else:
-            bg = ""
+            badges += '&nbsp;<span style="background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px">ENTRY</span>'
+        bg = "#f1f8e9" if j.get("age_days", 999) == 0 else ""
+        title      = _html.escape(j["title"])
+        company    = _html.escape(j["company"])
+        location   = _html.escape(j["location"])
+        role       = _html.escape(j.get("role", ""))
+        posted     = _html.escape(j["posted"])
+        posted_ago = _html.escape(j.get("posted_ago", ""))
+        link       = _html.escape(j["link"], quote=True)
         return (
-            f"<tr style='background:{bg}'>"
-            f"<td><a href='{j['link']}'>{j['title']}</a>{badges}</td>"
-            f"<td>{j['company']}</td>"
-            f"<td>{j['location']}</td>"
-            f"<td>{j.get('role','')}</td>"
-            f"<td style='white-space:nowrap'>{j['posted']}<br>"
-            f"<span style='font-size:11px;color:#666'>({j.get('posted_ago','')})</span></td>"
+            f'<tr style="background:{bg}">'
+            f'<td><a href="{link}">{title}</a>{badges}</td>'
+            f"<td>{company}</td>"
+            f"<td>{location}</td>"
+            f"<td>{role}</td>"
+            f'<td style="white-space:nowrap">{posted}<br>'
+            f'<span style="font-size:11px;color:#666">({posted_ago})</span></td>'
             f"</tr>"
         )
 
@@ -511,31 +516,32 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     for role_label, jobs in sorted(by_role.items()):
         jobs = sorted(jobs, key=lambda j: j.get("age_days", 999))
         role_rows = "".join(_row(j) for j in jobs)
-        sections += f"""
-    <h3 style='margin-top:24px'>{role_label} ({len(jobs)})</h3>
-    <table border="1" cellpadding="6" cellspacing="0"
-           style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
-      <tr style="background:#e0e0e0">
-        <th>Title</th><th>Company</th><th>Location</th><th>Role</th><th>Posted</th>
-      </tr>
-      {role_rows}
-    </table>"""
+        sections += (
+            f'<h3 style="margin-top:24px">{role_label} ({len(jobs)})</h3>'
+            f'<table border="1" cellpadding="6" cellspacing="0" '
+            f'style="border-collapse:collapse;font-family:sans-serif;font-size:13px">'
+            f'<tr style="background:#e0e0e0">'
+            f"<th>Title</th><th>Company</th><th>Location</th><th>Role</th><th>Posted</th>"
+            f"</tr>{role_rows}</table>"
+        )
 
     subject = (
         f"[Oracle] {new_count} new {_role_label} role(s) — "
         f"{datetime.now().strftime('%b %d, %Y %H:%M')}"
     )
-    body_html = f"""
-    <h2>Oracle Recruiting Cloud — {_role_label} Jobs (Last {MAX_AGE_DAYS} Day)</h2>
-    <p><b>{new_count} new role(s)</b> found. All listings from the last {MAX_AGE_DAYS} day(s) shown — new ones highlighted in green.</p>
-    {sections}
-    """
+    body_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head><body>
+<h2>Oracle Recruiting Cloud &#8212; {_role_label} Jobs (Last {MAX_AGE_DAYS} Day)</h2>
+<p><b>{new_count} new role(s)</b> found. All listings from the last {MAX_AGE_DAYS} day(s) shown &#8212; new ones highlighted in green.</p>
+{sections}
+</body></html>"""
+    print(f"[debug] email HTML snippet: {body_html[:300]}")
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"]    = EMAIL_SENDER
         msg["To"]      = EMAIL_TO
-        msg.attach(MIMEText(body_html, "html"))
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(EMAIL_SENDER, EMAIL_PASSWORD)
             server.sendmail(EMAIL_SENDER, EMAIL_TO, msg.as_string())
