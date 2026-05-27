@@ -1,0 +1,31 @@
+name: Daily Commit
+
+on:
+  schedule:
+    - cron: '0 14 * * *'   # 10 AM ET daily
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Update daily ping
+        run: echo "$(date -u +%Y-%m-%d)" > _daily_ping.txt
+
+      - name: Commit
+        run: |
+          git config user.name "Osborne"
+          git config user.email "lopes.o@northeastern.edu"
+          git add _daily_ping.txt
+          git diff --staged --quiet || git commit -m "chore: daily ping $(date -u +%Y-%m-%d)"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && break
+            sleep $((i * 3))
+          done
