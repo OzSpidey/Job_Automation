@@ -322,6 +322,10 @@ def send_email(jobs: list[dict], prev_seen: set[str]) -> None:
         'font-weight:bold;padding:2px 6px;border-radius:3px;margin-right:6px;">NEW</span>'
     )
 
+    new_first = (
+        sorted([j for j in jobs if j["id"] not in prev_seen], key=lambda j: j.get("posted", ""), reverse=True) +
+        sorted([j for j in jobs if j["id"]     in prev_seen], key=lambda j: j.get("posted", ""), reverse=True)
+    )
     rows = "\n".join(
         f'<tr style="{"background:#e6f4ea;" if j["id"] not in prev_seen else ""}">'
         f'<td style="padding:8px;border:1px solid #ddd;">'
@@ -331,7 +335,7 @@ def send_email(jobs: list[dict], prev_seen: set[str]) -> None:
         f'<td style="padding:8px;border:1px solid #ddd;">{j["location"]}</td>'
         f'<td style="padding:8px;border:1px solid #ddd;white-space:nowrap;">{j["posted"]}</td>'
         f'</tr>'
-        for j in jobs
+        for j in new_first
     )
 
     html = f"""<html><body style="font-family:Arial,sans-serif;color:#333">
