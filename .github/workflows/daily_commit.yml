@@ -2,7 +2,7 @@ name: Daily Commit
 
 on:
   schedule:
-    - cron: '0 14 * * 1-6'   # 10 AM ET Mon–Sat, skip Sunday
+    - cron: '0 14 * * 0-5'   # 10 AM ET Sun–Fri, skip Saturday
   workflow_dispatch:
 
 permissions:
