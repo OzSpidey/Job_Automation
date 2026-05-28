@@ -78,6 +78,7 @@ SKIP_COMPANIES = {
     "baanyan software services, inc.",
     "jobright.ai",
     "tech army, llc",
+    "mastech digital",
 }
 
 
