@@ -75,6 +75,7 @@ SKIP_COMPANIES = {
     "teksystems",
     "winaxis llc",
     "netrolynx ai",
+    "baanyan software services, inc.",
 }
 
 
