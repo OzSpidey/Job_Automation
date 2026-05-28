@@ -77,6 +77,7 @@ SKIP_COMPANIES = {
     "netrolynx ai",
     "baanyan software services, inc.",
     "jobright.ai",
+    "tech army, llc",
 }
 
 
