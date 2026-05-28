@@ -643,9 +643,14 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     for j in all_jobs:
         by_role.setdefault(j.get("role", "Other"), []).append(j)
 
+    _PRIORITY_ROLES = ["Data Engineer", "Data Analyst", "Insights", "Business Intelligence"]
+    ordered_roles = _PRIORITY_ROLES + sorted(r for r in by_role if r not in _PRIORITY_ROLES)
+
     sections = ""
-    for role_label, jobs in sorted(by_role.items()):
-        jobs = sorted(jobs, key=lambda j: j.get("posted_date", ""), reverse=True)
+    for role_label in ordered_roles:
+        if role_label not in by_role:
+            continue
+        jobs = sorted(by_role[role_label], key=lambda j: j.get("posted_date", ""), reverse=True)
         role_rows = "".join(_row(j) for j in jobs)
         sections += f"""
     <h3 style='margin-top:24px'>{role_label} ({len(jobs)})</h3>
@@ -832,15 +837,23 @@ def main() -> None:
     if new_count:
         print(f"    Saved → {OUTPUT_CSV.name}")
 
+    _EMAIL_TRIGGER_ROLES = {"Data Engineer", "Data Analyst", "Insights", "Business Intelligence"}
     if new_count:
         with lock:
             jobs_to_send = list(all_current_jobs)
-        jobs_to_send.sort(key=lambda j: (
-            not j["is_new"],
-            0 if j.get("entry_level") else 1,
-            posted_days_ago(j["posted"]),
-        ))
-        send_summary_email(jobs_to_send, new_count)
+        has_priority_new = any(
+            j.get("is_new") and j.get("role") in _EMAIL_TRIGGER_ROLES
+            for j in jobs_to_send
+        )
+        if has_priority_new:
+            jobs_to_send.sort(key=lambda j: (
+                not j["is_new"],
+                0 if j.get("entry_level") else 1,
+                posted_days_ago(j["posted"]),
+            ))
+            send_summary_email(jobs_to_send, new_count)
+        else:
+            print("[i] No new jobs in priority roles — skipping email.")
     else:
         print("[i] No new jobs — skipping email.")
 
