@@ -111,6 +111,13 @@ _STAFFING_DESC_RE = re.compile(
     re.I,
 )
 
+# "No experience required / training will be provided" — hallmark of fake/scam postings
+_SCAM_DESC_RE = re.compile(
+    r'\b(no\s+(?:prior\s+)?experience\s+(?:required|necessary|needed|is\s+required)'
+    r'|(?:full\s+)?training\s+(?:and\s+\w+\s+)?will\s+be\s+provided)',
+    re.I,
+)
+
 # Conservative company-name fallback for when description wasn't fetched
 _STAFFING_COMPANY_RE = re.compile(
     r'\b(staffing|recruiters?|talent\s+solutions|it\s+staffing|tech\s+staffing)\b',
@@ -515,6 +522,9 @@ def main():
                     job["easy_apply"] = card_ea or job.get("easy_apply", False)
                     if _STAFFING_DESC_RE.search(job.get("description", "")):
                         print(f"    SKIP staffing (desc): {job['company']}")
+                        continue
+                    if _SCAM_DESC_RE.search(job.get("description", "")):
+                        print(f"    SKIP scam pattern (desc): {job['company']}")
                         continue
                 else:
                     job["detail_skipped"] = True
