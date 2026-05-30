@@ -60,6 +60,7 @@ TARGET_ROLES = [
     "data analyst",
     # "data scientist",
     "business intelligence",
+    "business intel",
     "business analyst",
     "bi engineer",
     "bi developer",
