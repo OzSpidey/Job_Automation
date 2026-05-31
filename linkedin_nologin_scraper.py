@@ -79,6 +79,7 @@ SKIP_COMPANIES = {
     "jobright.ai",
     "tech army, llc",
     "mastech digital",
+    "randstad digital americas",
 }
 
 
