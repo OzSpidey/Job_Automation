@@ -69,6 +69,7 @@ TARGET_ROLES = [
     "early grad",
     "software engineer",
     "software developer",
+    "forward deployed",
 ]
 
 # Regex catches BI/AI roles where plain substring would false-positive inside other words.
