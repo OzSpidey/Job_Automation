@@ -116,7 +116,7 @@ _STAFFING_DESC_RE = re.compile(
 # "No experience required / training will be provided" — hallmark of fake/scam postings
 _SCAM_DESC_RE = re.compile(
     r'\b(no\s+(?:prior\s+)?experience\s+(?:required|necessary|needed|is\s+required)'
-    r'|(?:full\s+)?training\s+(?:and\s+\w+\s+)?will\s+be\s+provided)',
+    r'|(?:full\s+)?training\s+(?:and\s+(?:\w+\s+)+)?will\s+be\s+provided)',
     re.I,
 )
 
