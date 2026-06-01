@@ -650,7 +650,10 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     for role_label in ordered_roles:
         if role_label not in by_role:
             continue
-        jobs = sorted(by_role[role_label], key=lambda j: j.get("posted_date", ""), reverse=True)
+        jobs = sorted(
+            by_role[role_label],
+            key=lambda j: (not j.get("is_new", False), posted_days_ago(j.get("posted", "")))
+        )
         role_rows = "".join(_row(j) for j in jobs)
         sections += f"""
     <h3 style='margin-top:24px'>{role_label} ({len(jobs)})</h3>
