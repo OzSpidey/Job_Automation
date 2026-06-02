@@ -354,6 +354,31 @@ def send_email(fresh_jobs: list[dict], reposted_jobs: list[dict]) -> None:
         print("[!] GMAIL_APP_PASSWORD not set — skipping email.")
         return
 
+    label = os.getenv("SCRAPER_LABEL", "No-Login")
+
+    if label == "Catch-Up":
+        theme = {
+            "h2":             "#6b21a8",
+            "fresh_heading":  "#4c1d95",
+            "fresh_header":   "#7c3aed",
+            "repost_heading": "#5b21b6",
+            "repost_header":  "#a855f7",
+            "row_highlight":  "#7c3aed",
+            "row_light":      "#f3e8ff",
+            "link_light":     "#6b21a8",
+        }
+    else:
+        theme = {
+            "h2":             "#0a66c2",
+            "fresh_heading":  "#155724",
+            "fresh_header":   "#0a66c2",
+            "repost_heading": "#8a4a00",
+            "repost_header":  "#c0771a",
+            "row_highlight":  "#27ae60",
+            "row_light":      "#d4edda",
+            "link_light":     "#0a66c2",
+        }
+
     TABLE_HEADERS = (
         "<th style='min-width:160px'>Title</th>"
         "<th style='min-width:110px'>Company</th>"
@@ -394,11 +419,12 @@ def send_email(fresh_jobs: list[dict], reposted_jobs: list[dict]) -> None:
         wt_val = j.get("work_type", "—")
         wt     = unk if (skipped and wt_val == "—") else wt_val
 
-        row_bg    = "#27ae60" if (j.get("easy_apply") and sponsor_val == "yes") else "#d4edda"
-        row_color = "color:white;font-weight:bold" if row_bg == "#27ae60" else ""
+        row_bg    = theme["row_highlight"] if (j.get("easy_apply") and sponsor_val == "yes") else theme["row_light"]
+        row_color = "color:white;font-weight:bold" if row_bg == theme["row_highlight"] else ""
+        link_color = "white" if row_bg == theme["row_highlight"] else theme["link_light"]
         return (
             f"<tr style='background:{row_bg};{row_color}'>"
-            f"<td><a href='{j['apply_url']}' style='font-weight:bold;color:{'white' if row_bg == '#27ae60' else '#0a66c2'}'>"
+            f"<td><a href='{j['apply_url']}' style='font-weight:bold;color:{link_color}'>"
             f"{j['title']}</a></td>"
             f"<td>{j['company']}</td>"
             f"<td>{j['location']}</td>"
@@ -426,7 +452,6 @@ def send_email(fresh_jobs: list[dict], reposted_jobs: list[dict]) -> None:
         subject_parts.append(f"{len(fresh_jobs)} new")
     if reposted_jobs:
         subject_parts.append(f"{len(reposted_jobs)} repost(s)")
-    label = os.getenv("SCRAPER_LABEL", "No-Login")
     subject = (
         f"LinkedIn ({label}): {' + '.join(subject_parts)} — "
         f"{datetime.now(ET).strftime('%b %d %I:%M %p ET')}"
@@ -435,20 +460,20 @@ def send_email(fresh_jobs: list[dict], reposted_jobs: list[dict]) -> None:
     fresh_section = ""
     if fresh_jobs:
         fresh_section = f"""
-    <h3 style="color:#155724;margin-top:0">New Postings ({len(fresh_jobs)})</h3>
-    {build_table(fresh_jobs, "#0a66c2")}"""
+    <h3 style="color:{theme['fresh_heading']};margin-top:0">New Postings ({len(fresh_jobs)})</h3>
+    {build_table(fresh_jobs, theme['fresh_header'])}"""
 
     repost_section = ""
     if reposted_jobs:
         repost_section = f"""
-    <h3 style="color:#8a4a00;margin-top:24px">Reposted Jobs ({len(reposted_jobs)})</h3>
+    <h3 style="color:{theme['repost_heading']};margin-top:24px">Reposted Jobs ({len(reposted_jobs)})</h3>
     <p style="font-size:12px;color:#888;margin:0 0 6px">
       These job IDs are significantly older than today's newest listing — likely recycled postings.
     </p>
-    {build_table(reposted_jobs, "#c0771a")}"""
+    {build_table(reposted_jobs, theme['repost_header'])}"""
 
     body = f"""
-    <h2 style="color:#0a66c2">LinkedIn Job Alert — Public API</h2>
+    <h2 style="color:{theme['h2']}">LinkedIn Job Alert — Public API</h2>
     <p><b>{total} role(s) found</b> — {len(fresh_jobs)} new · {len(reposted_jobs)} reposted</p>
     {fresh_section}
     {repost_section}
