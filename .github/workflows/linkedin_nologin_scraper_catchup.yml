@@ -31,6 +31,8 @@ jobs:
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
           TIME_WINDOW:        r21600
           SCRAPER_LABEL:      Catch-Up
+          MAX_PAGES_LARGE:    5
+          MAX_PAGES_SMALL:    3
         run: python linkedin_nologin_scraper.py
 
       - name: Persist seen jobs state

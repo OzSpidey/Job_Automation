@@ -38,12 +38,16 @@ except ImportError:
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
+_PG_LG = int(os.getenv("MAX_PAGES_LARGE", 3))
+_PG_SM = int(os.getenv("MAX_PAGES_SMALL", 1))
+
 ROLES = [
-    ("Data Engineer",         3),
-    ("Data Analyst",          3),
-    ("Business Intelligence", 3),
-    ("Analytics Engineer",    1),
-    ("AI Engineer",           1),
+    ("Data Engineer",         _PG_LG),
+    ("Data Analyst",          _PG_LG),
+    ("Business Intelligence", _PG_LG),
+    ("Analytics Engineer",    _PG_SM),
+    ("AI Engineer",           _PG_SM),
+    ("Business Analyst",      _PG_SM),
 ]
 
 GEO_ID         = "103644278"  # United States
