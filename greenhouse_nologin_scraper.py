@@ -81,6 +81,7 @@ TIMEOUT        = 10.0
 ROLE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r'\bdata\s+analyst\b',                        re.I), "Data Analyst"),
     (re.compile(r'\banalytics?\s+engineer\b',                 re.I), "Analytics Engineer"),
+    (re.compile(r'\banalytics\b',                             re.I), "Analytics"),
     (re.compile(r'\bdata\s+engineer(?:ing)?\b',               re.I), "Data Engineer"),
     (re.compile(r'\bbusiness\s+intelligence\b|\bBI\b',            re.I), "BI"),
     (re.compile(r'\bdata\s+scientist\b',                      re.I), "Data Scientist"),
