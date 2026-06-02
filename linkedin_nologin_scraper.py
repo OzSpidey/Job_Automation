@@ -47,7 +47,7 @@ ROLES = [
     ("Business Intelligence", _PG_LG),
     ("Analytics Engineer",    _PG_SM),
     ("AI Engineer",           _PG_SM),
-    ("Business Analyst",      _PG_SM),
+    ("Business Analyst",      1),
 ]
 
 GEO_ID         = "103644278"  # United States
