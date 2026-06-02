@@ -59,6 +59,16 @@ SEARCH_URL      = "https://www.google.com/about/careers/applications/jobs/result
 LOCATION_FILTER = "United States"  # URL-level filter, ~46% smaller universe than unfiltered
 MAX_PAGES       = 10         # 10 pages × ~20 jobs = 200 newest US postings per run
 REQUEST_DELAY_S = 0.6        # polite pause between page fetches
+
+# Secondary keyword search pass — catches roles that don't surface in the
+# date-sorted feed (Google's sort_by=date is not strictly chronological).
+KEYWORD_SEARCHES = [
+    "analyst",
+    "data engineer",
+    "data scientist",
+    "analytics engineer",
+    "business intelligence",
+]
 SEEN_JOBS_FILE  = os.path.join(os.path.dirname(__file__), "json", "google_api_seen_jobs.json")
 USER_AGENT      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
@@ -276,6 +286,40 @@ def fetch_recent_jobs(max_pages: int = MAX_PAGES) -> list[dict]:
     return results
 
 
+def fetch_keyword_jobs(keywords: list[str]) -> list[dict]:
+    """Fetch page 1 of a keyword search for each term, return all parsed jobs."""
+    results = []
+    for kw in keywords:
+        params = {"q": kw, "location": LOCATION_FILTER}
+        url    = SEARCH_URL + "?" + urllib.parse.urlencode(params)
+        req    = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                html = r.read().decode("utf-8", errors="replace")
+        except Exception as exc:
+            print(f"  [kw:{kw!r}] ERROR: {exc}")
+            time.sleep(REQUEST_DELAY_S)
+            continue
+        m = DS1_PATTERN.search(html)
+        if not m:
+            print(f"  [kw:{kw!r}] WARN: ds:1 block not found")
+            time.sleep(REQUEST_DELAY_S)
+            continue
+        try:
+            ds1 = json.loads(m.group(1))
+        except json.JSONDecodeError:
+            print(f"  [kw:{kw!r}] WARN: JSON parse failed")
+            time.sleep(REQUEST_DELAY_S)
+            continue
+        raw_jobs = ds1[0] if ds1 and isinstance(ds1[0], list) else []
+        parsed   = [j for j in (parse_job(r) for r in raw_jobs) if j]
+        matched  = [j for j in parsed if is_us_job(j) and is_target_role(j["title"])]
+        print(f"  [kw:{kw!r}]  fetched={len(parsed)}  matched={len(matched)}")
+        results.extend(matched)
+        time.sleep(REQUEST_DELAY_S)
+    return results
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # EMAIL
 # ──────────────────────────────────────────────────────────────────────────────
@@ -380,6 +424,22 @@ def scan() -> list[dict]:
             "level":    j.get("level") or "",
         })
         print(f"  MATCH: {j['title']}  [{matched[-1]['location']}]")
+
+    print(f"[4] Keyword search pass ({len(KEYWORD_SEARCHES)} queries)...")
+    for j in fetch_keyword_jobs(KEYWORD_SEARCHES):
+        if j["url"] in seen_urls:
+            continue
+        seen_urls.add(j["url"])
+        matched.append({
+            "title":     j["title"],
+            "url":       j["url"],
+            "location":  format_locations(j),
+            "date":      format_date(j["posted_ts"]),
+            "ago":       format_ago(j["posted_ts"]),
+            "posted_ts": j["posted_ts"] or 0,
+            "level":     j.get("level") or "",
+        })
+        print(f"  MATCH (kw): {j['title']}  [{format_locations(j)}]")
 
     matched.sort(key=lambda j: j["posted_ts"], reverse=True)
     return matched
