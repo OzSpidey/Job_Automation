@@ -405,6 +405,7 @@
   "bah_/job/Fort-Belvoir-VA/Data-Engineer_R0240530",
   "bah_/job/Fort-Belvoir-VA/Imagery-Analyst--Mid_R0240871-1",
   "bah_/job/Fort-Belvoir-VA/Watchfloor-Intelligence-Analyst_R0240313",
+  "bah_/job/Fort-Belvoir-VA/Watchfloor-Intelligence-Analyst_R0241351",
   "bah_/job/Fort-Meade-MD/All-Source-Analyst_R0234921",
   "bah_/job/Fort-Meade-MD/Cyber-Intelligence-Analyst_R0240320",
   "bah_/job/Fort-Meade-MD/Data-Scientist--Mid_R0228064",
@@ -672,6 +673,7 @@
   "boeing_/job/USA---Everett-WA/Business-Process-Analyst_JR2026511005-1",
   "boeing_/job/USA---Everett-WA/Business-Process-Analyst_JR2026512283-1",
   "boeing_/job/USA---Everett-WA/Cost-Recovery-Estimating-Analyst--Associate-or-Experienced-_JR2026509231-2",
+  "boeing_/job/USA---Everett-WA/Data-Analyst_JR2026512716-1",
   "boeing_/job/USA---Everett-WA/Manufacturing-Operations-Analyst_JR2026502591-2",
   "boeing_/job/USA---Everett-WA/Manufacturing-Operations-Analyst_JR2026504753-2",
   "boeing_/job/USA---Everett-WA/Manufacturing-Operations-Analyst_JR2026510898-1",
@@ -1898,5 +1900,6 @@
   "spectrumhealth_/job/Grand-Rapids-MI/Coding-Quality-Analyst_R215081",
   "spectrumhealth_/job/Grand-Rapids-MI/Epic-Resolute-Hospital-Billing-and-Claims-Analyst_R212024",
   "spectrumhealth_/job/Grand-Rapids-MI/Financial-Analyst_R213886-1",
-  "vwr_/job/Radnor-PA/Finance-Analyst_R-173190"
+  "vwr_/job/Radnor-PA/Finance-Analyst_R-173190",
+  "wmeimg_/job/CA-Beverly-Hills---9601-Wilshire/Analyst--WME-Insights_JR28568-2"
 ]
