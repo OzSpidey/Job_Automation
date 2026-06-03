@@ -1,0 +1,121 @@
+name: Workday Auto-Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      roles:
+        description: 'Role codes to apply to (comma-separated, or "all")'
+        required: false
+        default: 'all'
+      max_apply:
+        description: 'Max applications per run'
+        required: false
+        default: '20'
+      resume_file:
+        description: 'Resume filename in job-assets repo (e.g. resume_de.pdf)'
+        required: false
+        default: 'resume.pdf'
+
+concurrency:
+  group: workday-autoapply
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  autoapply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v2-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright browser
+        run: playwright install chromium
+
+      - name: Install Playwright system deps
+        run: playwright install-deps chromium
+
+      - name: Restore Workday session
+        env:
+          WD_SESSION_B64: ${{ secrets.WD_SESSION_B64 }}
+        run: |
+          mkdir -p json
+          if [ -n "$WD_SESSION_B64" ]; then
+            echo "$WD_SESSION_B64" | base64 -d > json/workday_auth.json
+            echo "Session restored."
+          else
+            echo "No session found — bot will create accounts on first visit."
+          fi
+
+      - name: Clone job-assets for resume
+        run: |
+          git clone https://${{ secrets.GH_PAT }}@github.com/OzSpidey/job-assets.git /tmp/job-assets
+          RESUME_FILE="${{ github.event.inputs.resume_file }}"
+          if [ -f "/tmp/job-assets/${RESUME_FILE}" ]; then
+            cp "/tmp/job-assets/${RESUME_FILE}" /tmp/resume.pdf
+            echo "Resume copied: ${RESUME_FILE}"
+          else
+            echo "Warning: ${RESUME_FILE} not found in job-assets — checking for resume.pdf fallback"
+            ls /tmp/job-assets/ || true
+            if [ -f "/tmp/job-assets/resume.pdf" ]; then
+              cp /tmp/job-assets/resume.pdf /tmp/resume.pdf
+            fi
+          fi
+
+      - name: Run Workday Auto-Apply
+        env:
+          ROLES:                ${{ github.event.inputs.roles || 'all' }}
+          MAX_APPLY:            ${{ github.event.inputs.max_apply || '20' }}
+          WD_APPLICANT_INFO:    ${{ secrets.WD_APPLICANT_INFO }}
+          WORKDAY_PASSWORD:     ${{ secrets.WORKDAY_PASSWORD }}
+          WD_RESUME_PATH:       /tmp/resume.pdf
+          WD_SESSION_B64:       ${{ secrets.WD_SESSION_B64 }}
+          HEADLESS:             "true"
+          EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:             ${{ secrets.EMAIL_TO }}
+        run: python workday_autoapply.py
+
+      - name: Update session secret
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -f json/workday_auth.json ] && [ -n "$GH_TOKEN" ]; then
+            jq '{cookies: .cookies, origins: []}' json/workday_auth.json > json/workday_auth_clean.json
+            gh secret set WD_SESSION_B64 \
+              --body "$(base64 -w 0 json/workday_auth_clean.json)" \
+              --repo OzSpidey/Job_Automation
+            echo "Session secret updated."
+          fi
+
+      - name: Persist applied state
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add json/workday_applied.json csv/workday_applied.csv json/workday_answers.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update workday applied jobs [skip ci]"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $i failed, retrying in $((i * 3))s..."
+            sleep $((i * 3))
+          done
