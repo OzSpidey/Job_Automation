@@ -12,9 +12,9 @@ on:
         required: false
         default: '20'
       resume_file:
-        description: 'Resume filename in job-assets repo (e.g. resume_de.pdf)'
+        description: 'Override resume (e.g. Osborne_DE.pdf). Leave blank to auto-select based on roles.'
         required: false
-        default: 'resume.pdf'
+        default: ''
 
 concurrency:
   group: workday-autoapply
@@ -68,16 +68,27 @@ jobs:
       - name: Clone job-assets for resume
         run: |
           git clone https://${{ secrets.GH_PAT }}@github.com/OzSpidey/job-assets.git /tmp/job-assets
+
+          # Auto-select resume based on roles if no override provided
+          ROLES="${{ github.event.inputs.roles || 'all' }}"
           RESUME_FILE="${{ github.event.inputs.resume_file }}"
+
+          if [ -z "$RESUME_FILE" ]; then
+            case "$ROLES" in
+              *data_engineer*|*etl_engineer*)   RESUME_FILE="Osborne_DE.pdf" ;;
+              *ai_engineer*|*data_scientist*)   RESUME_FILE="Osborne_AI.pdf" ;;
+              *)                                RESUME_FILE="Osborne_BI.pdf" ;;
+            esac
+            echo "Auto-selected resume: ${RESUME_FILE} (roles=${ROLES})"
+          fi
+
           if [ -f "/tmp/job-assets/${RESUME_FILE}" ]; then
             cp "/tmp/job-assets/${RESUME_FILE}" /tmp/resume.pdf
             echo "Resume copied: ${RESUME_FILE}"
           else
-            echo "Warning: ${RESUME_FILE} not found in job-assets — checking for resume.pdf fallback"
-            ls /tmp/job-assets/ || true
-            if [ -f "/tmp/job-assets/resume.pdf" ]; then
-              cp /tmp/job-assets/resume.pdf /tmp/resume.pdf
-            fi
+            echo "Error: ${RESUME_FILE} not found in job-assets"
+            ls /tmp/job-assets/
+            exit 1
           fi
 
       - name: Run Workday Auto-Apply
