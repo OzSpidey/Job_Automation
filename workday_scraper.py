@@ -307,15 +307,24 @@ def save_seen_ids(ids: set) -> None:
     SEEN_LOG.write_text(json.dumps(sorted(ids), indent=2), encoding="utf-8")
 
 
+def _role_csv_path(role_label: str) -> Path:
+    slug = re.sub(r"[^a-z0-9]+", "_", role_label.lower()).strip("_")
+    fname = f"workday_jobs_{slug}"
+    if _args.batch:
+        fname += f"_{_args.batch}"
+    return OUTPUT_CSV.parent / f"{fname}.csv"
+
 def append_csv(row: dict) -> None:
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = ["title", "company", "location", "posted", "experience", "link", "found_on"]
-    write_header = not OUTPUT_CSV.exists() or OUTPUT_CSV.stat().st_size == 0
-    with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        if write_header:
-            writer.writeheader()
-        writer.writerow(row)
+
+    for path in [OUTPUT_CSV, _role_csv_path(row.get("role", "other"))]:
+        write_header = not path.exists() or path.stat().st_size == 0
+        with open(path, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            if write_header:
+                writer.writeheader()
+            writer.writerow(row)
 
 
 def load_companies() -> list[dict]:

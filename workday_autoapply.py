@@ -131,6 +131,8 @@ def build_queue(roles: str, applied_ids: set) -> list[dict]:
         role_list = [r.strip() for r in roles.split(",")]
         files = []
         for r in role_list:
+            # Support both old short codes (de, bi) and new role-label slugs
+            # (data_engineer, business_intelligence, ai_engineer, etc.)
             files.extend(sorted(glob.glob(str(csv_dir / f"workday_jobs_{r}*.csv"))))
 
     seen_links: set[str] = set()

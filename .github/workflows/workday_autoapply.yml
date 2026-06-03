@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       roles:
-        description: 'Role codes to apply to (comma-separated, or "all")'
+        description: 'Role slugs to apply to: data_engineer, business_intelligence, ai_engineer, data_analyst, data_scientist, analyst_analytics — comma-separated or "all"'
         required: false
         default: 'all'
       max_apply:
