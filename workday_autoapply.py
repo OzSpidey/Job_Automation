@@ -81,7 +81,7 @@ SESSION_B64  = os.environ.get("WD_SESSION_B64", "")
 HEADLESS     = os.environ.get("HEADLESS", "true").lower() == "true"
 MAX_APPLY    = int(os.environ.get("MAX_APPLY", "20"))
 CONCURRENCY  = max(1, int(os.environ.get("WD_CONCURRENCY", "1")))  # apps in parallel
-MAX_QUEUE_AGE_DAYS = int(os.environ.get("WD_MAX_AGE_DAYS", "2"))   # skip jobs older than this
+MAX_QUEUE_AGE_DAYS = int(os.environ.get("WD_MAX_AGE_DAYS", "1"))   # only today's roles (Posted Today)
 # Companies to never apply to (clearance-required / not wanted)
 IGNORED_COMPANIES = {"booz allen", "guidehouse", "leidos"}
 
