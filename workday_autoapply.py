@@ -1420,6 +1420,53 @@ async def fill_date_questions(page: Page) -> None:
         except Exception:
             continue
 
+async def fill_questionnaire_textareas(page: Page, answers: dict | None = None) -> None:
+    """Fill required free-text questionnaire textareas that carry no usable label
+    link (e.g. PacificSource's questionnaire). For each empty required/invalid
+    textarea, read its prompt from the nearest ancestor whose text looks like a
+    question, map it via the profile, and type the answer in (verified)."""
+    answers = answers or {}
+    # Collect (id, prompt) for empty required/invalid textareas via the DOM.
+    targets = await page.evaluate("""() => {
+        const out = [];
+        document.querySelectorAll(
+            'textarea[aria-required="true"], textarea[aria-invalid="true"], textarea[required]'
+        ).forEach(el => {
+            if (el.offsetParent === null) return;
+            if ((el.value || '').trim()) return;
+            if (!el.id) return;
+            let prompt = '';
+            let node = el.parentElement;
+            for (let i = 0; i < 10 && node; i++, node = node.parentElement) {
+                const t = (node.innerText || '').trim();
+                if (t && t.length >= 8 && t.length < 400 && /[?:]/.test(t)) { prompt = t; break; }
+            }
+            // strip a leading "Error: The field <Q> is required..." wrapper
+            const m = prompt.match(/the field\\s+(.*?)\\s+is required/i);
+            if (m) prompt = m[1];
+            out.push({ id: el.id, prompt });
+        });
+        return out;
+    }""")
+    for t in targets:
+        prompt = (t.get("prompt") or "").strip()
+        fid = t.get("id") or ""
+        if not prompt or not fid:
+            continue
+        ans = _answer_from_profile(prompt, answers)
+        if ans in (None, "", "__DECLINE__", "__HEAR_ABOUT_US__",
+                   "__MASTERS__", "__YEARS_2PLUS__"):
+            # No safe free-text answer; for an unknown required free-text the
+            # safest non-blocking value is N/A.
+            ans = "N/A" if ans is None else ans
+            if ans in ("", "__DECLINE__", "__HEAR_ABOUT_US__", "__MASTERS__", "__YEARS_2PLUS__"):
+                continue
+        ok = await _fill_text_verified(page, str(ans), [f'#{fid}'], fid)
+        if ok:
+            print(f"  [+] Filled textarea '{prompt[:45]}' = {ans!r}")
+        else:
+            print(f"  [!] Could not fill textarea '{prompt[:45]}' (id={fid!r})")
+
 async def fill_radio_questions(page: Page, answers: dict | None = None) -> None:
     """Handle Yes/No radio-button questions whose container is aria-required but
     not necessarily role=radiogroup (e.g. Dow's 'previously worked' question).
@@ -1482,17 +1529,18 @@ async def fill_application_questions(page: Page, answers: dict, unknowns: list[s
         try:
             dump = await page.evaluate("""() => {
                 const out = [];
-                document.querySelectorAll('input, textarea').forEach(el => {
-                    if (['file','hidden','submit','button','checkbox','radio','reset'].includes(el.type)) return;
+                document.querySelectorAll('textarea').forEach(el => {
                     if (el.offsetParent === null) return;
-                    let lbl = el.getAttribute('aria-label') || '';
-                    const lb = el.getAttribute('aria-labelledby');
-                    if (!lbl && lb) lbl = lb.split(' ').map(id => {const e=document.getElementById(id);return e?e.innerText.trim():'';}).join(' ');
-                    if (!lbl && el.id) { const l=document.querySelector('label[for="'+el.id+'"]'); if (l) lbl=l.innerText.trim(); }
-                    out.push({tag:el.tagName, type:el.type, id:el.id, aid:el.getAttribute('data-automation-id'),
-                              req:el.getAttribute('aria-required'), reqAttr:el.required,
-                              invalid:el.getAttribute('aria-invalid'), val:(el.value||'').slice(0,20),
-                              label:(lbl||'').slice(0,60)});
+                    // climb to find the nearest ancestor whose text has a prompt
+                    let prompt = '';
+                    let node = el.parentElement;
+                    for (let i=0;i<10&&node;i++,node=node.parentElement){
+                        const t=(node.innerText||'').trim();
+                        if (t && t.length>=8 && t.length<400 && /[?:]/.test(t)){ prompt=t; break; }
+                    }
+                    out.push({tag:el.tagName, id:el.id.slice(-12), req:el.getAttribute('aria-required'),
+                              invalid:el.getAttribute('aria-invalid'), val:(el.value||'').slice(0,15),
+                              prompt:(prompt||'').slice(0,90)});
                 });
                 return out;
             }""")
@@ -1951,6 +1999,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             await fill_checkbox_questions(page, answers)
             await fill_radio_questions(page, answers)
             await fill_date_questions(page)
+            await fill_questionnaire_textareas(page, answers)
             await fill_application_questions(page, answers, unknowns)
         else:
             # Unknown step — try all fillers; each is a no-op if fields aren't present
@@ -1960,6 +2009,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             await fill_checkbox_questions(page, answers)
             await fill_radio_questions(page, answers)
             await fill_date_questions(page)
+            await fill_questionnaire_textareas(page, answers)
             await fill_application_questions(page, answers, unknowns)
 
         await page.wait_for_timeout(600)
