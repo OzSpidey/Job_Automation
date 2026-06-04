@@ -81,6 +81,7 @@ SESSION_B64  = os.environ.get("WD_SESSION_B64", "")
 HEADLESS     = os.environ.get("HEADLESS", "true").lower() == "true"
 MAX_APPLY    = int(os.environ.get("MAX_APPLY", "20"))
 CONCURRENCY  = max(1, int(os.environ.get("WD_CONCURRENCY", "1")))  # apps in parallel
+MAX_QUEUE_AGE_DAYS = int(os.environ.get("WD_MAX_AGE_DAYS", "2"))   # skip jobs older than this
 
 EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
@@ -174,17 +175,37 @@ def build_queue(roles: str, applied_ids: set) -> list[dict]:
                         seen.add(f)
                         files.append(f)
 
+    # Only apply to freshly-scraped roles — skip anything found more than
+    # WD_MAX_AGE_DAYS ago (default 2). Rows without a parseable found_on are kept.
+    from datetime import datetime as _dt, timedelta as _td
+    cutoff = _dt.now() - _td(days=MAX_QUEUE_AGE_DAYS)
+
+    def _is_fresh(row: dict) -> bool:
+        fo = (row.get("found_on") or "").strip()
+        if not fo:
+            return True  # no date → keep (can't tell)
+        try:
+            return _dt.strptime(fo.split()[0], "%Y-%m-%d") >= cutoff
+        except Exception:
+            return True
+
     seen_links: set[str] = set()
     jobs: list[dict] = []
+    stale = 0
     for f in files:
         with open(f, newline="", encoding="utf-8") as fh:
             for row in csv.DictReader(fh):
                 link = (row.get("link") or "").strip()
                 if not link or link in seen_links or link in applied_ids:
                     continue
+                if not _is_fresh(row):
+                    stale += 1
+                    continue
                 seen_links.add(link)
                 jobs.append(row)
 
+    if stale:
+        print(f"[i] Skipped {stale} stale job(s) older than {MAX_QUEUE_AGE_DAYS}d")
     jobs.sort(key=lambda j: j.get("found_on", ""), reverse=True)
     return jobs
 
