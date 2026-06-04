@@ -223,34 +223,53 @@ def main():
         print("[i] No roles approved.")
         return
 
-    # Write approved roles into a temp CSV for autoapply
-    approved_csv = ROOT / "csv" / "_tg_approved.csv"
-    fields = ["title", "company", "location", "posted", "experience", "link", "found_on"]
-    with open(approved_csv, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(to_apply)
-
     approved_names = ", ".join(r.get("company", "") for r in to_apply)
     edit_message(msg_id, text.replace("Waiting…", "")
                  + f"\n\n<b>▶️ Applying to: {approved_names}</b>")
     print(f"[+] Approved: {approved_names}")
 
-    # Run autoapply against the approved CSV
-    env = os.environ.copy()
-    env["ROLES"] = "da"  # slug doesn't matter — file is directly specified
-    env["WD_QUEUE_CSV"] = str(approved_csv)  # autoapply reads this if set
-    env["MAX_APPLY"] = str(len(to_apply))
-    env["HEADLESS"] = env.get("HEADLESS", "true")
+    # Resume selection: DE → Osborne_DE.pdf, everything else (DA/BI) → Osborne_BI.pdf
+    job_assets = os.environ.get("JOB_ASSETS_DIR", "/tmp/job-assets")
+    resume_map = {
+        "data_engineer":        os.path.join(job_assets, "Osborne_DE.pdf"),
+        "data_analyst":         os.path.join(job_assets, "Osborne_BI.pdf"),
+        "business_intelligence": os.path.join(job_assets, "Osborne_BI.pdf"),
+    }
+    # Also honour WD_RESUME_PATH if set (local testing)
+    default_resume = os.environ.get("WD_RESUME_PATH", os.path.join(job_assets, "Osborne_BI.pdf"))
 
-    result = subprocess.run(
-        [sys.executable, str(ROOT / "workday_autoapply.py")],
-        env=env, cwd=str(ROOT),
-    )
+    # Group approved roles by resume so autoapply runs once per resume
+    from collections import defaultdict
+    by_resume: dict[str, list] = defaultdict(list)
+    for r in to_apply:
+        slug   = r.get("_slug", "data_analyst")
+        resume = resume_map.get(slug, default_resume)
+        by_resume[resume].append(r)
 
-    approved_csv.unlink(missing_ok=True)
+    fields = ["title", "company", "location", "posted", "experience", "link", "found_on"]
+    overall_rc = 0
+    for resume_path, group in by_resume.items():
+        approved_csv = ROOT / "csv" / "_tg_approved.csv"
+        with open(approved_csv, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+            w.writeheader()
+            w.writerows(group)
+        label = "DE" if "DE" in resume_path else "BI/DA"
+        print(f"  [{label} resume] {len(group)} role(s): {', '.join(r.get('company','') for r in group)}")
+        env = os.environ.copy()
+        env["ROLES"]        = "da"   # slug irrelevant — WD_QUEUE_CSV overrides
+        env["WD_QUEUE_CSV"] = str(approved_csv)
+        env["MAX_APPLY"]    = str(len(group))
+        env["HEADLESS"]     = env.get("HEADLESS", "true")
+        env["WD_RESUME_PATH"] = resume_path
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "workday_autoapply.py")],
+            env=env, cwd=str(ROOT),
+        )
+        overall_rc = overall_rc or result.returncode
+        approved_csv.unlink(missing_ok=True)
 
-    status_text = "✅ Done!" if result.returncode == 0 else "⚠️ Completed with errors — check the logs."
+    status_text = "✅ Done!" if overall_rc == 0 else "⚠️ Completed with errors — check the logs."
     edit_message(msg_id, text.replace("Waiting…", "")
                  + f"\n\n<b>{status_text}</b>")
     print(f"[+] Autoapply finished (exit {result.returncode}).")

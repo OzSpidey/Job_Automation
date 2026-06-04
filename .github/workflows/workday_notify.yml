@@ -52,7 +52,7 @@ jobs:
       - name: Clone job-assets for resume
         run: |
           git clone https://${{ secrets.GH_PAT }}@github.com/OzSpidey/job-assets.git /tmp/job-assets
-          cp /tmp/job-assets/Osborne_BI.pdf /tmp/resume.pdf
+          echo "Resumes available: $(ls /tmp/job-assets/*.pdf | xargs -I{} basename {})"
 
       - name: Run Notify & Apply
         env:
@@ -61,7 +61,7 @@ jobs:
           APPROVAL_TIMEOUT:        "270"
           WD_APPLICANT_INFO:       ${{ secrets.WD_APPLICANT_INFO }}
           WORKDAY_PASSWORD:        ${{ secrets.WORKDAY_PASSWORD }}
-          WD_RESUME_PATH:          /tmp/resume.pdf
+          JOB_ASSETS_DIR:          /tmp/job-assets
           WD_SESSION_B64:          ${{ secrets.WD_SESSION_B64 }}
           HEADLESS:                "true"
           WD_CONCURRENCY:          "2"
