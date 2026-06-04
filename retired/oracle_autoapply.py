@@ -93,7 +93,7 @@ MAX_APPLY    = int(os.environ.get("MAX_APPLY", "20"))
 CONCURRENCY  = max(1, int(os.environ.get("ORACLE_CONCURRENCY", "1")))  # apps in parallel
 MAX_QUEUE_AGE_DAYS = int(os.environ.get("ORACLE_MAX_AGE_DAYS", "2"))   # skip jobs older than this
 # Companies to never apply to (clearance-required / not wanted)
-IGNORED_COMPANIES = {"booz allen", "guidehouse", "leidos"}
+IGNORED_COMPANIES = {"booz allen", "guidehouse", "leidos", "saic", "savannah river"}
 
 EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
@@ -104,6 +104,14 @@ EMAIL_TO       = os.environ.get("EMAIL_TO", "")
 # secrets work. Used to auto-read the 6-digit verification code via IMAP.
 VERIFY_IMAP_USER = os.environ.get("WD_VERIFY_IMAP_USER", "")   # e.g. osbornelopes.neu@gmail.com
 VERIFY_IMAP_PASS = os.environ.get("WD_VERIFY_IMAP_PASSWORD", "")  # 16-char Gmail app password
+
+# Oracle application email — the address typed into the Oracle candidate "Email Address" field.
+# Default to the IMAP inbox so the verification code lands where we poll.
+# Override with ORACLE_EMAIL env var if a different address is wanted.
+_ORACLE_EMAIL_EXPLICIT = os.environ.get("ORACLE_EMAIL", "").strip()
+ORACLE_EMAIL = (_ORACLE_EMAIL_EXPLICIT
+                or VERIFY_IMAP_USER         # prefer the Gmail inbox we poll
+                or INFO.get("email", ""))   # last-resort fallback
 
 SESSION_FILE = ROOT / "json" / "oracle_auth.json"
 APPLIED_LOG  = ROOT / "json" / "oracle_applied.json"
@@ -121,9 +129,14 @@ async def _shot(page, label: str) -> None:
     try:
         SHOTS_DIR.mkdir(exist_ok=True)
         _shot_n[0] += 1
-        path = SHOTS_DIR / f"{_shot_n[0]:02d}_{label}.png"
-        await page.screenshot(path=str(path), full_page=True)
-        print(f"  [shot] {path.name}")
+        n = f"{_shot_n[0]:02d}_{label}"
+        await page.screenshot(path=str(SHOTS_DIR / f"{n}.png"), full_page=True)
+        try:
+            html = await page.content()
+            (SHOTS_DIR / f"{n}.html").write_text(html, encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+        print(f"  [shot] {n}.png")
     except Exception as e:
         print(f"  [shot-err] {label}: {str(e)[:50]}")
 
@@ -403,10 +416,14 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
     if re.search(r'how many years|years of .{0,40}experience|years.*experience.*do you have', ll):
         return "__YEARS_2PLUS__"
 
-    # ── Contact info — ONLY for short field labels ────────────────────────────
+    # ── Contact / identity info — ONLY for short field labels ─────────────────
+    if len(ll) <= 60:
+        if re.search(r'\bfull name\b|\bsign.*full name\b', ll):
+            fn = info.get("first_name", ""); ln = info.get("last_name", "")
+            return f"{fn} {ln}".strip() or info.get("sign_full_name", "")
     if len(ll) <= 35:
-        if re.search(r'\bfirst name\b', ll):      return info.get("first_name")
-        if re.search(r'\blast name\b', ll):       return info.get("last_name")
+        if re.search(r'\bfirst name\b|\bpreferred first\b', ll): return info.get("first_name")
+        if re.search(r'\blast name\b|\bpreferred last\b', ll):   return info.get("last_name")
         if re.search(r'\bemail\b', ll):           return info.get("email")
         if re.search(r'\bphone\b', ll):           return info.get("phone")
         if re.search(r'address.*line 1|street address', ll): return info.get("address_line1")
@@ -484,26 +501,44 @@ def _resolve_special(token: str, options: list[str]) -> str | None:
 
 # ── Verification code over IMAP ──────────────────────────────────────────────────
 
-def fetch_verification_code() -> str | None:
+def fetch_verification_code(after_ts: float | None = None) -> str | None:
     """Read the verification inbox over IMAP, find the newest Oracle candidate
-    verification email, and return its 6-digit code (or None)."""
+    verification email received after `after_ts` (epoch seconds), and return
+    its 6-digit code (or None). Pass after_ts=None to skip the time filter."""
     if not VERIFY_IMAP_USER or not VERIFY_IMAP_PASS:
         return None
-    import imaplib, email as _email
+    import imaplib, email as _email, time as _time
     from email.header import decode_header as _decode_header
+    from email.utils import parsedate_to_datetime as _parsedate
+    import datetime as _dt
     code = None
     try:
         M = imaplib.IMAP4_SSL("imap.gmail.com")
         M.login(VERIFY_IMAP_USER, VERIFY_IMAP_PASS)
         M.select("INBOX")
-        typ, data = M.search(None, "ALL")
-        ids = data[0].split()
-        for num in reversed(ids[-10:]):
+        # Search today's messages first (faster); fall back to ALL if none.
+        since_str = _dt.datetime.utcnow().strftime("%d-%b-%Y")
+        typ, data = M.search(None, f'SINCE "{since_str}"')
+        ids = data[0].split() if data[0] else []
+        if not ids:
+            typ, data = M.search(None, "ALL")
+            ids = (data[0].split() if data[0] else [])[-20:]
+        for num in reversed(ids[-20:]):
             typ, msgdata = M.fetch(num, "(RFC822)")
             if not msgdata or not msgdata[0]:
                 continue
             msg = _email.message_from_bytes(msgdata[0][1])
-            subj = str(_decode_header(msg.get("Subject", ""))[0][0] or "")
+            # Time filter: skip emails older than the code-request timestamp.
+            if after_ts is not None:
+                try:
+                    msg_dt = _parsedate(msg.get("Date", ""))
+                    if msg_dt.timestamp() < after_ts - 5:
+                        continue
+                except Exception:
+                    pass  # Can't parse date — don't filter
+            subj_raw = _decode_header(msg.get("Subject", ""))[0]
+            subj = (subj_raw[0].decode(subj_raw[1] or "utf-8", errors="replace")
+                    if isinstance(subj_raw[0], bytes) else str(subj_raw[0] or ""))
             frm = (msg.get("From", "") or "").lower()
             body = ""
             if msg.is_multipart():
@@ -519,14 +554,14 @@ def fetch_verification_code() -> str | None:
                 except Exception:
                     body = str(msg.get_payload())
             haystack = f"{subj}\n{body}"
-            # Only treat as a verification email if it looks like one (avoid pulling
-            # a random 6-digit number out of an unrelated message).
-            if not re.search(r'verif|verification|one[- ]time|access code|pin|confirm', haystack, re.I) \
-               and "oracle" not in frm:
+            # Only treat as a verification email if it looks like one.
+            if not re.search(r'verif|verification|one[- ]time|access code|pin|confirm',
+                             haystack, re.I) \
+               and "oracle" not in frm and "taleo" not in frm:
                 continue
-            # 6-digit code, optionally shown as the verification "code is 123456".
-            m = re.search(r'(?:code|pin)[^0-9]{0,20}(\d{6})', haystack, re.I) \
-                or re.search(r'\b(\d{6})\b', haystack)
+            # 6-digit code (optionally labelled as "code is …").
+            m = (re.search(r'(?:code|pin)[^0-9]{0,20}(\d{6})', haystack, re.I)
+                 or re.search(r'\b(\d{6})\b', haystack))
             if m:
                 code = m.group(1)
                 break
@@ -593,24 +628,61 @@ async def click_apply(page: Page) -> bool:
         timeout=8000,
     )
 
+async def _tick_identity_terms(page: Page) -> None:
+    """Tick the T&C / privacy consent checkbox on the identity email entry page.
+
+    Oracle tenants render this differently:
+    • Goldman Sachs: a hidden <input> with a custom clickable span
+      (.apply-flow-input-checkbox__button)
+    • SAIC and most standard ORC tenants: a visible <input type="checkbox">
+      wrapped in a <label>
+    We try multiple selectors in order of specificity.
+    """
+    for cb_sel in [
+        # Goldman Sachs custom checkbox visual span
+        '.apply-flow-input-checkbox__button:not(.apply-flow-input-checkbox__button--checked)',
+        '.apply-flow-input-checkbox__button',
+        # Standard visible checkbox (SAIC, most ORC tenants)
+        'input[type="checkbox"][id*="legal" i]:visible',
+        'input[type="checkbox"][id*="disclaimer" i]:visible',
+        'input[type="checkbox"][id*="agree" i]:visible',
+        'input[type="checkbox"][aria-required="true"]:visible',
+        'input[type="checkbox"][required]:visible',
+        # Label wrapper fallback
+        'label[for="legal-disclaimer-checkbox"]',
+        'label.legal-disclaimer-container',
+        # Generic: any visible unchecked checkbox in an identity page context
+        'input[type="checkbox"]:visible:not(:checked)',
+    ]:
+        try:
+            cb = page.locator(cb_sel).first
+            if await cb.count() > 0 and await cb.is_visible(timeout=600):
+                await cb.click(timeout=3000)
+                await page.wait_for_timeout(200)
+                return  # Ticked one checkbox — done
+        except Exception:
+            continue
+
+
 async def handle_identity(page: Page, company: str, title: str, link: str) -> str:
     """Oracle identity step: sign in with an existing candidate account, or register
     with email + 6-digit code. Returns "ok", "needs_review:<why>", or "skip".
     """
     await page.wait_for_timeout(1500)
     await dismiss_cookie_banner(page)
-    body = ""
-    try:
-        body = (await page.evaluate("document.body.innerText")).lower()
-    except Exception:
-        pass
 
     # Existing-candidate sign-in: a visible password field is present.
     pwd = page.locator('input[type="password"]:visible').first
     has_pwd = await pwd.count() > 0 and await pwd.is_visible(timeout=1500)
+
+    # Email field (may be type="email" or type="text" with email-like name/id).
     email_field = page.locator(
-        'input[type="email"]:visible, input[autocomplete="username"]:visible, '
-        'input[name*="mail" i]:visible, input[id*="mail" i]:visible'
+        'input[type="email"]:visible, '
+        'input[autocomplete="username"]:visible, '
+        'input[autocomplete="email"]:visible, '
+        'input[name="primaryEmail"]:visible, '
+        'input[id*="primary-email"]:visible, '
+        'input[id*="emailAddress"]:visible'
     ).first
     has_email = await email_field.count() > 0 and await email_field.is_visible(timeout=1500)
 
@@ -618,7 +690,7 @@ async def handle_identity(page: Page, company: str, title: str, link: str) -> st
         if has_email:
             try:
                 if not (await email_field.input_value()):
-                    await email_field.fill(INFO.get("email", ""))
+                    await email_field.fill(ORACLE_EMAIL)
             except Exception:
                 pass
         await pwd.fill(ORA_PASSWORD)
@@ -629,22 +701,87 @@ async def handle_identity(page: Page, company: str, title: str, link: str) -> st
         await page.wait_for_timeout(2500)
         return "ok"
 
-    # Registration / verify-identity path: enter email → request code.
+    # Registration / verify-identity path: enter email → tick T&C → click Next.
     if has_email:
-        await email_field.fill(INFO.get("email", ""))
+        await email_field.fill(ORACLE_EMAIL)
         await page.wait_for_timeout(400)
-        await try_click(page,
+        # Tick T&C / privacy checkbox before clicking Next.
+        await _tick_identity_terms(page)
+        await page.wait_for_timeout(300)
+        # Note timestamp before requesting code so IMAP filter only returns NEW emails.
+        import time as _time
+        _code_request_ts = _time.time()
+        clicked = await try_click(page,
             'button:has-text("Verify")', 'button:has-text("Send")',
-            'button:has-text("Continue")', 'button:has-text("Next")',
-            'oj-button:has-text("Continue")', 'button[type="submit"]',
+            'button:has-text("Continue")', 'button[title="Next"]',
+            'button:has-text("Next")', 'oj-button:has-text("Continue")',
+            'button[type="submit"]',
             timeout=6000)
         await page.wait_for_timeout(2500)
+        await _shot(page, "after_email_next")
 
-        # A code field should now be present. Poll IMAP for the 6-digit code.
+        # Check if the page is still on the email form (T&C failed / Next didn't work).
+        # We detect "still on email form" by looking for the narrow email-only page,
+        # NOT just any mention of "terms and conditions" (which also appears on app forms).
+        def _is_still_on_email_page(bt: str) -> bool:
+            # The email-entry page contains "provide email address" or
+            # "you don't need to have an account".  If the page contains a lot more
+            # content (resume, work history, etc.) it has already advanced.
+            if "provide email address" in bt or "you don't need to have an account" in bt:
+                return True
+            # Also still on email if the page only says terms but has no form sections
+            if "you need to agree to the terms and conditions" in bt:
+                return True
+            return False
+
+        body_text = ""
+        try:
+            body_text = (await page.evaluate("document.body.innerText")).lower()
+        except Exception:
+            pass
+        still_on_email = _is_still_on_email_page(body_text)
+        if still_on_email:
+            # Second attempt: try clicking the T&C checkbox again (might need force).
+            try:
+                await _tick_identity_terms(page)
+                await page.wait_for_timeout(300)
+                _code_request_ts = _time.time()
+                await try_click(page,
+                    'button[title="Next"]', 'button:has-text("Next")',
+                    'button[type="submit"]', timeout=6000)
+                await page.wait_for_timeout(2500)
+                await _shot(page, "after_email_next2")
+                body_text = (await page.evaluate("document.body.innerText")).lower()
+                still_on_email = _is_still_on_email_page(body_text)
+            except Exception:
+                pass
+        if still_on_email:
+            return "needs_review:identity_terms_checkbox_failed"
+
+        # Check if we've already passed identity (tenant skips the code step).
+        code_input = page.locator(
+            '.pin-code-input__input:visible, '
+            'input[aria-label*="digit" i]:visible, '
+            'input[autocomplete="one-time-code"]:visible, '
+            'input[maxlength="1"]:visible, input[aria-label*="verif" i]:visible'
+        ).first
+        confirm_text = ("confirm your identity" in body_text or
+                        "verification code" in body_text or
+                        "enter.*code" in body_text)
+        has_code_input = (await code_input.count() > 0 and
+                          await code_input.is_visible(timeout=800))
+        if not has_code_input and not confirm_text:
+            # Already on the application form — no code needed.
+            print("  [identity] No code prompt — identity accepted directly.")
+            return "ok"
+
+        # A code page is present. Poll IMAP for the 6-digit code.
         code = None
         for attempt in range(6):  # ~60s total
-            code = fetch_verification_code()
+            print(f"  [identity] IMAP poll {attempt+1}/6 for code (email={ORACLE_EMAIL})…")
+            code = fetch_verification_code(after_ts=_code_request_ts)
             if code:
+                print(f"  [identity] Got code: {code}")
                 break
             await page.wait_for_timeout(10000)
         if not code:
@@ -661,12 +798,49 @@ async def handle_identity(page: Page, company: str, title: str, link: str) -> st
     return "ok"
 
 async def _enter_code(page: Page, code: str) -> None:
-    """Type a 6-digit verification code into either a single input or six boxes."""
-    # Single combined field.
+    """Type a 6-digit verification code into Oracle's pin-code inputs or a single field."""
+    # Strategy 1: Oracle pin-code segment inputs — each box takes ONE digit.
+    # Goldman Sachs uses type="number" inputs with .pin-code-input__input class.
+    pin_boxes = page.locator(
+        '.pin-code-input__input:visible, '
+        'input[aria-label*="digit" i]:visible'
+    )
+    n_pin = await pin_boxes.count()
+    if n_pin >= len(code):
+        try:
+            await pin_boxes.first.click(timeout=3000)
+            await page.wait_for_timeout(200)
+            for ch in code:
+                await page.keyboard.press(ch)
+                await page.wait_for_timeout(80)
+            await try_click(page,
+                'button:has-text("Verify")', 'button:has-text("Verify Code")',
+                'button:has-text("Submit")', 'button:has-text("Continue")',
+                'button[type="submit"]', timeout=5000)
+            return
+        except Exception as e:
+            print(f"  [code] pin-box fill failed: {e}")
+
+    # Strategy 2: six separate maxlength="1" boxes.
+    boxes = page.locator('input[maxlength="1"]:visible')
+    n = await boxes.count()
+    if n >= len(code):
+        for i, ch in enumerate(code):
+            try:
+                await boxes.nth(i).click(timeout=2000)
+                await boxes.nth(i).fill(ch)
+                await page.wait_for_timeout(60)
+            except Exception:
+                pass
+        await try_click(page,
+            'button:has-text("Verify")', 'button:has-text("Submit")',
+            'button:has-text("Continue")', 'button[type="submit"]', timeout=5000)
+        return
+
+    # Strategy 3: single combined field.
     single = page.locator(
         'input[autocomplete="one-time-code"]:visible, '
-        'input[name*="code" i]:visible, input[id*="code" i]:visible, '
-        'input[aria-label*="code" i]:visible'
+        'input[name*="verification" i]:visible'
     ).first
     if await single.count() > 0 and await single.is_visible(timeout=1500):
         try:
@@ -677,18 +851,6 @@ async def _enter_code(page: Page, code: str) -> None:
             return
         except Exception:
             pass
-    # Six separate single-character boxes.
-    boxes = page.locator('input[maxlength="1"]:visible')
-    n = await boxes.count()
-    if n >= len(code):
-        for i, ch in enumerate(code):
-            try:
-                await boxes.nth(i).fill(ch)
-            except Exception:
-                pass
-        await try_click(page,
-            'button:has-text("Verify")', 'button:has-text("Submit")',
-            'button:has-text("Continue")', 'button[type="submit"]', timeout=5000)
 
 async def _maybe_set_password(page: Page) -> None:
     """If a 'create password' form appears for the new account, fill it."""
@@ -733,22 +895,194 @@ async def upload_resume(page: Page) -> bool:
 async def fill_personal_info(page: Page) -> None:
     """Fill the basic contact fields on the Personal Information section."""
     info = INFO
-    await _fill_text_verified(page, info.get("first_name", ""),
-        ['input[name*="first" i][name*="name" i]', 'input[aria-label*="First Name" i]',
-         'input[id*="FirstName" i]'])
-    await _fill_text_verified(page, info.get("last_name", ""),
-        ['input[name*="last" i][name*="name" i]', 'input[aria-label*="Last Name" i]',
-         'input[id*="LastName" i]'])
-    await _fill_text_verified(page, info.get("email", ""),
+    first = info.get("first_name", "")
+    last  = info.get("last_name", "")
+
+    # Legal names (Oracle uses firstName/lastName field names)
+    await _fill_text_verified(page, first,
+        ['input[name="firstName"]', 'input[id*="firstName" i]',
+         'input[name*="first" i][name*="name" i]', 'input[aria-label*="Legal First" i]',
+         'input[aria-label*="First Name" i]', 'input[id*="FirstName" i]'])
+    await _fill_text_verified(page, last,
+        ['input[name="lastName"]', 'input[id*="lastName" i]',
+         'input[name*="last" i][name*="name" i]', 'input[aria-label*="Legal Last" i]',
+         'input[aria-label*="Last Name" i]', 'input[id*="LastName" i]'])
+
+    # Preferred / known-as names (Goldman Sachs and similar tenants require these separately)
+    await _fill_text_verified(page, first,
+        ['input[name="knownAs"]', 'input[id*="knownAs" i]',
+         'input[aria-label*="Preferred First" i]'])
+    await _fill_text_verified(page, last,
+        ['input[name*="namInformation" i]',
+         'input[name="preferredLastName"]', 'input[id*="preferredLast" i]',
+         'input[aria-label*="Preferred Last" i]'])
+
+    # Email
+    await _fill_text_verified(page, ORACLE_EMAIL,
         ['input[type="email"]', 'input[aria-label*="Email" i]', 'input[id*="Email" i]'])
-    await _fill_text_verified(page, info.get("phone", ""),
+
+    # Phone: strip +1 country code prefix — Oracle's phone widget pre-sets +1 already.
+    raw_phone = info.get("phone", "")
+    phone = re.sub(r'^\+1[\s\-]?', '', raw_phone).strip()
+    phone = re.sub(r'[\s\-\(\)]', '', phone)  # → "6177926908"
+    # Force-overwrite if the field already contains a value that starts with +
+    # (might have been filled with the full +1… string in a previous loop).
+    try:
+        tel_loc = page.locator('input[type="tel"].phone-row__input:visible').first
+        if await tel_loc.count() == 0:
+            tel_loc = page.locator('input[type="tel"][aria-label*="Phone" i]:visible').first
+        if await tel_loc.count() > 0 and await tel_loc.is_visible(timeout=800):
+            cur = (await tel_loc.input_value()).strip()
+            if cur.startswith("+") or not cur:
+                # Need to overwrite — use triple-click select-all then type
+                await tel_loc.click(timeout=3000)
+                await tel_loc.press("Control+a")
+                await tel_loc.press("Delete")
+                await tel_loc.fill(phone)
+                await tel_loc.press("Tab")
+    except Exception as e:
+        print(f"  [!] phone fill: {str(e)[:60]}")
+    await _fill_text_verified(page, phone,
         ['input[type="tel"]', 'input[aria-label*="Phone" i]', 'input[id*="Phone" i]'])
-    await _fill_text_verified(page, info.get("address_line1", ""),
-        ['input[aria-label*="Address" i]', 'input[id*="Address" i]', 'input[name*="address" i]'])
+
+    # Address Line 1 — use the Oracle Maps autocomplete combobox
+    await _fill_oracle_address(page, info)
+
+    # Fallback plain-text address/city/zip fields (non-autocomplete tenants)
     await _fill_text_verified(page, info.get("city", ""),
-        ['input[aria-label*="City" i]', 'input[id*="City" i]', 'input[name*="city" i]'])
+        ['input[aria-label*="City" i]:not([role="combobox"])',
+         'input[id*="city" i]:not([role="combobox"])',
+         'input[name="city"]:not([role="combobox"])'])
     await _fill_text_verified(page, info.get("zip", ""),
-        ['input[aria-label*="Postal" i]', 'input[aria-label*="Zip" i]', 'input[id*="Postal" i]'])
+        ['input[name="postalCode"]:not([role="combobox"])',
+         'input[autocomplete="postal-code"]:not([role="combobox"])',
+         'input[id*="postalCode" i]:not([role="combobox"])',
+         'input[aria-label*="Postal" i]:not([role="combobox"])',
+         'input[aria-label*="Zip" i]:not([role="combobox"])',
+         'input[name="zip"]:not([role="combobox"])'])
+    await _fill_text_verified(page, info.get("state", ""),
+        ['input[name="stateProvinceAbbreviation"]:not([role="combobox"])',
+         'input[id*="state" i]:not([role="combobox"])'])
+
+
+async def _fill_oracle_address(page: Page, info: dict) -> None:
+    """Fill Oracle's address fields.
+
+    Two patterns exist:
+    1. Oracle Maps combobox (Goldman Sachs, Hilton) — type address, select suggestion.
+       After selection, ZIP/City/State auto-populate.
+    2. Plain-text input (many standard ORC tenants) — simple fill.
+
+    Fallback: fill ZIP/City as cx-select comboboxes (type value, pick first match).
+    """
+    addr = info.get("address_line1", "")
+    zip_code = info.get("zip", "")
+    city = info.get("city", "")
+
+    try:
+        # Strategy 1: Oracle Maps autocomplete combobox for Address Line 1.
+        addr_combo = page.locator(
+            'input[name="addressLine1"][role="combobox"]:visible, '
+            'input[id*="addressLine1"][role="combobox"]:visible'
+        ).first
+        if await addr_combo.count() > 0 and await addr_combo.is_visible(timeout=1000):
+            if not (await addr_combo.input_value()).strip():
+                await addr_combo.click(timeout=3000)
+                await addr_combo.fill(addr)
+                await page.wait_for_timeout(2500)  # Wait for Oracle Maps suggestions
+                # Try to pick the first suggestion from Oracle Maps grid
+                found_suggestion = False
+                for listbox_sel in [
+                    '[id*="addressLine1"][id$="-listbox"] [role="row"]:first-child',
+                    '[id*="addressLine1"][id$="-listbox"] [role="option"]:first-child',
+                    '[role="grid"][id*="addressLine1"] [role="row"]:first-child',
+                ]:
+                    opt = page.locator(listbox_sel).first
+                    if await opt.count() > 0 and await opt.is_visible(timeout=1500):
+                        await opt.click(timeout=3000)
+                        await page.wait_for_timeout(1500)
+                        found_suggestion = True
+                        break
+                if not found_suggestion:
+                    # No suggestion from Oracle Maps API (typical in headless/CI).
+                    # Attempt to bypass KO validation by injecting a synthetic
+                    # selection event that the cx-select model will accept.
+                    try:
+                        injected = await addr_combo.evaluate(
+                            """(el, addrVal) => {
+                                // Approach 1: find KO viewmodel and set value directly.
+                                try {
+                                    const ko = window.ko || window.require && require('knockout');
+                                    if (ko) {
+                                        const container = el.closest('.cx-select-container');
+                                        if (container) {
+                                            const vm = ko.dataFor(container);
+                                            if (vm && vm.value && typeof vm.value === 'function') {
+                                                vm.value(addrVal);
+                                                if (vm.selectedOption && typeof vm.selectedOption === 'function') {
+                                                    vm.selectedOption({label: addrVal, value: addrVal});
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                } catch(e) {}
+                                // Approach 2: direct input value + synthetic events.
+                                el.value = addrVal;
+                                el.setAttribute('aria-invalid', 'false');
+                                el.dispatchEvent(new Event('input', { bubbles: true }));
+                                el.dispatchEvent(new Event('change', { bubbles: true }));
+                                el.dispatchEvent(new Event('blur', { bubbles: true }));
+                                return false;
+                            }""",
+                            addr,
+                        )
+                        await page.wait_for_timeout(500)
+                    except Exception as e:
+                        print(f"  [!] addr KO inject: {str(e)[:60]}")
+                    # Press Tab to trigger any pending validations
+                    try:
+                        await addr_combo.press("Tab")
+                    except Exception:
+                        pass
+                # After selecting/entering address, ZIP/City may auto-fill.
+                await page.wait_for_timeout(500)
+        else:
+            # Strategy 2: Plain text address input.
+            if addr:
+                await _fill_text_verified(page, addr,
+                    ['input[name="addressLine1"]:visible',
+                     'input[aria-label*="Address Line 1" i]:visible',
+                     'input[aria-label*="Address" i]:not([role="combobox"]):visible',
+                     'input[id*="address" i]:not([role="combobox"]):visible'])
+    except Exception as e:
+        print(f"  [!] address fill: {str(e)[:60]}")
+
+    # Fill ZIP Code combobox (cx-select that searches by postal code).
+    if zip_code:
+        try:
+            zip_combo = page.locator(
+                'input[name="postalCode"][role="combobox"]:visible, '
+                'input[id*="postalCode"][role="combobox"]:visible'
+            ).first
+            if await zip_combo.count() > 0 and await zip_combo.is_visible(timeout=800):
+                if not (await zip_combo.input_value()).strip():
+                    await zip_combo.click(timeout=2000)
+                    await zip_combo.fill(zip_code)
+                    await page.wait_for_timeout(1500)
+                    # Pick the first matching option
+                    for lb_sel in [
+                        '[id*="postalCode"][id$="-listbox"] [role="row"]:first-child',
+                        '[id*="postalCode"][id$="-listbox"] [role="option"]:first-child',
+                        '[role="grid"][id*="postalCode"] [role="row"]:first-child',
+                    ]:
+                        opt = page.locator(lb_sel).first
+                        if await opt.count() > 0 and await opt.is_visible(timeout=1500):
+                            await opt.click(timeout=3000)
+                            await page.wait_for_timeout(1000)
+                            break
+        except Exception as e:
+            print(f"  [!] zip-combo fill: {str(e)[:60]}")
 
 async def _select_oracle_option(page: Page, want: str) -> bool:
     """After an oj-select dropdown is opened, click the option matching `want`."""
@@ -785,6 +1119,9 @@ async def _dropdown_options(page: Page) -> list[str]:
 
 async def fill_oracle_dropdowns(page: Page, answers: dict, unknowns: list[str]) -> None:
     """Answer every visible single-select dropdown using the profile/answer rules."""
+    # Exclude Oracle Maps / address autocombos — those are handled by _fill_oracle_address.
+    _ADDR_NAMES = {"addressline1", "addressline2", "addressline4", "postalcode",
+                   "city", "stateprovinceabbreviation", "county", "phonenumber"}
     triggers = page.locator(
         'oj-select-single, oj-c-select-single, [role="combobox"], '
         'div.oj-select-choice, select'
@@ -794,6 +1131,10 @@ async def fill_oracle_dropdowns(page: Page, answers: dict, unknowns: list[str]) 
         trig = triggers.nth(i)
         try:
             if not await trig.is_visible(timeout=500):
+                continue
+            # Skip Oracle address / phone autocomplete comboboxes.
+            el_name = await trig.evaluate("el => (el.name || el.getAttribute('name') || '').toLowerCase()")
+            if el_name in _ADDR_NAMES or el_name.startswith("country-codes"):
                 continue
             # Skip if it already shows a chosen value.
             cur = (await trig.inner_text()).strip().lower()
@@ -866,9 +1207,12 @@ async def fill_oracle_radios(page: Page, answers: dict) -> None:
 
 async def fill_oracle_text_questions(page: Page, answers: dict, unknowns: list[str]) -> None:
     """Fill required free-text inputs/textareas that are still empty."""
+    # Include inputs without explicit type (defaults to text in HTML) and inputs
+    # with autocomplete="off" (Oracle eSignature / fullName fields).
     fields = page.locator(
         'oj-input-text input:visible, oj-text-area textarea:visible, '
-        'input[type="text"]:visible, textarea:visible'
+        'input[type="text"]:visible, textarea:visible, '
+        'input:not([type]):visible, input[autocomplete="off"]:visible'
     )
     n = await fields.count()
     for i in range(n):
@@ -990,7 +1334,8 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
     # the current section, then Continue. Bail if we can't advance twice in a row.
     last_sig = ""
     stuck = 0
-    MAX_SECTIONS = 14
+    submit_attempts = 0   # Track consecutive Submit-click-but-no-advance cycles
+    MAX_SECTIONS = 20
     for section in range(MAX_SECTIONS):
         await page.wait_for_timeout(1200)
         try:
@@ -1020,7 +1365,8 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
         await tick_required_checkboxes(page)
 
         # Try to submit (last section) before/after Continue.
-        if await find_submit(page):
+        submitted = await find_submit(page)
+        if submitted:
             await page.wait_for_timeout(3500)
             try:
                 body = (await page.evaluate("document.body.innerText")).lower()
@@ -1047,6 +1393,19 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
         else:
             stuck = 0
         last_sig = sig
+
+        # If Submit was clicked but didn't advance (form validation failure),
+        # count consecutive failures and bail after 3 — otherwise we loop forever
+        # on single-page forms.
+        if submitted and not advanced:
+            submit_attempts += 1
+            if submit_attempts >= 3:
+                note = "stuck_on_submit"
+                if unknowns:
+                    note = "unknown_questions: " + "; ".join(dict.fromkeys(unknowns))[:160]
+                return "needs_review", note
+        elif advanced:
+            submit_attempts = 0
 
     return "needs_review", "too_many_sections"
 

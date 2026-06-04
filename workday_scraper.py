@@ -155,18 +155,24 @@ NOISE_TITLE_RE = re.compile(
 )
 
 _CLASSIFY_PATTERNS = [
-    (re.compile(r"\bdata\s+engineer\b",                                re.I), "Data Engineer"),
-    (re.compile(r"\b(business\s+intelligence|bi\s+\w+)\b",             re.I), "Business Intelligence"),
+    (re.compile(r"\bdata\s+engineer\b",          re.I), "Data Engineer"),
+    (re.compile(r"\bdata\s+scientist\b",          re.I), "Data Scientist"),
+    (re.compile(r"\bai\s+engineer\b",             re.I), "AI Engineer"),
+    (re.compile(r"\bsoftware\s+engineer\b",       re.I), "Software Engineer"),
+    (re.compile(r"\bsoftware\s+developer\b",      re.I), "Software Developer"),
+    (re.compile(r"\b(business\s+intelligence|bi\s+\w+)\b", re.I), "Business Intelligence"),
     (re.compile(r"\b(data\b.{0,30}\banalyst|analyst\b.{0,30}\bdata\b)", re.I), "Data Analyst"),
+    (re.compile(r"\betl\b",                       re.I), "ETL Engineer"),
+    (re.compile(r"\binsights\b",                  re.I), "Insights"),
+    (re.compile(r"\b(analytics|analyst)\b",       re.I), "Analyst / Analytics"),
+    (re.compile(r"\bdata\b",                      re.I), "Data (Other)"),
 ]
 
-_TARGET_ROLES = {"Data Analyst", "Data Engineer", "Business Intelligence"}
-
-def _classify(title: str) -> str | None:
+def _classify(title: str) -> str:
     for pat, label in _CLASSIFY_PATTERNS:
         if pat.search(title):
             return label
-    return None
+    return "Other"
 
 # Titles with these signals are preferred entry-level roles
 ENTRY_LEVEL_RE = re.compile(
@@ -301,28 +307,15 @@ def save_seen_ids(ids: set) -> None:
     SEEN_LOG.write_text(json.dumps(sorted(ids), indent=2), encoding="utf-8")
 
 
-def _role_csv_path(role_label: str) -> Path:
-    slug = re.sub(r"[^a-z0-9]+", "_", role_label.lower()).strip("_")
-    fname = f"workday_jobs_{slug}"
-    if _args.batch:
-        fname += f"_{_args.batch}"
-    return OUTPUT_CSV.parent / f"{fname}.csv"
-
 def append_csv(row: dict) -> None:
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = ["title", "company", "location", "posted", "experience", "link", "found_on"]
-
-    paths = [OUTPUT_CSV]
-    if row.get("role") in _TARGET_ROLES:
-        paths.append(_role_csv_path(row["role"]))
-
-    for path in paths:
-        write_header = not path.exists() or path.stat().st_size == 0
-        with open(path, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-            if write_header:
-                writer.writeheader()
-            writer.writerow(row)
+    write_header = not OUTPUT_CSV.exists() or OUTPUT_CSV.stat().st_size == 0
+    with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
 
 
 def load_companies() -> list[dict]:
