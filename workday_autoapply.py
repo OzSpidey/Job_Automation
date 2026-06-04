@@ -555,7 +555,9 @@ async def handle_auth(page: Page, prefer_signin: bool = False) -> bool:
         return True
 
     # ── Create account ──────────────────────────────────────────────────────
-    if has_verify:
+    # Skip create-account when prefer_signin=True (account already exists);
+    # fall through to the sign-in path even if verifyPassword is visible.
+    if has_verify and not prefer_signin:
         return await _create_account(page)
 
     # ── Sign in (existing account) ──────────────────────────────────────────
@@ -1445,7 +1447,11 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
             # Answer any dropdown still on "Select One" (don't require the aria-label
             # to literally say "required" — many Workday tenants omit that).
             current_val = (await btn.inner_text()).strip()
-            if current_val and current_val.lower() != "select one":
+            # Skip already-answered dropdowns. Some tenants append "Required" or "*"
+            # to "Select One" (e.g. "Select One Required" or "Select One *") so strip
+            # those suffixes before comparing.
+            cv_clean = re.sub(r'\s*(required|\*)\s*$', '', current_val, flags=re.I).strip().lower()
+            if current_val and cv_clean not in ("select one", ""):
                 continue  # Already answered
 
             # Read the question text (form-field ancestor) and consult the profile
@@ -1668,12 +1674,29 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
                 except Exception:
                     pass
             if not clicked_opt:
-                # Close the dropdown so a stuck-open menu doesn't block the page.
-                # (Do NOT press Enter — it would select whatever option is highlighted.)
+                # Primary match failed — for unknown/default "No" questions, try the
+                # first real (non-"Select One") option rather than escaping and leaving
+                # the dropdown at "Select One" (which blocks form advancement).
                 try:
-                    await page.keyboard.press("Escape")
+                    all_opts = await opts.all()
+                    for o in all_opts:
+                        t = ""
+                        try:
+                            t = (await o.inner_text()).strip()
+                        except Exception:
+                            pass
+                        if t and t.lower() not in ("select one", ""):
+                            await o.click(timeout=4000)
+                            clicked_opt = True
+                            break
                 except Exception:
                     pass
+                if not clicked_opt:
+                    # Close the dropdown so a stuck-open menu doesn't block the page.
+                    try:
+                        await page.keyboard.press("Escape")
+                    except Exception:
+                        pass
             await page.wait_for_timeout(300)
         except Exception:
             continue
@@ -2326,6 +2349,31 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                         await page.wait_for_timeout(2500)
                         verify_waits += 1
                         continue
+                # No verification link found — try clicking "Forgot Password" link
+                # so the password-reset email arrives and the user can fix it.
+                try:
+                    forgot = page.locator(
+                        'a:has-text("Forgot Password"), '
+                        '[data-automation-id="forgotPasswordLink"], '
+                        'button:has-text("Forgot Password")'
+                    ).first
+                    if await forgot.count() and await forgot.is_visible(timeout=1500):
+                        await forgot.click(timeout=4000)
+                        await page.wait_for_timeout(2000)
+                        # Fill email on the reset form
+                        email_f = page.locator(
+                            '[data-automation-id="email"]:visible, input[type="email"]:visible'
+                        ).first
+                        if await email_f.count() and await email_f.is_visible(timeout=3000):
+                            await email_f.fill(INFO.get("email", ""))
+                            await try_click(page,
+                                '[data-automation-id="signInButton"]',
+                                'button:has-text("Send")',
+                                'button[type="submit"]',
+                                timeout=5000)
+                        print("  [!] Triggered password reset email — apply manually once reset")
+                except Exception:
+                    pass
                 print("  [!] Sign-in rejected — wrong password or locked account")
                 return "needs_review", "auth_failed:wrong_password_or_locked"
             tenant = (url.split("//", 1)[-1].split(".", 1)[0]) if url else ""
