@@ -276,23 +276,34 @@ async def combobox_select_any(page: Page, values: list[str], *selectors: str) ->
     return False
 
 async def fill_hear_about_us(page: Page) -> bool:
-    """Fill 'How Did You Hear About Us' — click icon, type other, Enter, click the leaf node."""
+    """Fill 'How Did You Hear About Us' — open the prompt, then try a fallback
+    chain of sources (Other → LinkedIn → Glassdoor → Greenhouse → Indeed)."""
     try:
         await page.locator('.wd-icon-prompts').first.click()
         await page.wait_for_timeout(600)
         search = page.locator('[data-automation-id="searchBox"]').first
         await search.wait_for(state="visible", timeout=4000)
-        await search.fill("other")
-        await search.press("Enter")
-        await page.wait_for_timeout(700)
-        # Click the first result row (promptLeafNode contains the radio + label)
-        leaf = page.locator('[data-automation-id="promptLeafNode"]').first
-        if await leaf.is_visible(timeout=3000):
-            await leaf.click()
-        else:
-            await page.locator('[data-automation-id="radioBtn"]').first.click()
-        await page.wait_for_timeout(400)
-        return True
+        for term in ["Other", "LinkedIn", "Glassdoor", "Greenhouse", "Indeed", "Company Website"]:
+            try:
+                await search.fill(term)
+                await search.press("Enter")
+                await page.wait_for_timeout(700)
+                leaf = page.locator('[data-automation-id="promptLeafNode"]').first
+                if await leaf.count() and await leaf.is_visible(timeout=2000):
+                    await leaf.click()
+                    await page.wait_for_timeout(400)
+                    return True
+                radio = page.locator('[data-automation-id="radioBtn"]').first
+                if await radio.count() and await radio.is_visible(timeout=1500):
+                    await radio.click()
+                    await page.wait_for_timeout(400)
+                    return True
+                # No match for this term — clear and try the next
+                await search.fill("")
+                await page.wait_for_timeout(200)
+            except Exception:
+                continue
+        return False
     except Exception:
         return False
 
@@ -628,6 +639,28 @@ async def upload_resume(page: Page) -> bool:
     if not RESUME_PATH or not Path(RESUME_PATH).exists():
         print(f"  [!] Resume not found: {RESUME_PATH!r}")
         return False
+
+    # Remove any already-attached resume(s) first (e.g. pre-filled by "use last
+    # application"), so we upload a fresh copy.
+    try:
+        del_sel = ('[data-automation-id="delete-file"], '
+                   'button[aria-label*="Delete" i], '
+                   'button:has(svg.wd-icon-trash), '
+                   '[data-automation-id="deleteButton"]')
+        removed = 0
+        for _ in range(5):  # cap to avoid loops
+            btn = page.locator(del_sel).first
+            if await btn.count() and await btn.is_visible(timeout=1000):
+                await btn.click(timeout=4000)
+                await page.wait_for_timeout(800)
+                removed += 1
+            else:
+                break
+        if removed:
+            print(f"  [+] Removed {removed} existing resume(s)")
+    except Exception:
+        pass
+
     # Only attempt if the upload drop zone is actually on this page
     if not await page.locator('[data-automation-id="file-upload-drop-zone"]').is_visible(timeout=1500):
         return False
@@ -678,7 +711,49 @@ async def fill_my_experience(page: Page) -> None:
         'input[aria-label*="GitHub" i]',
         'input[aria-label*="Portfolio" i]',
         'input[placeholder*="website" i]')
-    # Work experience + education are auto-parsed from resume — we don't overwrite
+    await fill_education(page)
+
+async def fill_education(page: Page) -> None:
+    """Fill School/University + Field of Study. Handles text box, typeahead, or
+    listbox dropdown for the school field (varies by tenant)."""
+    info = INFO
+    edu_list = info.get("education") or []
+    edu = edu_list[0] if edu_list else {}
+    school = edu.get("school") or "Northeastern University"
+    field = edu.get("field") or "Computer Science"
+
+    # School / University — try text input first, then typeahead, then listbox
+    try:
+        school_in = page.locator(
+            'input[id*="schoolName" i], input[aria-label*="School" i], '
+            'input[aria-label*="University" i], input[id*="school" i]'
+        ).first
+        if await school_in.count() and await school_in.is_visible(timeout=1500):
+            cur = ""
+            try:
+                cur = await school_in.input_value()
+            except Exception:
+                pass
+            if not cur:
+                await school_in.fill(school)
+                await page.wait_for_timeout(900)
+                # Typeahead: click a matching suggestion if one appears
+                sugg = page.locator(
+                    '[role="option"], [data-automation-id="promptOption"], li[role="option"]'
+                ).filter(has_text=re.compile("northeastern", re.I)).first
+                if await sugg.count() and await sugg.is_visible(timeout=1500):
+                    await sugg.click(timeout=4000)
+        else:
+            # Listbox/combobox variant
+            await combobox_select(page, school,
+                'button[aria-label*="School" i]', 'button[aria-label*="University" i]')
+    except Exception:
+        pass
+
+    # Field of Study
+    await try_fill(page, field,
+        'input[id*="fieldOfStudy" i]', 'input[aria-label*="Field of Study" i]',
+        '[data-automation-id="fieldOfStudy"]')
 
 # ── Application questions ──────────────────────────────────────────────────────
 
@@ -700,6 +775,8 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
         return "Yes"
     if re.search(r'federal government|defense health|\bdha\b|political appointee|served in the military', ll):
         return "No"
+    if re.search(r'government agency|state[- ]owned entity|state owned', ll):
+        return "No"
     if re.search(r'previously worked|ever worked for|worked for .{0,30}\b(before|previously)\b|former (employee|contractor)|previously (employed|been employed)', ll):
         return "No"
     if re.search(r'enter n/?a|please enter n/?a|if not a current', ll):
@@ -715,8 +792,8 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
         return info.get("ethnicity", "Asian")
     if re.search(r'veteran', ll):
         return "__DECLINE__"
-    if re.search(r'highest level of education|level of education|education or training|highest.*(degree|education)', ll):
-        return info.get("education_level", "Master")
+    if re.search(r'highest level of education|level of education|education or training|highest.*(degree|education)|\bdegree\b', ll):
+        return "__MASTERS__"
     if re.search(r'status(es)? applies to you|which.*status|immigration status|residency status', ll):
         return info.get("work_status", "Permanent Resident")
     if re.search(r'how many years|years of .{0,40}experience|years.*experience.*do you have', ll):
@@ -738,8 +815,8 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
     # ── Common screening questions ────────────────────────────────────────────
     if re.search(r'how did you hear|how did you find|referral source|source of hire', ll):
         return "__HEAR_ABOUT_US__"
-    if re.search(r'salary.*expect|expected.*salary|desired.*salary|compensation', ll):
-        return info.get("salary_expectation", "")
+    if re.search(r'salary|compensation|expected.*pay|pay expectation|annual gross|gross (figure|salary|pay)|annual (figure|amount)', ll):
+        return info.get("salary_expectation") or "75000"
     if re.search(r'available.*start|start.*date|when.*start|earliest.*start', ll):
         return info.get("available_start", "")
     if re.search(r'willing.*relocat|open.*relocat', ll):
@@ -918,8 +995,10 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
             #   other value (e.g. "Asian", "Male") → contains-match
             #   None           → unknown Yes/No question → default No
             if profile_ans == "__HEAR_ABOUT_US__":
-                continue
-            if profile_ans == "__YEARS_2PLUS__":
+                mode = "hearabout"  # listbox variant — pick a source below
+            elif profile_ans == "__MASTERS__":
+                mode = "masters"
+            elif profile_ans == "__YEARS_2PLUS__":
                 mode = "years2plus"
             elif profile_ans == "__DECLINE__":
                 mode = "decline"
@@ -938,6 +1017,31 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
                 opt = opts.filter(has_text=re.compile(
                     r"not wish|prefer not|decline|do not want|don'?t wish|choose not", re.I
                 )).first
+            elif mode == "hearabout":
+                # Prefer a known source; else pick the first real (non "Select One") option
+                for term in ["LinkedIn", "Indeed", "Glassdoor", "Greenhouse",
+                             "Company Website", "Job Board", "Other"]:
+                    cand = opts.filter(has_text=re.compile(re.escape(term), re.I)).first
+                    if await cand.count() and await cand.is_visible(timeout=600):
+                        opt = cand
+                        break
+                if opt is None:
+                    for o in await opts.all():
+                        try:
+                            t = (await o.inner_text()).strip()
+                        except Exception:
+                            t = ""
+                        if t and t.lower() != "select one":
+                            opt = o
+                            break
+            elif mode == "masters":
+                # Prefer Master of Science / M.S., else any master's option
+                for term in ["Master of Science", r"\bM\.?S\.?\b", "Master's Degree",
+                             "Masters", "Master"]:
+                    cand = opts.filter(has_text=re.compile(term, re.I)).first
+                    if await cand.count() and await cand.is_visible(timeout=600):
+                        opt = cand
+                        break
             elif mode == "years2plus":
                 # Pick an option whose range starts at 2+ ("2-3", "2+", "2 to 5", "2 or more")
                 all_opts = await opts.all()
@@ -1193,6 +1297,8 @@ async def fill_application_questions(page: Page, answers: dict, unknowns: list[s
             continue
         if answer == "__YEARS_2PLUS__":
             answer = INFO.get("years_experience", "2")  # text field → numeric years
+        if answer == "__MASTERS__":
+            answer = "Master of Science"
         if answer in ("__DECLINE__",):
             continue  # decline handled only for dropdowns
         if ftype in ("text", "email", "tel", "number", "textarea", "search", "spinbutton", ""):
