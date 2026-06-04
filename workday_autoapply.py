@@ -2404,10 +2404,12 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                 return "needs_review", "auth_failed:wrong_password_or_locked"
             tenant = (url.split("//", 1)[-1].split(".", 1)[0]) if url else ""
             if auth_attempts < 1:
-                # First encounter — create the account (or sign in if it exists)
+                # First encounter — create the account (or sign in if it exists).
+                # If we used a previous application the account already exists →
+                # prefer sign-in to avoid creating a duplicate/orphaned account.
                 auth_attempts += 1
                 print(f"  → Auth page (attempt {auth_attempts}: create / sign-in)")
-                await handle_auth(page)
+                await handle_auth(page, prefer_signin=used_last_app)
                 await page.wait_for_timeout(2500)
                 await page.wait_for_load_state("domcontentloaded")
                 await _shot(page, f"step_{step_num+1}_after_auth")
