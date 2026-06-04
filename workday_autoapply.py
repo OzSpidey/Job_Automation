@@ -1990,6 +1990,14 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             print("  [+] Application submitted")
             return "applied", "; ".join(unknowns)
 
+        # Already applied (message can appear after sign-in, not just on the posting)
+        if any(kw in body for kw in [
+            "you've already applied", "you have already applied",
+            "already applied for this job", "application already submitted",
+        ]):
+            print("  [+] Already applied")
+            return "already_applied", ""
+
         # External assessment required (e.g. Fiserv WOTC) — can't automate; stop here
         if ("take assessment" in body or "complete the assessment" in body
                 or await page.locator('[data-automation-id="inlineAssessmentButton"]').count() > 0):
