@@ -85,6 +85,9 @@ SKIP_COMPANIES = {
     "mastech digital",
     "nova infotek",
     "randstad digital americas",
+    "guidehouse",
+    "remotehunter",
+    "siritech solutions corp",
 }
 
 
