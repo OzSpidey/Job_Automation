@@ -1530,7 +1530,28 @@ async def fill_application_questions(page: Page, answers: dict, unknowns: list[s
         if answer in ("__DECLINE__",):
             continue  # decline handled only for dropdowns
         if ftype in ("text", "email", "tel", "number", "textarea", "search", "spinbutton", ""):
-            await try_fill(page, str(answer), *sels, overwrite=False)
+            filled = await try_fill(page, str(answer), *sels, overwrite=False)
+            if not filled and fid:
+                # Fallback: some Workday text/textarea fields label via
+                # aria-labelledby (no aria-label) and the Playwright fill missed
+                # them. Target the element by id and type into it directly.
+                try:
+                    loc = page.locator(f'#{fid}').first
+                    if await loc.count() and await loc.is_visible(timeout=1500):
+                        cur = ""
+                        try:
+                            cur = await loc.input_value()
+                        except Exception:
+                            pass
+                        if not cur:
+                            await loc.click(timeout=4000)
+                            await loc.fill(str(answer))
+                            filled = True
+                except Exception:
+                    pass
+            if not filled:
+                print(f"  [!] Could not fill text field '{label[:40]}' "
+                      f"(aid={aid!r} id={fid!r})")
         elif ftype in ("select", "combobox"):
             await combobox_select(page, str(answer), *sels)
         elif ftype in ("radio", "radiogroup"):
