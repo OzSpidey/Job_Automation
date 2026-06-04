@@ -377,6 +377,36 @@ async def fill_hear_about_us(page: Page) -> bool:
     except Exception:
         return False
 
+async def dismiss_cookie_banner(page: Page) -> bool:
+    """Dismiss a cookie-consent banner if one is covering the page. Some tenants
+    (e.g. HP) render a consent overlay that intercepts clicks and stalls the
+    wizard. Click an accept/agree control (or close the banner) so the form is
+    interactable. Returns True if something was clicked."""
+    for sel in [
+        '#onetrust-accept-btn-handler',
+        '#truste-consent-button',
+        'button#accept-recommended-btn-handler',
+        '[aria-label="Accept cookies"]',
+        '[data-automation-id="legalNoticeAcceptButton"]',
+        'button:has-text("Accept All")',
+        'button:has-text("Accept Cookies")',
+        'button:has-text("Accept all cookies")',
+        'button:has-text("Accept")',
+        'button:has-text("I Agree")',
+        'button:has-text("Agree")',
+        'button:has-text("Got it")',
+        'button:has-text("Allow all")',
+    ]:
+        try:
+            loc = page.locator(sel).first
+            if await loc.count() > 0 and await loc.is_visible(timeout=800):
+                await loc.click(timeout=3000)
+                await page.wait_for_timeout(500)
+                return True
+        except Exception:
+            continue
+    return False
+
 async def radio_click(page: Page, answer: str) -> bool:
     """Click a radio button whose label text matches answer (Yes/No style)."""
     for sel in [
@@ -1814,6 +1844,9 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
     stuck_count = 0
     for step_num in range(20):
         await wait_for_content(page)
+        # Clear any cookie-consent overlay that may be intercepting clicks.
+        if await dismiss_cookie_banner(page):
+            await page.wait_for_timeout(400)
         step = await current_step(page)
 
         body = (await page.evaluate("document.body.innerText")).lower()
