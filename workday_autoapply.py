@@ -1481,7 +1481,9 @@ async def fill_application_questions(page: Page, answers: dict, unknowns: list[s
         const out = [];
         const SKIP_TYPES = new Set(['file', 'hidden', 'submit', 'button', 'checkbox', 'reset']);
         const inputs = document.querySelectorAll(
-            'input[aria-required="true"], select[aria-required="true"], textarea[aria-required="true"], [role="combobox"][aria-required="true"], [role="spinbutton"][aria-required="true"]'
+            'input[aria-required="true"], select[aria-required="true"], textarea[aria-required="true"], [role="combobox"][aria-required="true"], [role="spinbutton"][aria-required="true"], ' +
+            'input[required], textarea[required], select[required], ' +
+            'input[aria-invalid="true"], textarea[aria-invalid="true"]'
         );
         inputs.forEach(el => {
             if (SKIP_TYPES.has(el.type)) return;
