@@ -80,6 +80,7 @@ RESUME_PATH  = os.environ.get("WD_RESUME_PATH", "")
 SESSION_B64  = os.environ.get("WD_SESSION_B64", "")
 HEADLESS     = os.environ.get("HEADLESS", "true").lower() == "true"
 MAX_APPLY    = int(os.environ.get("MAX_APPLY", "20"))
+CONCURRENCY  = max(1, int(os.environ.get("WD_CONCURRENCY", "1")))  # apps in parallel
 
 EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
@@ -645,6 +646,19 @@ async def upload_resume(page: Page) -> bool:
         print(f"  [!] Resume not found: {RESUME_PATH!r}")
         return False
 
+    # If OUR resume is already attached (e.g. we uploaded it on a previous visit
+    # to this step), do nothing — avoids a delete/re-upload loop.
+    resume_stem = Path(RESUME_PATH).stem.lower()
+    try:
+        names = await page.locator(
+            '[data-automation-id="file-name"], [data-automation-id*="fileName" i], '
+            '[data-automation-id="attachment-name"]'
+        ).all_inner_texts()
+        if any(resume_stem in (n or "").lower() for n in names):
+            return True
+    except Exception:
+        pass
+
     # Remove any already-attached resume(s) first (e.g. pre-filled by "use last
     # application"), so we upload a fresh copy.
     try:
@@ -703,6 +717,14 @@ async def upload_resume(page: Page) -> bool:
         print(f"  [!] File chooser error: {e}")
     return False
 
+_ROLE_TITLE = {
+    "da": "Data Analyst", "de": "Data Engineer", "bi": "Business Intelligence Analyst",
+}
+
+def _role_title() -> str:
+    first = (ROLES_ENV.split(",")[0] if ROLES_ENV else "").strip()
+    return _ROLE_TITLE.get(first, "Data Analyst")
+
 async def fill_my_experience(page: Page) -> None:
     await upload_resume(page)
     info = INFO
@@ -716,7 +738,68 @@ async def fill_my_experience(page: Page) -> None:
         'input[aria-label*="GitHub" i]',
         'input[aria-label*="Portfolio" i]',
         'input[placeholder*="website" i]')
+    await fill_work_experience(page)
     await fill_education(page)
+
+_MONTHS = ["January", "February", "March", "April", "May", "June", "July",
+           "August", "September", "October", "November", "December"]
+
+async def _fill_exp_date(page: Page, which: str, ym: str) -> None:
+    """Set a work-experience MM/YYYY date (which='startDate'/'endDate').
+    Prefers the calendar month-tile; falls back to typing the spinbuttons."""
+    try:
+        parts = ym.split("-")
+        year, mnum = parts[0], int(parts[1])
+        month_name = _MONTHS[mnum - 1]
+    except Exception:
+        return
+    # Calendar approach: open this field's calendar, click the month tile
+    try:
+        icon = page.locator(f'[id*="{which}"] [data-automation-id="dateIcon"]').first
+        if await icon.count() and await icon.is_visible(timeout=1500):
+            await icon.click(timeout=4000)
+            await page.wait_for_timeout(600)
+            tile = page.locator(
+                f'[data-automation-id="monthPickerTileLabel"][aria-label="{month_name} {year}"]'
+            ).first
+            if await tile.count() and await tile.is_visible(timeout=2000):
+                await tile.click(timeout=4000)
+                await page.wait_for_timeout(400)
+                return
+    except Exception:
+        pass
+    # Fallback: type into the month/year spinbuttons
+    mo = page.locator(f'[id*="{which}"] [data-automation-id="dateSectionMonth-input"]').first
+    yr = page.locator(f'[id*="{which}"] [data-automation-id="dateSectionYear-input"]').first
+    try:
+        if await mo.count() and await mo.is_visible(timeout=1000):
+            await mo.click(timeout=4000)
+            await page.keyboard.type(f"{mnum:02d}")
+        if await yr.count() and await yr.is_visible(timeout=1000):
+            await yr.click(timeout=4000)
+            await page.keyboard.type(year)
+    except Exception:
+        pass
+
+async def fill_work_experience(page: Page) -> None:
+    """Fill a work-experience entry (job title role-aware, company, start/end dates)
+    if the section is present. Only fills empty fields."""
+    jt = page.locator('input[id*="jobTitle" i], [data-automation-id="jobTitle"]').first
+    if not (await jt.count() and await jt.is_visible(timeout=1000)):
+        return
+    info = INFO
+    exp_list = info.get("experience") or []
+    exp = exp_list[0] if exp_list else {}
+    title   = exp.get("title") or _role_title()
+    company = exp.get("company") or "Atlas SP"
+    start   = exp.get("start") or "2025-01"
+    end     = exp.get("end") or "2025-08"
+    await try_fill(page, title,
+        'input[id*="jobTitle" i]', 'input[aria-label*="Job Title" i]')
+    await try_fill(page, company,
+        'input[id*="companyName" i]', 'input[aria-label*="Company" i]')
+    await _fill_exp_date(page, "startDate", start)
+    await _fill_exp_date(page, "endDate", end)
 
 async def fill_education(page: Page) -> None:
     """Fill School/University + Field of Study. Handles text box, typeahead, or
@@ -778,7 +861,9 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
         return "Yes"
     if re.search(r'require sponsorship|need.*sponsorship|will you.*sponsor|now or in the future', ll):
         return info.get("needs_sponsorship", "No")
-    if re.search(r'reside.*(location|area)|commutable distance|live.*within.*commut|located within|within commut', ll):
+    if re.search(r'reside.*(location|area)|commutable distance|live.*within.*commut|located within|within commut|commuting distance', ll):
+        return "Yes"
+    if re.search(r'willing to work on-?site|work on-?site|\bon-?site\b|willing to work in (the )?office', ll):
         return "Yes"
     if re.search(r'federal government|defense health|\bdha\b|political appointee|served in the military', ll):
         return "No"
@@ -806,18 +891,20 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
     if re.search(r'how many years|years of .{0,40}experience|years.*experience.*do you have', ll):
         return "__YEARS_2PLUS__"
 
-    # ── Contact info ──────────────────────────────────────────────────────────
-    if re.search(r'\bfirst name\b', ll):      return info.get("first_name")
-    if re.search(r'\blast name\b', ll):       return info.get("last_name")
-    if re.search(r'\bemail\b', ll):           return info.get("email")
-    if re.search(r'\bphone\b', ll):           return info.get("phone")
-    if re.search(r'address.*line 1|street address', ll): return info.get("address_line1")
-    if re.search(r'\bcity\b', ll):            return info.get("city")
-    if re.search(r'\bstate\b|\bprovince\b', ll): return info.get("state", "Massachusetts")
-    if re.search(r'\bzip\b|\bpostal\b', ll):  return info.get("zip")
-    if re.search(r'\bcountry\b', ll):         return info.get("country", "United States of America")
-    if re.search(r'\blinkedin\b', ll):        return info.get("linkedin")
-    if re.search(r'github|portfolio|personal.*website|website.*url', ll): return info.get("github")
+    # ── Contact info — ONLY for short field labels, so words like "State" inside a
+    #    long screening question (e.g. "…Community and State") don't false-match. ──
+    if len(ll) <= 35:
+        if re.search(r'\bfirst name\b', ll):      return info.get("first_name")
+        if re.search(r'\blast name\b', ll):       return info.get("last_name")
+        if re.search(r'\bemail\b', ll):           return info.get("email")
+        if re.search(r'\bphone\b', ll):           return info.get("phone")
+        if re.search(r'address.*line 1|street address', ll): return info.get("address_line1")
+        if re.search(r'\bcity\b', ll):            return info.get("city")
+        if re.search(r'\bstate\b|\bprovince\b', ll): return info.get("state", "Massachusetts")
+        if re.search(r'\bzip\b|\bpostal\b', ll):  return info.get("zip")
+        if re.search(r'\bcountry\b', ll):         return info.get("country", "United States of America")
+        if re.search(r'\blinkedin\b', ll):        return info.get("linkedin")
+        if re.search(r'github|portfolio|personal.*website|website.*url', ll): return info.get("github")
 
     # ── Common screening questions ────────────────────────────────────────────
     if re.search(r'how did you hear|how did you find|referral source|source of hire', ll):
@@ -1017,8 +1104,28 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
                 mode, want = "exact", "No"
 
             await btn.click(timeout=4000)
-            await page.wait_for_timeout(400)
-            opts = page.locator('[role="listbox"] [role="option"], [role="listbox"] div')
+            await page.wait_for_timeout(700)
+            # Scope option search to the listbox this button controls (aria-controls),
+            # since Workday renders the options in a popup that may lack role=listbox.
+            ctrl = await btn.get_attribute("aria-controls")
+            scope = page
+            if ctrl and await page.locator(f'#{ctrl}').count():
+                scope = page.locator(f'#{ctrl}')
+            opts = scope.locator(
+                '[role="option"], [data-automation-id="promptOption"], li, div'
+            )
+            # Diagnostic: dump what the open listbox exposes (read _wd_dd_debug.txt)
+            if DEBUG_SHOTS:
+                try:
+                    expanded = await btn.get_attribute("aria-expanded")
+                    role_opts = await page.get_by_role("option").all_inner_texts()
+                    li_opts = await page.locator('[role="listbox"] li, [role="listbox"] [role="option"]').all_inner_texts()
+                    with open(SHOTS_DIR.parent / "_wd_dd_debug.txt", "a", encoding="utf-8") as _f:
+                        _f.write(f"\nQ={qtext[:50]!r} want={mode}/{locals().get('want','')} "
+                                 f"expanded={expanded} ctrl={ctrl}\n"
+                                 f"  role_options={role_opts}\n  li_options={li_opts}\n")
+                except Exception as _e:
+                    pass
             opt = None
             if mode == "decline":
                 opt = opts.filter(has_text=re.compile(
@@ -1068,13 +1175,31 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
             elif mode == "contains":
                 # Word-boundary match so "Male" doesn't also match "Female"
                 opt = opts.filter(has_text=re.compile(rf'\b{re.escape(want)}\b', re.I)).first
-            else:  # exact
-                opt = page.locator(
-                    f'[role="listbox"] [role="option"]:text-is("{want}"), '
-                    f'[role="listbox"] div:text-is("{want}")'
-                ).first
-            if opt is not None and await opt.count() and await opt.is_visible(timeout=1500):
-                await opt.click(timeout=4000)
+            else:  # exact (Yes/No)
+                opt = page.get_by_role("option", name=re.compile(rf'^\s*{re.escape(want)}\s*$', re.I)).first
+                if not await opt.count():
+                    opt = scope.get_by_text(re.compile(rf'^\s*{re.escape(want)}\s*$', re.I)).first
+                if not await opt.count():
+                    opt = opts.filter(has_text=re.compile(rf'^\s*{re.escape(want)}\b', re.I)).first
+
+            clicked_opt = False
+            if opt is not None and await opt.count():
+                try:
+                    await opt.scroll_into_view_if_needed(timeout=2000)
+                except Exception:
+                    pass
+                try:
+                    await opt.click(timeout=4000, force=True)
+                    clicked_opt = True
+                except Exception:
+                    pass
+            if not clicked_opt:
+                # Close the dropdown so a stuck-open menu doesn't block the page.
+                # (Do NOT press Enter — it would select whatever option is highlighted.)
+                try:
+                    await page.keyboard.press("Escape")
+                except Exception:
+                    pass
             await page.wait_for_timeout(300)
         except Exception:
             continue
@@ -1083,7 +1208,11 @@ async def fill_checkbox_questions(page: Page, answers: dict | None = None) -> No
     """Handle Yes/No checkbox-group questions (each option is a checkbox + label).
     Ticks the option matching the profile answer; defaults to No."""
     answers = answers or {}
-    groups = await page.locator('[data-automation-id*="formField"]').all()
+    groups = await page.locator(
+        '[data-automation-id*="formField"], '
+        'fieldset[data-automation-id*="CheckboxGroup"], '
+        '[aria-required="true"]:has(input[type="checkbox"])'
+    ).all()
     for grp in groups:
         try:
             cbs = grp.locator('input[type="checkbox"][aria-required="true"]')
@@ -1104,9 +1233,13 @@ async def fill_checkbox_questions(page: Page, answers: dict | None = None) -> No
             qtext = (await grp.inner_text()).strip()
             profile_ans = _answer_from_profile(qtext, answers)
             want = profile_ans if (profile_ans and profile_ans.lower() in ("yes", "no")) else "No"
-            lbl = grp.locator('label').filter(
-                has_text=re.compile(rf'^\s*{want}\s*$', re.I)
-            ).first
+            # Match exact, or starts-with (e.g. "No, or I prefer not to identify"),
+            # and for "No" also the decline-style options.
+            if want.lower() == "no":
+                pat = r"^\s*no\b|prefer not to (identify|answer|say)|none of the above|i do not"
+            else:
+                pat = rf'^\s*{re.escape(want)}\b'
+            lbl = grp.locator('label').filter(has_text=re.compile(pat, re.I)).first
             if await lbl.count() and await lbl.is_visible(timeout=1500):
                 await lbl.click(timeout=4000)
                 await page.wait_for_timeout(200)
@@ -1446,6 +1579,12 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             print("  [+] Application submitted")
             return "applied", "; ".join(unknowns)
 
+        # External assessment required (e.g. Fiserv WOTC) — can't automate; stop here
+        if ("take assessment" in body or "complete the assessment" in body
+                or await page.locator('[data-automation-id="inlineAssessmentButton"]').count() > 0):
+            print("  [!] Assessment required — stopping (apply manually)")
+            return "needs_review", "assessment required — complete manually"
+
         # Create Account / Sign In step — the form often renders late, so the
         # pre-loop handle_auth() can miss it. Handle it here where it's rendered.
         # A visible password field only ever appears on an auth page.
@@ -1465,7 +1604,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                 title = job.get("title", "")
                 tenant = (url.split("//", 1)[-1].split(".", 1)[0]) if url else ""
                 # Try to auto-click the verification link from the inbox (IMAP)
-                link = fetch_verification_link(tenant_hint=tenant)
+                link = await asyncio.to_thread(fetch_verification_link, tenant)
                 if link:
                     print(f"  [+] Got verification link from inbox — opening it")
                     try:
@@ -1498,7 +1637,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                     continue
                 # No IMAP configured / link not found yet — notify user and wait for manual click
                 if not verify_email_sent:
-                    send_verification_email(job.get("company", ""), job.get("title", ""), url)
+                    await asyncio.to_thread(send_verification_email, job.get("company", ""), job.get("title", ""), url)
                     verify_email_sent = True
                 print("  [!] Account verification required — waiting 30s for manual verification…")
                 await page.wait_for_timeout(30000)
@@ -1544,7 +1683,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                     continue
                 # Otherwise the account needs email verification, then sign-in (e.g.
                 # Corewell). Fetch the verification link via IMAP, open it, re-enter.
-                link = fetch_verification_link(tenant_hint=tenant)
+                link = await asyncio.to_thread(fetch_verification_link, tenant)
                 if link:
                     print(f"  [+] Got verification link from inbox — opening it")
                     try:
@@ -1554,7 +1693,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                         print(f"  [!] Failed to open verification link: {e}")
                 else:
                     if not verify_email_sent:
-                        send_verification_email(job.get("company", ""), job.get("title", ""), url)
+                        await asyncio.to_thread(send_verification_email, job.get("company", ""), job.get("title", ""), url)
                         verify_email_sent = True
                     print("  [!] Verification email not found yet — waiting 20s…")
                     await page.wait_for_timeout(20000)
@@ -1817,7 +1956,8 @@ async def main() -> None:
         print(f"[i] No pending jobs (roles={ROLES_ENV}).")
         return
 
-    print(f"[+] Queue: {len(queue)} job(s)  |  roles={ROLES_ENV}  |  headless={HEADLESS}")
+    print(f"[+] Queue: {len(queue)} job(s)  |  roles={ROLES_ENV}  |  "
+          f"headless={HEADLESS}  |  concurrency={CONCURRENCY}")
 
     session_state = session_from_b64()
     if not session_state and SESSION_FILE.exists():
@@ -1828,73 +1968,74 @@ async def main() -> None:
     if session_state:
         print("[+] Session state loaded.")
 
+    ctx_kwargs: dict = {
+        "user_agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "viewport": {"width": 1280, "height": 900},
+    }
+    # Only seed cookies in serial mode — in parallel each tenant gets a clean
+    # context so sessions don't collide.
+    if session_state and CONCURRENCY == 1:
+        ctx_kwargs["storage_state"] = session_state
+
+    lock = asyncio.Lock()
+    sem = asyncio.Semaphore(CONCURRENCY)
+    total = len(queue)
+
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
             headless=HEADLESS,
             args=["--no-sandbox", "--disable-dev-shm-usage"] if HEADLESS else [],
             slow_mo=0 if HEADLESS else 60,
         )
-        ctx_kwargs: dict = {
-            "user_agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            "viewport": {"width": 1280, "height": 900},
-        }
-        if session_state:
-            ctx_kwargs["storage_state"] = session_state
 
-        context: BrowserContext = await browser.new_context(**ctx_kwargs)
-        page = await context.new_page()
-        # Cap every action so a stuck click can't hang for the 30s default
-        page.set_default_timeout(8000)
-
-        for i, job in enumerate(queue):
+        async def run_one(i: int, job: dict) -> None:
             title   = job.get("title", "Unknown")
             company = job.get("company", "Unknown")
             link    = job.get("link", "")
+            async with sem:
+                print(f"\n[{i+1}/{total}] {title} @ {company}")
+                # Each application gets its own isolated context (separate cookies)
+                context = await browser.new_context(**ctx_kwargs)
+                page = await context.new_page()
+                page.set_default_timeout(8000)
+                try:
+                    status, notes = await apply_to_job(page, job, answers)
+                except PlaywrightTimeout as e:
+                    status, notes = "error", f"timeout:{str(e)[:60]}"
+                except Exception as e:
+                    status, notes = "error", f"{type(e).__name__}:{str(e)[:60]}"
+                finally:
+                    try:
+                        await context.close()
+                    except Exception:
+                        pass
 
-            print(f"\n[{i+1}/{len(queue)}] {title} @ {company}")
+                print(f"  → [{company}] {status}" + (f"  |  {notes}" if notes else ""))
 
-            try:
-                status, notes = await apply_to_job(page, job, answers)
-            except PlaywrightTimeout as e:
-                status, notes = "error", f"timeout:{str(e)[:60]}"
-            except Exception as e:
-                status, notes = "error", f"{type(e).__name__}:{str(e)[:60]}"
+                row = {
+                    "title":      title,
+                    "company":    company,
+                    "location":   job.get("location", ""),
+                    "link":       link,
+                    "status":     status,
+                    "applied_on": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "notes":      notes,
+                }
+                async with lock:
+                    # Don't retry jobs that succeeded OR are blocked by an external
+                    # assessment (can't be automated).
+                    if status in ("applied", "already_applied") or "assessment" in notes:
+                        applied_ids.add(link)
+                        save_applied(applied_ids)
+                    results.append(row)
+                    append_csv(row)
+                    save_answers(answers)
 
-            print(f"  → {status}" + (f"  |  {notes}" if notes else ""))
-
-            if status in ("applied", "already_applied"):
-                applied_ids.add(link)
-                save_applied(applied_ids)
-
-            row: dict = {
-                "title":      title,
-                "company":    company,
-                "location":   job.get("location", ""),
-                "link":       link,
-                "status":     status,
-                "applied_on": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "notes":      notes,
-            }
-            results.append(row)
-            append_csv(row)
-
-            try:
-                await page.wait_for_timeout(1200)
-            except Exception:
-                pass
-
-        # Persist session
-        state = await context.storage_state()
-        state["origins"] = []
-        SESSION_FILE.parent.mkdir(exist_ok=True)
-        SESSION_FILE.write_text(json.dumps(state))
-        print(f"\n[+] Session saved → {SESSION_FILE.name}")
-        print(f"    WD_SESSION_B64 = {session_to_b64(state)[:40]}…")
-
+        await asyncio.gather(*(run_one(i, job) for i, job in enumerate(queue)))
         await browser.close()
 
     # Summary
