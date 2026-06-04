@@ -157,11 +157,17 @@ _ROLE_SLUG = {
 
 def build_queue(roles: str, applied_ids: set) -> list[dict]:
     csv_dir = ROOT / "csv"
-    # NEVER read from workday_jobs_all*.csv — always use per-role side-cars only.
-    # "all" is treated the same as "da,de,bi" (the 3 target roles).
-    if roles == "all":
-        roles = "da,de,bi"
-    if True:
+
+    # When Telegram-notify pre-approved a specific set, read only those
+    queue_csv = os.environ.get("WD_QUEUE_CSV", "")
+    if queue_csv and Path(queue_csv).exists():
+        files = [queue_csv]
+    else:
+        # NEVER read from workday_jobs_all*.csv — always use per-role side-cars only.
+        # "all" is treated the same as "da,de,bi" (the 3 target roles).
+        if roles == "all":
+            roles = "da,de,bi"
+    if not queue_csv or not Path(queue_csv).exists():
         role_list = [r.strip() for r in roles.split(",")]
         files = []
         for r in role_list:

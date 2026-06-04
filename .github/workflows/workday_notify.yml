@@ -1,0 +1,98 @@
+name: Workday Notify & Apply
+
+on:
+  workflow_dispatch: {}
+  # Uncomment and set your cron schedule (UTC):
+  # schedule:
+  #   - cron: '*/15 * * * *'   # every 15 min
+  #   - cron: '0 9-22 * * 1-5' # every hour, Mon-Fri 9am-10pm UTC
+
+concurrency:
+  group: workday-notify
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  notify-and-apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - run: pip install -r requirements.txt
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v2-${{ hashFiles('requirements.txt') }}
+
+      - run: playwright install chromium
+      - run: playwright install-deps chromium
+
+      - name: Restore Workday session
+        env:
+          WD_SESSION_B64: ${{ secrets.WD_SESSION_B64 }}
+        run: |
+          mkdir -p json
+          if [ -n "$WD_SESSION_B64" ]; then
+            echo "$WD_SESSION_B64" | base64 -d > json/workday_auth.json
+          fi
+
+      - name: Clone job-assets for resume
+        run: |
+          git clone https://${{ secrets.GH_PAT }}@github.com/OzSpidey/job-assets.git /tmp/job-assets
+          cp /tmp/job-assets/Osborne_BI.pdf /tmp/resume.pdf
+
+      - name: Run Notify & Apply
+        env:
+          TELEGRAM_BOT_TOKEN:      ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:        ${{ secrets.TELEGRAM_CHAT_ID }}
+          APPROVAL_TIMEOUT:        "270"
+          WD_APPLICANT_INFO:       ${{ secrets.WD_APPLICANT_INFO }}
+          WORKDAY_PASSWORD:        ${{ secrets.WORKDAY_PASSWORD }}
+          WD_RESUME_PATH:          /tmp/resume.pdf
+          WD_SESSION_B64:          ${{ secrets.WD_SESSION_B64 }}
+          HEADLESS:                "true"
+          WD_CONCURRENCY:          "2"
+          WD_MAX_AGE_DAYS:         "1"
+          WD_VERIFY_IMAP_USER:     ${{ secrets.WD_VERIFY_IMAP_USER }}
+          WD_VERIFY_IMAP_PASSWORD: ${{ secrets.WD_VERIFY_IMAP_PASSWORD }}
+          EMAIL_SENDER:            ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD:      ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:                ${{ secrets.EMAIL_TO }}
+        run: python workday_notify.py
+
+      - name: Update session secret
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -f json/workday_auth.json ] && [ -n "$GH_TOKEN" ]; then
+            jq '{cookies: .cookies, origins: []}' json/workday_auth.json > json/workday_auth_clean.json
+            gh secret set WD_SESSION_B64 \
+              --body "$(base64 -w 0 json/workday_auth_clean.json)" \
+              --repo OzSpidey/Job_Automation
+          fi
+
+      - name: Persist applied state
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add json/workday_applied.json json/workday_notified.json csv/workday_applied.csv json/workday_answers.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update workday applied/notified state [skip ci]"
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && break
+            sleep $((i * 3))
+          done
