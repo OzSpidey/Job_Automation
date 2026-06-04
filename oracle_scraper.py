@@ -371,8 +371,9 @@ def build_job_url(company: dict, job_id, external_desc_id: str = "") -> str:
     region = company["region"]
     site   = company["site"]
     suffix = f"?jr_id={external_desc_id}" if external_desc_id else ""
+    base   = build_base_url(pod, region)
     return (
-        f"https://{pod}.fa.{region}.oraclecloud.com"
+        f"{base}"
         f"/hcmUI/CandidateExperience/en/sites/{site}/job/{job_id}{suffix}"
     )
 
