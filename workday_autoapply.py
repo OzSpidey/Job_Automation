@@ -313,7 +313,7 @@ async def radio_click(page: Page, answer: str) -> bool:
 
 # ── Auth ───────────────────────────────────────────────────────────────────────
 
-async def handle_auth(page: Page) -> bool:
+async def handle_auth(page: Page, prefer_signin: bool = False) -> bool:
     """Log in or create Workday account if prompted. Returns True on success.
 
     Routes by FIELD PRESENCE (not body text), so the "Create Account" link on a
@@ -321,7 +321,45 @@ async def handle_auth(page: Page) -> bool:
       • verify-password field present  → create account
       • visible password field present → sign in
       • only email field present       → two-step: enter email, continue, recurse
+
+    prefer_signin=True forces the sign-in path (used after an account was already
+    created this run, e.g. Corewell: create → verify → sign in).
     """
+    # Some tenants (e.g. Corewell) show a social-login chooser first — reveal the
+    # email/password form by clicking "Sign in with email", then (unless we want
+    # to sign in) switch to the Create Account form via its link.
+    try:
+        has_email_field = await page.locator(
+            '[data-automation-id="email"]:visible, input[type="email"]:visible'
+        ).count() > 0
+        revealed = False
+        if not has_email_field:
+            if await try_click(page,
+                '[data-automation-id="SignInWithEmailButton"]',
+                'button:has-text("Sign in with email")',
+                '[role="button"]:has-text("Sign in with email")',
+                'a:has-text("Sign in with email")',
+                'button:has-text("Continue with email")',
+                timeout=3000):
+                revealed = True
+                await page.wait_for_timeout(1800)
+        # If we just revealed a Sign-In form (no verify-password field) and there's
+        # a Create Account link, switch to the create form — UNLESS prefer_signin
+        # (account already exists, just sign in).
+        if revealed and not prefer_signin:
+            has_verify_now = await page.locator(
+                '[data-automation-id="verifyPassword"]:visible, input[name*="erify" i]:visible'
+            ).count() > 0
+            if not has_verify_now:
+                if await try_click(page,
+                    '[data-automation-id="createAccountLink"]',
+                    'a:has-text("Create Account")',
+                    'button:has-text("Create Account")',
+                    timeout=3000):
+                    await page.wait_for_timeout(1800)
+    except Exception:
+        pass
+
     try:
         email_input = page.locator(
             '[data-automation-id="email"]:visible, input[type="email"]:visible'
@@ -562,7 +600,8 @@ async def fill_my_information(page: Page) -> None:
         'input[aria-label*="Last Name" i]')
     await try_fill(page, info.get("phone", ""),
         '[data-automation-id="phone-number"]',
-        'input[aria-label*="Phone" i]', 'input[type="tel"]')
+        'input[aria-label*="Phone" i]', 'input[type="tel"]',
+        'input[name*="phone" i]')
     await _select_phone_device_type(page)
     await try_fill(page, info.get("address_line1", ""),
         '[data-automation-id="addressSection_addressLine1"]',
@@ -573,6 +612,10 @@ async def fill_my_information(page: Page) -> None:
     await try_fill(page, info.get("zip", ""),
         '[data-automation-id="addressSection_postalCode"]',
         'input[aria-label*="Postal Code" i]', 'input[aria-label*="Zip" i]')
+    await try_fill(page, info.get("county", "Suffolk"),
+        '[data-automation-id="addressSection_regionSubdivision1"]',
+        'input[name="regionSubdivision1"]',
+        'input[aria-label*="County" i]')
     await combobox_select(page, info.get("country", "United States of America"),
         '[data-automation-id="countryDropdown"]',
         '[data-automation-id="addressSection_country"]',
@@ -1298,7 +1341,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
         ).count() > 0
         is_auth_page = has_pw_field or (
             "create account" in body and "verify new password" in body
-        )
+        ) or "sign in with email" in body or "continue with email" in body
         if is_auth_page:
             # Account needs email verification before sign-in
             if any(kw in body for kw in [
@@ -1334,7 +1377,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                     except Exception:
                         pass
                     await wait_for_content(page)
-                    await handle_auth(page)
+                    await handle_auth(page, prefer_signin=True)
                     await page.wait_for_timeout(2500)
                     verify_waits += 1
                     if verify_waits > 3:
@@ -1346,7 +1389,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                     verify_email_sent = True
                 print("  [!] Account verification required — waiting 30s for manual verification…")
                 await page.wait_for_timeout(30000)
-                await handle_auth(page)
+                await handle_auth(page, prefer_signin=True)
                 await page.wait_for_timeout(2500)
                 verify_waits += 1
                 if verify_waits > 3:
@@ -1359,14 +1402,57 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             ]):
                 print("  [!] Sign-in rejected — wrong password or locked account")
                 return "needs_review", "auth_failed:wrong_password_or_locked"
-            if auth_attempts < 2:
+            tenant = (url.split("//", 1)[-1].split(".", 1)[0]) if url else ""
+            if auth_attempts < 1:
+                # First encounter — create the account (or sign in if it exists)
                 auth_attempts += 1
-                print(f"  → Create Account/Sign In page (attempt {auth_attempts})")
+                print(f"  → Auth page (attempt {auth_attempts}: create / sign-in)")
                 await handle_auth(page)
                 await page.wait_for_timeout(2500)
                 await page.wait_for_load_state("domcontentloaded")
                 await _shot(page, f"step_{step_num+1}_after_auth")
-                continue  # account creation / sign-in advances the wizard
+                continue
+            elif auth_attempts < 5:
+                # Still on an auth page after creating → the account was created but
+                # needs email verification, then sign-in (e.g. Corewell). Fetch the
+                # verification link via IMAP, open it, re-enter, then SIGN IN.
+                auth_attempts += 1
+                link = fetch_verification_link(tenant_hint=tenant)
+                if link:
+                    print(f"  [+] Got verification link from inbox — opening it")
+                    try:
+                        await page.goto(link, wait_until="domcontentloaded", timeout=30000)
+                        await page.wait_for_timeout(2500)
+                    except Exception as e:
+                        print(f"  [!] Failed to open verification link: {e}")
+                else:
+                    if not verify_email_sent:
+                        send_verification_email(job.get("company", ""), job.get("title", ""), url)
+                        verify_email_sent = True
+                    print("  [!] Verification email not found yet — waiting 20s…")
+                    await page.wait_for_timeout(20000)
+                # Re-enter the application and sign in (account now exists/verified)
+                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                await page.wait_for_timeout(2000)
+                await try_click(page,
+                    '[data-automation-id="applyButton"]',
+                    '[data-automation-id="adventureButton"]',
+                    'button:has-text("Apply")', 'a:has-text("Apply")',
+                    timeout=12000)
+                await page.wait_for_timeout(2500)
+                try:
+                    last_app = page.locator('[data-automation-id="useMyLastApplication"]').first
+                    if await last_app.is_visible(timeout=4000):
+                        await last_app.click(timeout=4000)
+                        await page.wait_for_timeout(2000)
+                except Exception:
+                    pass
+                await wait_for_content(page)
+                await handle_auth(page, prefer_signin=True)
+                await page.wait_for_timeout(2500)
+                await page.wait_for_load_state("domcontentloaded")
+                await _shot(page, f"step_{step_num+1}_after_auth")
+                continue
             return "needs_review", "auth_stuck"
 
         # Review/submit step
