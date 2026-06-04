@@ -100,6 +100,8 @@ jobs:
           WD_RESUME_PATH:       /tmp/resume.pdf
           WD_SESSION_B64:       ${{ secrets.WD_SESSION_B64 }}
           HEADLESS:             "true"
+          WD_VERIFY_IMAP_USER:  ${{ secrets.WD_VERIFY_IMAP_USER }}
+          WD_VERIFY_IMAP_PASSWORD: ${{ secrets.WD_VERIFY_IMAP_PASSWORD }}
           EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:             ${{ secrets.EMAIL_TO }}

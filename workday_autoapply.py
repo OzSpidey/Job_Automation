@@ -191,9 +191,39 @@ def build_queue(roles: str, applied_ids: set) -> list[dict]:
         except Exception:
             return True
 
+    # Location patterns that indicate a non-US posting (India, UK, Canada, etc.)
+    # Filter by the job's location field and by known non-US URL segments.
+    _NON_US_LOCATION = re.compile(
+        r'\b(india|bangalore|bengaluru|mumbai|hyderabad|pune|chennai|gurugram|gurgaon|'
+        r'noida|delhi|kolkata|uk|united kingdom|london|canada|toronto|australia|'
+        r'ireland|germany|netherlands|singapore|philippines|malaysia|'
+        r'japan|china|brazil|mexico|poland)\b',
+        re.I,
+    )
+    # Non-US URL path segments (myworkdayjobs.com/en-US/ is US; others are foreign)
+    _NON_US_URL = re.compile(
+        r'myworkdayjobs\.com/(?!en-US/)(?:en-GB|en-CA|en-AU|en-IN|en-IE|fr-CA|de-DE|'
+        r'nl-NL|pt-BR|es-MX|zh-CN|ja-JP|ko-KR)',
+        re.I,
+    )
+
+    def _is_us_job(row: dict) -> bool:
+        loc = (row.get("location") or "").strip()
+        if loc and _NON_US_LOCATION.search(loc):
+            return False
+        link = (row.get("link") or "").strip()
+        if link and _NON_US_URL.search(link):
+            return False
+        # Also check the URL path for India/non-US city names when location says
+        # "2 Locations" or is otherwise ambiguous (e.g. Citigroup Gurgaon URL).
+        if link and _NON_US_LOCATION.search(link):
+            return False
+        return True
+
     seen_links: set[str] = set()
     jobs: list[dict] = []
     stale = 0
+    non_us = 0
     for f in files:
         with open(f, newline="", encoding="utf-8") as fh:
             for row in csv.DictReader(fh):
@@ -203,11 +233,17 @@ def build_queue(roles: str, applied_ids: set) -> list[dict]:
                 company_l = (row.get("company") or "").lower()
                 if any(ig in company_l for ig in IGNORED_COMPANIES):
                     continue
+                if not _is_us_job(row):
+                    non_us += 1
+                    continue
                 if not _is_fresh(row):
                     stale += 1
                     continue
                 seen_links.add(link)
                 jobs.append(row)
+
+    if non_us:
+        print(f"[i] Skipped {non_us} non-US job(s)")
 
     if stale:
         print(f"[i] Skipped {stale} stale job(s) older than {MAX_QUEUE_AGE_DAYS}d")
@@ -695,14 +731,13 @@ async def click_next(page: Page) -> bool:
 # ── Step fillers ───────────────────────────────────────────────────────────────
 
 async def _select_phone_device_type(page: Page) -> None:
-    """Click the Workday phone-type button dropdown and pick Mobile."""
-    try:
-        btn = page.locator('button[name="phoneType"]').first
-        if not await btn.is_visible(timeout=3000):
-            return
-        await btn.click()
-        await page.wait_for_timeout(600)
-        # Options appear as buttons or divs in a listbox — try both
+    """Click the Workday phone-type button dropdown and pick Mobile.
+
+    Covers both button[name='phoneType'] (most tenants) and labeled
+    listbox buttons (e.g. USAA uses a standard listbox button inside a
+    form field labeled 'Phone Device Type').
+    """
+    async def _pick_mobile_from_open_listbox() -> bool:
         for sel in [
             '[role="listbox"] button:has-text("Mobile")',
             '[role="option"]:has-text("Mobile")',
@@ -713,15 +748,64 @@ async def _select_phone_device_type(page: Page) -> None:
             opt = page.locator(sel).first
             if await opt.count() > 0 and await opt.is_visible(timeout=1500):
                 await opt.click()
-                return
-        # Fallback: any visible element containing exactly "Mobile"
+                return True
         opts = await page.locator('[role="listbox"] *').all()
         for o in opts:
             try:
                 txt = (await o.inner_text()).strip()
                 if txt == "Mobile":
                     await o.click()
+                    return True
+            except Exception:
+                continue
+        return False
+
+    try:
+        # 1) Canonical selector used by most Workday tenants
+        btn = page.locator('button[name="phoneType"]').first
+        if await btn.is_visible(timeout=2000):
+            cur = (await btn.inner_text()).strip().lower()
+            if cur and cur not in ("select one", ""):
+                return  # already set
+            await btn.click()
+            await page.wait_for_timeout(600)
+            if await _pick_mobile_from_open_listbox():
+                return
+    except Exception:
+        pass
+
+    try:
+        # 2) USAA / some tenants: find the first unanswered listbox button
+        #    whose ancestor form-field contains "Phone Device Type".
+        btns = await page.locator(
+            'button[aria-haspopup="listbox"], button[aria-haspopup="true"]'
+        ).all()
+        for b in btns:
+            try:
+                if not await b.is_visible(timeout=500):
+                    continue
+                cur = (await b.inner_text()).strip().lower()
+                if cur and cur not in ("select one", ""):
+                    continue  # already answered
+                container = b.locator(
+                    'xpath=ancestor::*[contains(@data-automation-id,"formField")][1]'
+                )
+                if not await container.count():
+                    continue
+                ctxt = (await container.inner_text()).lower()
+                if "phone device type" not in ctxt and "device type" not in ctxt:
+                    continue
+                await b.click(timeout=3000)
+                await page.wait_for_timeout(600)
+                if await _pick_mobile_from_open_listbox():
                     return
+                # Fallback to Other if Mobile not found
+                fallback = page.locator('[role="option"]:has-text("Other")').first
+                if await fallback.count() and await fallback.is_visible(timeout=800):
+                    await fallback.click()
+                    return
+                await page.keyboard.press("Escape")
+                break
             except Exception:
                 continue
     except Exception:
@@ -1058,6 +1142,19 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
     ll = label.lower().strip()
     info = INFO
 
+    # ── Language proficiency (checked before work-auth/sponsorship rules because
+    #    some containers include a later sponsorship question whose "now or in the
+    #    future" wording would otherwise steal the match) ──────────────────────
+    # Cardinal Health: "Please indicate below your proficiency with the English language"
+    if re.search(r'indicate.*proficiency|proficiency.{0,40}english|english.{0,40}proficiency|primary language.{0,80}proficiency|proficiency.{0,40}primary language', ll):
+        return "Fluent"
+    # Phone device type → Mobile (USAA, Citi, and others use a listbox for this)
+    if re.search(r'\bphone device type\b|\bdevice type\b', ll):
+        return "Mobile"
+    # "I confirm that my response/information above is true and accurate" → Yes
+    if re.search(r'i confirm.{0,60}(response|information|answer|statement).{0,30}(true|accurate)|confirm.{0,30}above.{0,30}(true|accurate)', ll):
+        return "Yes"
+
     # ── Work authorization ────────────────────────────────────────────────────
     if re.search(r'legally authorized|authorized to work|legally eligible|eligible to work|residence or work permit|work permit|legal right to work|right to work|verify.*legal right', ll):
         return info.get("work_authorized", "Yes")
@@ -1069,7 +1166,14 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
         return "Yes"
     if re.search(r'willing to work on-?site|work on-?site|\bon-?site\b|willing to work in (the )?office', ll):
         return "Yes"
-    if re.search(r'federal government|defense health|\bdha\b|political appointee|served in the military', ll):
+    # "U.S. Federal Government Employment" (Booz Allen q5) has long options like
+    # "I have never been employed by the U.S. Federal Government." — return a
+    # prefix that matches it; for simple Yes/No variants "No" would be correct
+    # but the prefix also starts with a word boundary and won't match Yes/No.
+    if re.search(r'u\.?s\.? federal government employ|federal government employ|dha\b|defense health', ll):
+        return "I have never been employed by the U"
+    # Generic "are you a government employee / political appointee" → No
+    if re.search(r'political appointee|served in the military', ll):
         return "No"
     if re.search(r'government agency|state[- ]owned entity|state owned', ll):
         return "No"
@@ -1104,6 +1208,39 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
         return info.get("work_status", "Permanent Resident")
     if re.search(r'how many years|years of .{0,40}experience|years.*experience.*do you have', ll):
         return "__YEARS_2PLUS__"
+
+    # ── Citizenship / clearance / notice ──────────────────────────────────────
+    if re.search(r'u\.?s\.? citizen|are you a citizen', ll):
+        # Options include "Yes", "No", "US Permanent Resident" — pick resident
+        return "US Permanent Resident"
+    if re.search(r'security clearance', ll):
+        return "I have never been cleared"
+    if re.search(r'notice period|notice to.*employer|two.week notice|2.week notice', ll):
+        return "2 weeks"
+
+    # ── Language proficiency ──────────────────────────────────────────────────
+    # Workday "Languages" section: Language dropdown → English, Overall → Fluent
+    if re.search(r'^language\b', ll):
+        return "English"
+    if re.search(r'^overall\b|proficiency|fluency', ll):
+        return "Fluent"
+
+    # ── Background / consumer-report consent ─────────────────────────────────
+    if re.search(r'consumer report|background.*report|credit.*report|investigative.*report|report.*disclosure', ll):
+        # Pick the non-Oklahoma consent option (prefix matched via contains mode)
+        return "Non-Oklahoma"
+
+    # ── "Non-compete / IP agreement?" (numbered questions like BAH uses) ──────
+    if re.search(r'entered into any agreement|non.?compete agreement in connection', ll):
+        return "No"
+    if re.search(r'acceptance of employment.*violate|offer.*violate.*agreement', ll):
+        return "No"
+    # "To the best of your knowledge, are/is ..." → Not to my knowledge
+    if re.search(r'to the best of your knowledge', ll):
+        return "Not to my knowledge"
+    # State/Local/Non-US Government Employment (Booz Allen question 6)
+    if re.search(r'state.*local.*non.?u\.?s\.?.*government|non.?u\.?s\.?.*government.*employ', ll):
+        return "I have never been employed by a"
 
     # ── Contact info — ONLY for short field labels, so words like "State" inside a
     #    long screening question (e.g. "…Community and State") don't false-match. ──
@@ -2469,9 +2606,19 @@ async def main() -> None:
                 # (or the user closing a window) never affects the others.
                 browser = None
                 try:
+                    headless_args = [
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--disable-setuid-sandbox",
+                        "--disable-extensions",
+                        "--disable-background-networking",
+                        "--disable-default-apps",
+                        "--no-first-run",
+                    ] if HEADLESS else []
                     browser = await pw.chromium.launch(
                         headless=HEADLESS,
-                        args=["--no-sandbox", "--disable-dev-shm-usage"] if HEADLESS else [],
+                        args=headless_args,
                         slow_mo=0 if HEADLESS else 60,
                     )
                     context = await browser.new_context(**ctx_kwargs)
