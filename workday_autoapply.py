@@ -871,6 +871,16 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
         return "No"
     if re.search(r'previously worked|ever worked for|worked for .{0,30}\b(before|previously)\b|former (employee|contractor)|previously (employed|been employed)', ll):
         return "No"
+    # Relative / family member employed here. If the prompt says to type "none"
+    # when the answer is no, fill "none"; otherwise it's a Yes/No → No.
+    if re.search(r'(relative|family member|immediate family).{0,60}(work|employ)', ll) or \
+       re.search(r'(do you have|any).{0,30}(relative|family member).{0,40}(employ|work)', ll):
+        if re.search(r"type\b.{0,6}none|enter\b.{0,6}none|provide .{0,30}name", ll):
+            return "none"
+        return "No"
+    # Type of employment desired (Full-time/Part-time/...) → Full-time
+    if re.search(r'type of employment|employment (type|desired)|desired employment|employment status (desired|preference)', ll):
+        return "Full-time"
     if re.search(r"enter\b.{0,6}n/?a|please enter n/?a|if not a current|if not applicable", ll):
         return "N/A"
     # "Do you have … experience …" questions → Yes (must come before the
@@ -1162,21 +1172,58 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
                         opt = cand
                         break
             elif mode == "years2plus":
-                # Pick an option whose range starts at 2+ ("2-3", "2+", "2 to 5", "2 or more")
+                # Choose the experience bracket that contains the profile's years
+                # value (default 2). Handles numeric ranges ("2-3", "2+", "2 to 5")
+                # and textual ranges ("More than 1 year but less than 3 years",
+                # "Less than 1 year", "No experience", "More than 10 years").
+                try:
+                    target = float(INFO.get("years_experience", "2") or "2")
+                except Exception:
+                    target = 2.0
                 all_opts = await opts.all()
                 texts = []
                 for o in all_opts:
                     try:
-                        texts.append((o, (await o.inner_text()).strip()))
+                        t = (await o.inner_text()).strip()
                     except Exception:
-                        pass
-                for pat in [r'^\s*2\s*[-+]', r'^\s*2\s*(to|or)\b', r'^\s*2\b', r'\b2\s*[-+]', r'\b2\b']:
-                    for o, t in texts:
-                        if t and re.search(pat, t, re.I):
-                            opt = o
-                            break
-                    if opt is not None:
+                        t = ""
+                    if t and t.lower() != "select one":
+                        texts.append((o, t))
+
+                def _bounds(t: str):
+                    tl = t.lower()
+                    nums = [float(n) for n in re.findall(r'\d+(?:\.\d+)?', t)]
+                    if re.search(r'no experience|none|n/?a', tl) or not nums:
+                        return (0.0, 0.0) if re.search(r'no experience|none', tl) else None
+                    if re.search(r'less than|under|up to|below|fewer', tl) and "more than" not in tl:
+                        return (0.0, nums[0])
+                    if re.search(r'more than|over|above|greater|at least|\+|or more', tl) and len(nums) == 1:
+                        return (nums[0], 99.0)
+                    if len(nums) >= 2:
+                        return (min(nums), max(nums))
+                    return (nums[0], nums[0])
+
+                # 1) bracket that strictly contains the target
+                for o, t in texts:
+                    b = _bounds(t)
+                    if b and b[0] <= target <= b[1]:
+                        opt = o
                         break
+                # 2) else the lowest bracket whose lower bound is >= target
+                #    (e.g. target 2 with brackets 1-3 missing → pick 3-5)
+                if opt is None:
+                    cand = sorted(
+                        ((o, t, _bounds(t)) for o, t in texts if _bounds(t)),
+                        key=lambda x: x[2][0],
+                    )
+                    above = [c for c in cand if c[2][1] >= target]
+                    if above:
+                        opt = above[0][0]
+                    elif cand:
+                        opt = cand[-1][0]  # highest available
+                # 3) last resort: first real option
+                if opt is None and texts:
+                    opt = texts[0][0]
             elif mode == "salaryrange":
                 # Options are salary brackets ("$50,000 - $74,999", "$75,000+",
                 # "Less than $50,000"). Pick the bracket that contains `want`,
@@ -1266,7 +1313,14 @@ async def fill_checkbox_questions(page: Page, answers: dict | None = None) -> No
                 continue
             qtext = (await grp.inner_text()).strip()
             profile_ans = _answer_from_profile(qtext, answers)
-            want = profile_ans if (profile_ans and profile_ans.lower() in ("yes", "no")) else "No"
+            # Honor a concrete profile answer (Yes/No or a specific option like
+            # "Full-time"); only fall back to "No" when there's no usable answer.
+            if profile_ans and profile_ans not in (
+                "__MASTERS__", "__YEARS_2PLUS__", "__DECLINE__", "__HEAR_ABOUT_US__"
+            ):
+                want = profile_ans
+            else:
+                want = "No"
             # Match exact, or starts-with (e.g. "No, or I prefer not to identify"),
             # and for "No" also the decline-style options.
             if want.lower() == "no":
