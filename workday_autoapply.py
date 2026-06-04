@@ -2033,16 +2033,25 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
         except Exception:
             errs = []
 
-        # No-progress guard: if the same step shows the same blocking errors on
-        # consecutive iterations, we're stuck on a field we can't fill — bail
-        # early instead of burning all 20 iterations.
-        sig = (step, tuple(sorted(errs))[:5]) if errs else None
-        if sig and sig == stuck_sig:
+        # No-progress guard: if the same step (heading + page body fingerprint)
+        # repeats on consecutive iterations, we're stuck — either on a field we
+        # can't fill, or on a step whose Next click doesn't advance. Bail early
+        # instead of burning all 20 iterations.
+        try:
+            body_now = (await page.evaluate("document.body.innerText")) or ""
+        except Exception:
+            body_now = ""
+        body_fp = re.sub(r'\s+', ' ', body_now)[:600]
+        sig = (step, tuple(sorted(errs))[:5], body_fp)
+        if sig == stuck_sig:
             stuck_count += 1
             if stuck_count >= 2:
-                blocking = "; ".join(errs[:3])[:160]
-                print(f"  [!] No progress on '{step}' — blocked by: {blocking}")
-                return "needs_review", f"stuck_field:{blocking}"
+                if errs:
+                    blocking = "; ".join(errs[:3])[:160]
+                    print(f"  [!] No progress on '{step or '(unknown)'}' — blocked by: {blocking}")
+                    return "needs_review", f"stuck_field:{blocking}"
+                print(f"  [!] No progress on '{step or '(unknown)'}' — Next not advancing")
+                return "needs_review", f"stuck_no_advance:{step or 'unknown'}"
         else:
             stuck_sig = sig
             stuck_count = 0
