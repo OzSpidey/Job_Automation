@@ -82,6 +82,8 @@ HEADLESS     = os.environ.get("HEADLESS", "true").lower() == "true"
 MAX_APPLY    = int(os.environ.get("MAX_APPLY", "20"))
 CONCURRENCY  = max(1, int(os.environ.get("WD_CONCURRENCY", "1")))  # apps in parallel
 MAX_QUEUE_AGE_DAYS = int(os.environ.get("WD_MAX_AGE_DAYS", "2"))   # skip jobs older than this
+# Companies to never apply to (clearance-required / not wanted)
+IGNORED_COMPANIES = {"booz allen", "guidehouse", "leidos"}
 
 EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
@@ -197,6 +199,9 @@ def build_queue(roles: str, applied_ids: set) -> list[dict]:
             for row in csv.DictReader(fh):
                 link = (row.get("link") or "").strip()
                 if not link or link in seen_links or link in applied_ids:
+                    continue
+                company_l = (row.get("company") or "").lower()
+                if any(ig in company_l for ig in IGNORED_COMPANIES):
                     continue
                 if not _is_fresh(row):
                     stale += 1
@@ -908,15 +913,13 @@ async def upload_resume(page: Page) -> bool:
         print(f"  [!] File chooser error: {e}")
     return False
 
-_ROLE_TITLE = {
-    "da": "Data Analyst", "de": "Data Engineer", "bi": "Business Intelligence Analyst",
-}
+def _exp_title_for(job_title: str) -> str:
+    """Work-experience job title to use, based on the ROLE BEING APPLIED TO:
+    a Data Engineer posting → "Data Engineer"; everything else (DA, BI) →
+    "Data Analyst". (Per user: "Data Engineer" only for DE roles.)"""
+    return "Data Engineer" if "engineer" in (job_title or "").lower() else "Data Analyst"
 
-def _role_title() -> str:
-    first = (ROLES_ENV.split(",")[0] if ROLES_ENV else "").strip()
-    return _ROLE_TITLE.get(first, "Data Analyst")
-
-async def fill_my_experience(page: Page) -> None:
+async def fill_my_experience(page: Page, exp_title: str = "Data Analyst") -> None:
     await upload_resume(page)
     info = INFO
     # LinkedIn and GitHub/Portfolio — only if field is visible and empty
@@ -929,7 +932,7 @@ async def fill_my_experience(page: Page) -> None:
         'input[aria-label*="GitHub" i]',
         'input[aria-label*="Portfolio" i]',
         'input[placeholder*="website" i]')
-    await fill_work_experience(page)
+    await fill_work_experience(page, exp_title)
     await fill_education(page)
 
 _MONTHS = ["January", "February", "March", "April", "May", "June", "July",
@@ -972,16 +975,16 @@ async def _fill_exp_date(page: Page, which: str, ym: str) -> None:
     except Exception:
         pass
 
-async def fill_work_experience(page: Page) -> None:
-    """Fill a work-experience entry (job title role-aware, company, start/end dates)
-    if the section is present. Only fills empty fields."""
+async def fill_work_experience(page: Page, exp_title: str = "Data Analyst") -> None:
+    """Fill a work-experience entry (job title from the role applied to, company,
+    start/end dates) if the section is present. Only fills empty fields."""
     jt = page.locator('input[id*="jobTitle" i], [data-automation-id="jobTitle"]').first
     if not (await jt.count() and await jt.is_visible(timeout=1000)):
         return
     info = INFO
     exp_list = info.get("experience") or []
     exp = exp_list[0] if exp_list else {}
-    title   = exp.get("title") or _role_title()
+    title   = exp_title
     company = exp.get("company") or "Atlas SP"
     start   = exp.get("start") or "2025-01"
     end     = exp.get("end") or "2025-08"
@@ -1513,6 +1516,22 @@ async def fill_checkbox_questions(page: Page, answers: dict | None = None) -> No
             if already:
                 continue
             qtext = (await grp.inner_text()).strip()
+            ql = qtext.lower()
+
+            # Work-arrangement "select all that apply" → tick Remote + Hybrid
+            if re.search(r'work arrangement|work setting|work model|prefer.*(remote|hybrid|on-?site)|remote.*hybrid|hybrid.*remote', ql):
+                ticked = False
+                for opt in ("Hybrid", "Remote"):
+                    lbl = grp.locator('label').filter(
+                        has_text=re.compile(rf'\b{opt}\b', re.I)
+                    ).first
+                    if await lbl.count() and await lbl.is_visible(timeout=1000):
+                        await lbl.click(timeout=4000)
+                        await page.wait_for_timeout(200)
+                        ticked = True
+                if ticked:
+                    continue  # handled this group
+
             profile_ans = _answer_from_profile(qtext, answers)
             # Honor a concrete profile answer (Yes/No or a specific option like
             # "Full-time"); only fall back to "No" when there's no usable answer.
@@ -1868,6 +1887,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
         return "skipped", "no_url"
 
     unknowns: list[str] = []
+    exp_title = _exp_title_for(job.get("title", ""))  # work-experience title for THIS role
 
     # Navigate
     try:
@@ -2131,7 +2151,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             await fill_my_information(page)
             await fill_radio_questions(page, answers)
         elif any(k in step for k in ("experience", "background", "resume", "my experience")):
-            await fill_my_experience(page)
+            await fill_my_experience(page, exp_title)
         elif any(k in step for k in ("voluntary", "disclos", "eeo", "equal opportunity", "diversity")):
             pass  # Prefer not to disclose — just click Next
         elif any(k in step for k in ("question", "additional", "application question", "screening")):
@@ -2144,7 +2164,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
         else:
             # Unknown step — try all fillers; each is a no-op if fields aren't present
             await fill_my_information(page)
-            await fill_my_experience(page)
+            await fill_my_experience(page, exp_title)
             await fill_mandatory_listbox_dropdowns(page, answers)
             await fill_checkbox_questions(page, answers)
             await fill_radio_questions(page, answers)
@@ -2430,11 +2450,6 @@ async def main() -> None:
     total = len(queue)
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(
-            headless=HEADLESS,
-            args=["--no-sandbox", "--disable-dev-shm-usage"] if HEADLESS else [],
-            slow_mo=0 if HEADLESS else 60,
-        )
 
         async def run_one(i: int, job: dict) -> None:
             title   = job.get("title", "Unknown")
@@ -2442,21 +2457,29 @@ async def main() -> None:
             link    = job.get("link", "")
             async with sem:
                 print(f"\n[{i+1}/{total}] {title} @ {company}")
-                # Each application gets its own isolated context (separate cookies)
-                context = await browser.new_context(**ctx_kwargs)
-                page = await context.new_page()
-                page.set_default_timeout(8000)
+                # Each application gets its OWN browser, so one crashing/closing
+                # (or the user closing a window) never affects the others.
+                browser = None
                 try:
+                    browser = await pw.chromium.launch(
+                        headless=HEADLESS,
+                        args=["--no-sandbox", "--disable-dev-shm-usage"] if HEADLESS else [],
+                        slow_mo=0 if HEADLESS else 60,
+                    )
+                    context = await browser.new_context(**ctx_kwargs)
+                    page = await context.new_page()
+                    page.set_default_timeout(8000)
                     status, notes = await apply_to_job(page, job, answers)
                 except PlaywrightTimeout as e:
                     status, notes = "error", f"timeout:{str(e)[:60]}"
                 except Exception as e:
                     status, notes = "error", f"{type(e).__name__}:{str(e)[:60]}"
                 finally:
-                    try:
-                        await context.close()
-                    except Exception:
-                        pass
+                    if browser is not None:
+                        try:
+                            await browser.close()
+                        except Exception:
+                            pass
 
                 print(f"  → [{company}] {status}" + (f"  |  {notes}" if notes else ""))
 
@@ -2479,8 +2502,11 @@ async def main() -> None:
                     append_csv(row)
                     save_answers(answers)
 
-        await asyncio.gather(*(run_one(i, job) for i, job in enumerate(queue)))
-        await browser.close()
+        # return_exceptions=True → one task failing never aborts the others
+        await asyncio.gather(
+            *(run_one(i, job) for i, job in enumerate(queue)),
+            return_exceptions=True,
+        )
 
     # Summary
     n_applied = sum(1 for r in results if r["status"] == "applied")
