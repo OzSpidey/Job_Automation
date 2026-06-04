@@ -160,9 +160,14 @@ def build_queue(roles: str, applied_ids: set) -> list[dict]:
         files = []
         for r in role_list:
             slug = _ROLE_SLUG.get(r, r)
-            # Glob both the full slug name (new) and the short code (old legacy files)
+            # Full slug name (new) + short-code legacy files. The legacy patterns
+            # require an underscore/exact match so "da" doesn't also match
+            # "data_engineer" (both start with "da").
+            patterns = [f"workday_jobs_{slug}*.csv"]
+            if r != slug:
+                patterns += [f"workday_jobs_{r}_*.csv", f"workday_jobs_{r}.csv"]
             seen = set()
-            for pattern in [f"workday_jobs_{slug}*.csv", f"workday_jobs_{r}*.csv"]:
+            for pattern in patterns:
                 for f in sorted(glob.glob(str(csv_dir / pattern))):
                     if f not in seen:
                         seen.add(f)
@@ -767,8 +772,10 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
     info = INFO
 
     # ── Work authorization ────────────────────────────────────────────────────
-    if re.search(r'legally authorized|authorized to work|legally eligible|eligible to work|residence or work permit|work permit', ll):
+    if re.search(r'legally authorized|authorized to work|legally eligible|eligible to work|residence or work permit|work permit|legal right to work|right to work|verify.*legal right', ll):
         return info.get("work_authorized", "Yes")
+    if re.search(r'at least 18|over 18|18 years|age of 18|are you 18|legal working age', ll):
+        return "Yes"
     if re.search(r'require sponsorship|need.*sponsorship|will you.*sponsor|now or in the future', ll):
         return info.get("needs_sponsorship", "No")
     if re.search(r'reside.*(location|area)|commutable distance|live.*within.*commut|located within|within commut', ll):
@@ -1519,10 +1526,24 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                 await _shot(page, f"step_{step_num+1}_after_auth")
                 continue
             elif auth_attempts < 5:
-                # Still on an auth page after creating → the account was created but
-                # needs email verification, then sign-in (e.g. Corewell). Fetch the
-                # verification link via IMAP, open it, re-enter, then SIGN IN.
                 auth_attempts += 1
+                # If a sign-in form is right here (email+password visible, no verify),
+                # the account exists — just sign in (e.g. U-Haul: create → sign-in form).
+                has_signin_form = await page.locator(
+                    '[data-automation-id="password"]:visible, input[type="password"]:visible'
+                ).count() > 0
+                has_verify_field = await page.locator(
+                    '[data-automation-id="verifyPassword"]:visible, input[name*="erify" i]:visible'
+                ).count() > 0
+                if has_signin_form and not has_verify_field:
+                    print("  → Sign-in form present — signing in")
+                    await handle_auth(page, prefer_signin=True)
+                    await page.wait_for_timeout(2500)
+                    await page.wait_for_load_state("domcontentloaded")
+                    await _shot(page, f"step_{step_num+1}_after_auth")
+                    continue
+                # Otherwise the account needs email verification, then sign-in (e.g.
+                # Corewell). Fetch the verification link via IMAP, open it, re-enter.
                 link = fetch_verification_link(tenant_hint=tenant)
                 if link:
                     print(f"  [+] Got verification link from inbox — opening it")
