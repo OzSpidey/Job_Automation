@@ -753,12 +753,33 @@ async def fill_my_information(page: Page) -> None:
             except Exception:
                 pass
             digits = re.sub(r'\D', '', cur)
-            if not cur or len(digits) >= 7:  # empty or a phone-number-like value
+            # Empty, or polluted with a phone-number-like value → (re)select the
+            # US calling code. The field is a Workday prompt: type → pick option.
+            if not cur or len(digits) >= 7:
                 await ci.click(timeout=3000)
                 await ci.press("Control+a")
                 await ci.press("Delete")
-                await page.keyboard.type("+1")
-                await ci.press("Tab")
+                await page.wait_for_timeout(200)
+                picked = False
+                for term in ["United States of America", "United States"]:
+                    await page.keyboard.type(term)
+                    await page.wait_for_timeout(900)
+                    opt = page.locator(
+                        '[role="option"], [data-automation-id="promptOption"], '
+                        'li[role="option"], div[role="option"]'
+                    ).filter(has_text=re.compile(r"United States", re.I)).first
+                    if await opt.count() and await opt.is_visible(timeout=1200):
+                        await opt.click(timeout=3000)
+                        picked = True
+                        break
+                    # clear and try the next term
+                    await ci.press("Control+a")
+                    await ci.press("Delete")
+                    await page.wait_for_timeout(200)
+                if not picked:
+                    # Fall back to typing the bare code and blurring
+                    await page.keyboard.type("+1")
+                    await ci.press("Tab")
     except Exception:
         pass
     # Phone NUMBER — target the number field specifically, never the code field.
