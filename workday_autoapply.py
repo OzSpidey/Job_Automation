@@ -234,6 +234,70 @@ async def try_fill(page: Page, value: str, *selectors: str, overwrite: bool = Fa
             continue
     return False
 
+async def _fill_text_verified(page: Page, value: str, selectors: list[str],
+                              fid: str = "") -> bool:
+    """Fill a text/textarea question field robustly and verify the value stuck.
+
+    Workday's React inputs sometimes ignore Playwright's .fill() (the framework
+    keeps its own state), so the field reads empty on validation even though it
+    looked filled. We try .fill(), then keyboard typing, and finally a JS value
+    set with input/change events dispatched — verifying input_value() each time.
+    """
+    if not value:
+        return False
+    # Prefer the field's own id (most specific) ahead of the other selectors.
+    ordered = ([f'#{fid}'] if fid else []) + [s for s in selectors if s != f'#{fid}']
+    for sel in ordered:
+        try:
+            loc = page.locator(sel).first
+            if await loc.count() == 0 or not await loc.is_visible(timeout=1500):
+                continue
+            try:
+                if (await loc.input_value()).strip():
+                    return True  # already populated
+            except Exception:
+                pass
+            # 1) standard fill
+            try:
+                await loc.fill(value)
+                if (await loc.input_value()).strip() == value:
+                    return True
+            except Exception:
+                pass
+            # 2) click + type (drives React onChange)
+            try:
+                await loc.click(timeout=4000)
+                await loc.press("Control+a")
+                await loc.press("Delete")
+                await page.keyboard.type(value, delay=15)
+                await loc.press("Tab")
+                if (await loc.input_value()).strip() == value:
+                    return True
+            except Exception:
+                pass
+            # 3) JS set value + dispatch native events
+            try:
+                await loc.evaluate(
+                    """(el, v) => {
+                        const proto = el.tagName === 'TEXTAREA'
+                            ? window.HTMLTextAreaElement.prototype
+                            : window.HTMLInputElement.prototype;
+                        const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+                        setter.call(el, v);
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                        el.dispatchEvent(new Event('blur', { bubbles: true }));
+                    }""",
+                    value,
+                )
+                if (await loc.input_value()).strip() == value:
+                    return True
+            except Exception:
+                pass
+        except Exception:
+            continue
+    return False
+
 async def combobox_select(page: Page, value: str, *selectors: str) -> bool:
     """Handle both native <select> and Workday's custom combobox widgets."""
     if not value:
@@ -1530,25 +1594,7 @@ async def fill_application_questions(page: Page, answers: dict, unknowns: list[s
         if answer in ("__DECLINE__",):
             continue  # decline handled only for dropdowns
         if ftype in ("text", "email", "tel", "number", "textarea", "search", "spinbutton", ""):
-            filled = await try_fill(page, str(answer), *sels, overwrite=False)
-            if not filled and fid:
-                # Fallback: some Workday text/textarea fields label via
-                # aria-labelledby (no aria-label) and the Playwright fill missed
-                # them. Target the element by id and type into it directly.
-                try:
-                    loc = page.locator(f'#{fid}').first
-                    if await loc.count() and await loc.is_visible(timeout=1500):
-                        cur = ""
-                        try:
-                            cur = await loc.input_value()
-                        except Exception:
-                            pass
-                        if not cur:
-                            await loc.click(timeout=4000)
-                            await loc.fill(str(answer))
-                            filled = True
-                except Exception:
-                    pass
+            filled = await _fill_text_verified(page, str(answer), sels, fid)
             if not filled:
                 print(f"  [!] Could not fill text field '{label[:40]}' "
                       f"(aid={aid!r} id={fid!r})")
