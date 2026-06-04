@@ -871,7 +871,7 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
         return "No"
     if re.search(r'previously worked|ever worked for|worked for .{0,30}\b(before|previously)\b|former (employee|contractor)|previously (employed|been employed)', ll):
         return "No"
-    if re.search(r'enter n/?a|please enter n/?a|if not a current', ll):
+    if re.search(r"enter\b.{0,6}n/?a|please enter n/?a|if not a current|if not applicable", ll):
         return "N/A"
     # "Do you have … experience …" questions → Yes (must come before the
     # years-of-experience rule below, which would otherwise return a number).
@@ -1098,6 +1098,11 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
                 mode = "decline"
             elif profile_ans and profile_ans.lower() in ("yes", "no"):
                 mode, want = "exact", profile_ans
+            elif profile_ans and re.fullmatch(r"\d{4,7}", profile_ans.strip()):
+                # Numeric profile answer (e.g. salary 75000) on a listbox →
+                # the options are almost always ranges, so pick the bracket
+                # that contains the number rather than an exact match.
+                mode, want = "salaryrange", profile_ans.strip()
             elif profile_ans:
                 mode, want = "contains", profile_ans
             else:
@@ -1172,6 +1177,35 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
                             break
                     if opt is not None:
                         break
+            elif mode == "salaryrange":
+                # Options are salary brackets ("$50,000 - $74,999", "$75,000+",
+                # "Less than $50,000"). Pick the bracket that contains `want`,
+                # else the highest bracket whose lower bound is <= want, else the
+                # first real option.
+                target = int(want)
+                all_opts = await opts.all()
+                texts = []
+                for o in all_opts:
+                    try:
+                        t = (await o.inner_text()).strip()
+                    except Exception:
+                        t = ""
+                    if t and t.lower() != "select one":
+                        nums = [int(n.replace(",", "")) for n in re.findall(r'\d[\d,]{3,}', t)]
+                        texts.append((o, t, nums))
+                best = None
+                for o, t, nums in texts:
+                    if len(nums) >= 2 and nums[0] <= target <= nums[1]:
+                        best = o
+                        break
+                    if len(nums) == 1:
+                        if re.search(r'less than|under|up to|below', t, re.I) and target <= nums[0]:
+                            best = o
+                        elif re.search(r'\+|more|above|over|greater', t, re.I) and target >= nums[0]:
+                            best = o
+                if best is None and texts:
+                    best = texts[0][0]  # first real option as a safe fallback
+                opt = best
             elif mode == "contains":
                 # Word-boundary match so "Male" doesn't also match "Female"
                 opt = opts.filter(has_text=re.compile(rf'\b{re.escape(want)}\b', re.I)).first
@@ -1561,6 +1595,8 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
     auth_attempts = 0
     verify_email_sent = False
     verify_waits = 0
+    stuck_sig = None
+    stuck_count = 0
     for step_num in range(20):
         await wait_for_content(page)
         step = await current_step(page)
@@ -1778,7 +1814,21 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             for e in errs[:8]:
                 print(f"     [err] {e}")
         except Exception:
-            pass
+            errs = []
+
+        # No-progress guard: if the same step shows the same blocking errors on
+        # consecutive iterations, we're stuck on a field we can't fill — bail
+        # early instead of burning all 20 iterations.
+        sig = (step, tuple(sorted(errs))[:5]) if errs else None
+        if sig and sig == stuck_sig:
+            stuck_count += 1
+            if stuck_count >= 2:
+                blocking = "; ".join(errs[:3])[:160]
+                print(f"  [!] No progress on '{step}' — blocked by: {blocking}")
+                return "needs_review", f"stuck_field:{blocking}"
+        else:
+            stuck_sig = sig
+            stuck_count = 0
 
         if not await click_next(page):
             # Try submit directly (last step without clear heading)
