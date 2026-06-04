@@ -2294,6 +2294,23 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                 company = job.get("company", "")
                 title = job.get("title", "")
                 tenant = (url.split("//", 1)[-1].split(".", 1)[0]) if url else ""
+                # Click "Send a new verification email" / "Resend" link if present — this
+                # triggers a fresh verification email even if the old one was already read.
+                try:
+                    resend = page.locator(
+                        'a:has-text("send a new verification email"), '
+                        'a:has-text("resend verification"), '
+                        'button:has-text("Resend"), '
+                        '[data-automation-id*="resend" i], '
+                        'a:has-text("request a new"), '
+                        'a:has-text("send another")'
+                    ).first
+                    if await resend.count() and await resend.is_visible(timeout=2000):
+                        await resend.click(timeout=4000)
+                        await page.wait_for_timeout(3000)
+                        print("  [+] Clicked 'resend verification' — waiting for email")
+                except Exception:
+                    pass
                 # Try to auto-click the verification link from the inbox (IMAP)
                 link = await asyncio.to_thread(fetch_verification_link, tenant)
                 if link:
@@ -2326,10 +2343,15 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                     if verify_waits > 3:
                         return "needs_review", "verification_failed"
                     continue
-                # No IMAP configured / link not found yet — notify user and wait for manual click
+                # No IMAP configured / link not found yet — notify user.
                 if not verify_email_sent:
                     await asyncio.to_thread(send_verification_email, job.get("company", ""), job.get("title", ""), url)
                     verify_email_sent = True
+                # In headless/CI mode there is no user to click the link — bail immediately
+                # with a clear status so the user knows manual action is needed.
+                if HEADLESS:
+                    print("  [!] Account verification required — manual action needed on osbornelopes.neu@gmail.com")
+                    return "needs_review", "verification_needed:check_email"
                 print("  [!] Account verification required — waiting 30s for manual verification…")
                 await page.wait_for_timeout(30000)
                 await handle_auth(page, prefer_signin=True)
@@ -2445,6 +2467,9 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                     if not verify_email_sent:
                         await asyncio.to_thread(send_verification_email, job.get("company", ""), job.get("title", ""), url)
                         verify_email_sent = True
+                    if HEADLESS:
+                        print("  [!] Verification link not found in IMAP inbox — manual action needed")
+                        return "needs_review", "verification_needed:check_email"
                     print("  [!] Verification email not found yet — waiting 20s…")
                     await page.wait_for_timeout(20000)
                 # Re-enter the application and sign in (account now exists/verified)
@@ -2674,8 +2699,9 @@ def fetch_verification_link(tenant_hint: str = "") -> str | None:
         M.select("INBOX")
         typ, data = M.search(None, "ALL")
         ids = data[0].split()
-        # Newest first, scan the last ~10 messages
-        for num in reversed(ids[-10:]):
+        # Newest first, scan the last ~30 messages (was 10 — increased to find
+        # verification emails that may have arrived in earlier runs)
+        for num in reversed(ids[-30:]):
             typ, msgdata = M.fetch(num, "(RFC822)")
             if not msgdata or not msgdata[0]:
                 continue
@@ -2695,14 +2721,21 @@ def fetch_verification_link(tenant_hint: str = "") -> str | None:
                     body = msg.get_payload(decode=True).decode(errors="replace")
                 except Exception:
                     body = str(msg.get_payload())
-            # Find a Workday verification URL in this email
+            # Find a Workday verification URL in this email.
+            # Workday verification links may be on tenant domains (myworkdayjobs.com)
+            # or the generic workday.com domain — accept both.
             urls = re.findall(r'https?://[^\s"\'<>]+', body)
             for u in urls:
                 lu = u.lower()
-                if "myworkdayjobs" in lu and any(
+                is_wd = "myworkdayjobs" in lu or "workday.com" in lu
+                has_verify_kw = any(
                     k in lu for k in ("verify", "activate", "confirm", "register", "token", "validate")
-                ):
-                    if not tenant_hint or tenant_hint.lower() in lu:
+                )
+                if is_wd and has_verify_kw:
+                    # Accept if no tenant hint, or tenant is in the URL, or it's a
+                    # generic workday.com URL (tenant-agnostic verification endpoint)
+                    if (not tenant_hint or tenant_hint.lower() in lu
+                            or "workday.com" in lu):
                         link = u.replace("&amp;", "&")
                         break
             if link:
