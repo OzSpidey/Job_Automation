@@ -157,9 +157,11 @@ _ROLE_SLUG = {
 
 def build_queue(roles: str, applied_ids: set) -> list[dict]:
     csv_dir = ROOT / "csv"
+    # NEVER read from workday_jobs_all*.csv — always use per-role side-cars only.
+    # "all" is treated the same as "da,de,bi" (the 3 target roles).
     if roles == "all":
-        files = sorted(glob.glob(str(csv_dir / "workday_jobs_all*.csv")))
-    else:
+        roles = "da,de,bi"
+    if True:
         role_list = [r.strip() for r in roles.split(",")]
         files = []
         for r in role_list:
