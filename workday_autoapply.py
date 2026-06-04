@@ -1476,6 +1476,33 @@ async def fill_radio_questions(page: Page, answers: dict | None = None) -> None:
 async def fill_application_questions(page: Page, answers: dict, unknowns: list[str]) -> None:
     await page.wait_for_timeout(800)
 
+    # Diagnostic: dump every text-like input/textarea so we can see how a tenant
+    # marks required fields when the scan misses them (read _wd_text_fields.txt).
+    if DEBUG_SHOTS:
+        try:
+            dump = await page.evaluate("""() => {
+                const out = [];
+                document.querySelectorAll('input, textarea').forEach(el => {
+                    if (['file','hidden','submit','button','checkbox','radio','reset'].includes(el.type)) return;
+                    if (el.offsetParent === null) return;
+                    let lbl = el.getAttribute('aria-label') || '';
+                    const lb = el.getAttribute('aria-labelledby');
+                    if (!lbl && lb) lbl = lb.split(' ').map(id => {const e=document.getElementById(id);return e?e.innerText.trim():'';}).join(' ');
+                    if (!lbl && el.id) { const l=document.querySelector('label[for="'+el.id+'"]'); if (l) lbl=l.innerText.trim(); }
+                    out.push({tag:el.tagName, type:el.type, id:el.id, aid:el.getAttribute('data-automation-id'),
+                              req:el.getAttribute('aria-required'), reqAttr:el.required,
+                              invalid:el.getAttribute('aria-invalid'), val:(el.value||'').slice(0,20),
+                              label:(lbl||'').slice(0,60)});
+                });
+                return out;
+            }""")
+            with open(SHOTS_DIR.parent / "_wd_text_fields.txt", "a", encoding="utf-8") as _f:
+                _f.write(f"\n=== text fields (step) ===\n")
+                for d in dump:
+                    _f.write(f"  {d}\n")
+        except Exception:
+            pass
+
     # Find all currently-empty required fields via JS
     fields = await page.evaluate("""() => {
         const out = [];
@@ -1519,6 +1546,23 @@ async def fill_application_questions(page: Page, answers: dict, unknowns: list[s
                     if (/formField|questionItem|question/i.test(aid)) {
                         const t = (node.innerText || '').trim();
                         if (t) { label = t; break; }
+                    }
+                }
+            }
+            // Final fallback: climb ancestors and take the first one whose own
+            // text (excluding nested controls) reads like a question prompt.
+            // Workday questionnaire textareas (e.g. PacificSource) carry no label
+            // link at all — the prompt sits in a sibling div above the field.
+            if (!label) {
+                let node = el.parentElement;
+                for (let i = 0; i < 10 && node; i++, node = node.parentElement) {
+                    let t = (node.innerText || '').trim();
+                    if (t && t.length >= 8 && t.length < 400) {
+                        // strip option/value noise; keep if it looks like a prompt
+                        if (/[?:]/.test(t) || /\\b(salary|name|describe|explain|list|provide|how|what|do you|are you|have you)\\b/i.test(t)) {
+                            label = t;
+                            break;
+                        }
                     }
                 }
             }
