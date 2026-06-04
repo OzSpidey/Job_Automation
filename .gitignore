@@ -49,3 +49,7 @@ ashby_companies.json
 
 # Claude internal
 .claude/
+
+# Workday auto-apply debug artifacts
+_wd_debug_shots/
+_wd_debug_run.log

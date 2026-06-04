@@ -85,10 +85,32 @@ EMAIL_SENDER   = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 EMAIL_TO       = os.environ.get("EMAIL_TO", "")
 
+# Inbox that receives Workday account-verification emails (the account email used
+# when creating Workday accounts). Used to auto-click the verification link via IMAP.
+VERIFY_IMAP_USER = os.environ.get("WD_VERIFY_IMAP_USER", "")   # e.g. osbornelopes.neu@gmail.com
+VERIFY_IMAP_PASS = os.environ.get("WD_VERIFY_IMAP_PASSWORD", "")  # 16-char Gmail app password
+
 SESSION_FILE = ROOT / "json" / "workday_auth.json"
 APPLIED_LOG  = ROOT / "json" / "workday_applied.json"
 ANSWERS_FILE = ROOT / "json" / "workday_answers.json"
 OUTPUT_CSV   = ROOT / "csv"  / "workday_applied.csv"
+
+# ── Debug screenshots ────────────────────────────────────────────────────────
+DEBUG_SHOTS = os.environ.get("WD_DEBUG_SHOTS", "").lower() in ("1", "true", "yes")
+SHOTS_DIR = ROOT / "_wd_debug_shots"
+_shot_n = [0]
+
+async def _shot(page, label: str) -> None:
+    if not DEBUG_SHOTS:
+        return
+    try:
+        SHOTS_DIR.mkdir(exist_ok=True)
+        _shot_n[0] += 1
+        path = SHOTS_DIR / f"{_shot_n[0]:02d}_{label}.png"
+        await page.screenshot(path=str(path), full_page=True)
+        print(f"  [shot] {path.name}")
+    except Exception as e:
+        print(f"  [shot-err] {label}: {str(e)[:50]}")
 
 # ── Persistence ────────────────────────────────────────────────────────────────
 
@@ -123,6 +145,12 @@ def append_csv(row: dict) -> None:
 
 # ── Queue ──────────────────────────────────────────────────────────────────────
 
+_ROLE_SLUG = {
+    "da":  "data_analyst",
+    "de":  "data_engineer",
+    "bi":  "business_intelligence",
+}
+
 def build_queue(roles: str, applied_ids: set) -> list[dict]:
     csv_dir = ROOT / "csv"
     if roles == "all":
@@ -131,9 +159,14 @@ def build_queue(roles: str, applied_ids: set) -> list[dict]:
         role_list = [r.strip() for r in roles.split(",")]
         files = []
         for r in role_list:
-            # Support both old short codes (de, bi) and new role-label slugs
-            # (data_engineer, business_intelligence, ai_engineer, etc.)
-            files.extend(sorted(glob.glob(str(csv_dir / f"workday_jobs_{r}*.csv"))))
+            slug = _ROLE_SLUG.get(r, r)
+            # Glob both the full slug name (new) and the short code (old legacy files)
+            seen = set()
+            for pattern in [f"workday_jobs_{slug}*.csv", f"workday_jobs_{r}*.csv"]:
+                for f in sorted(glob.glob(str(csv_dir / pattern))):
+                    if f not in seen:
+                        seen.add(f)
+                        files.append(f)
 
     seen_links: set[str] = set()
     jobs: list[dict] = []
@@ -147,7 +180,7 @@ def build_queue(roles: str, applied_ids: set) -> list[dict]:
                 jobs.append(row)
 
     jobs.sort(key=lambda j: j.get("found_on", ""), reverse=True)
-    return jobs[:MAX_APPLY]
+    return jobs
 
 # ── Session management ─────────────────────────────────────────────────────────
 
@@ -171,7 +204,7 @@ async def try_click(page: Page, *selectors: str, timeout: int = 5000) -> bool:
             loc = page.locator(sel).first
             if await loc.count() > 0:
                 await loc.wait_for(state="visible", timeout=timeout)
-                await loc.click()
+                await loc.click(timeout=timeout)
                 return True
         except Exception:
             continue
@@ -235,6 +268,34 @@ async def combobox_select(page: Page, value: str, *selectors: str) -> bool:
             continue
     return False
 
+async def combobox_select_any(page: Page, values: list[str], *selectors: str) -> bool:
+    """Try each value in order, return True on first match."""
+    for value in values:
+        if await combobox_select(page, value, *selectors):
+            return True
+    return False
+
+async def fill_hear_about_us(page: Page) -> bool:
+    """Fill 'How Did You Hear About Us' — click icon, type other, Enter, click the leaf node."""
+    try:
+        await page.locator('.wd-icon-prompts').first.click()
+        await page.wait_for_timeout(600)
+        search = page.locator('[data-automation-id="searchBox"]').first
+        await search.wait_for(state="visible", timeout=4000)
+        await search.fill("other")
+        await search.press("Enter")
+        await page.wait_for_timeout(700)
+        # Click the first result row (promptLeafNode contains the radio + label)
+        leaf = page.locator('[data-automation-id="promptLeafNode"]').first
+        if await leaf.is_visible(timeout=3000):
+            await leaf.click()
+        else:
+            await page.locator('[data-automation-id="radioBtn"]').first.click()
+        await page.wait_for_timeout(400)
+        return True
+    except Exception:
+        return False
+
 async def radio_click(page: Page, answer: str) -> bool:
     """Click a radio button whose label text matches answer (Yes/No style)."""
     for sel in [
@@ -253,51 +314,81 @@ async def radio_click(page: Page, answer: str) -> bool:
 # ── Auth ───────────────────────────────────────────────────────────────────────
 
 async def handle_auth(page: Page) -> bool:
-    """Log in or create Workday account if prompted. Returns True on success."""
+    """Log in or create Workday account if prompted. Returns True on success.
+
+    Routes by FIELD PRESENCE (not body text), so the "Create Account" link on a
+    Sign-In page can't fool it:
+      • verify-password field present  → create account
+      • visible password field present → sign in
+      • only email field present       → two-step: enter email, continue, recurse
+    """
     try:
         email_input = page.locator(
-            '[data-automation-id="email"], input[type="email"][autocomplete*="email"]'
+            '[data-automation-id="email"]:visible, input[type="email"]:visible'
         ).first
-        if not await email_input.is_visible(timeout=5000):
-            return True
+        has_email = await email_input.count() > 0 and await email_input.is_visible(timeout=5000)
     except Exception:
+        has_email = False
+
+    has_verify = await page.locator(
+        '[data-automation-id="verifyPassword"]:visible, '
+        'input[name*="erify" i]:visible, input[id*="erify" i]:visible'
+    ).count() > 0
+    pwd = page.locator(
+        '[data-automation-id="password"]:visible, input[type="password"]:visible'
+    ).first
+    has_pwd = await pwd.count() > 0 and await pwd.is_visible(timeout=2000)
+
+    # No auth fields at all → nothing to do
+    if not has_email and not has_pwd and not has_verify:
         return True
 
-    email = INFO.get("email", "")
-    await email_input.fill(email)
-    await page.wait_for_timeout(500)
+    # ── Create account ──────────────────────────────────────────────────────
+    if has_verify:
+        return await _create_account(page)
 
-    await try_click(page,
-        '[data-automation-id="signInButton"]',
-        'button:has-text("Sign In")',
-        'button:has-text("Continue")',
-        'button[type="submit"]',
-        timeout=6000,
-    )
-    await page.wait_for_timeout(2000)
-    await page.wait_for_load_state("domcontentloaded")
+    # ── Sign in (existing account) ──────────────────────────────────────────
+    if has_pwd:
+        if has_email:
+            cur = ""
+            try:
+                cur = await email_input.input_value()
+            except Exception:
+                pass
+            if not cur:
+                await email_input.fill(INFO.get("email", ""))
+                await page.wait_for_timeout(300)
+        await pwd.fill(WD_PASSWORD)
+        await page.wait_for_timeout(400)
+        await try_click(page,
+            '[data-automation-id="signInButton"]',
+            '[role="button"][aria-label="Sign In"]',
+            'button:has-text("Sign In")',
+            'button[type="submit"]',
+            timeout=6000,
+        )
+        await page.wait_for_timeout(2500)
+        await page.wait_for_load_state("domcontentloaded")
+        return True
 
-    # Existing account — password field
-    try:
-        pwd = page.locator(
-            '[data-automation-id="password"], input[type="password"]'
-        ).first
-        if await pwd.is_visible(timeout=3000):
-            await pwd.fill(WD_PASSWORD)
-            await page.wait_for_timeout(400)
-            await try_click(page,
-                '[data-automation-id="signInButton"]',
-                'button[type="submit"]',
-                'button:has-text("Sign In")',
-                timeout=6000,
-            )
-            await page.wait_for_timeout(2500)
-            await page.wait_for_load_state("domcontentloaded")
-            return True
-    except Exception:
-        pass
+    # ── Two-step: only email field → enter email, continue ──────────────────
+    if has_email:
+        await email_input.fill(INFO.get("email", ""))
+        await page.wait_for_timeout(500)
+        await try_click(page,
+            '[data-automation-id="signInButton"]',
+            '[role="button"][aria-label="Sign In"]',
+            '[role="button"][aria-label="Continue"]',
+            'button:has-text("Sign In")',
+            'button:has-text("Continue")',
+            'button[type="submit"]',
+            timeout=6000,
+        )
+        await page.wait_for_timeout(2000)
+        await page.wait_for_load_state("domcontentloaded")
+        return True
 
-    # New account — Create Account button
+    # New account — Create Account button (fallback)
     try:
         ca = page.locator(
             '[data-automation-id="createAccountButton"], button:has-text("Create Account")'
@@ -310,20 +401,39 @@ async def handle_auth(page: Page) -> bool:
     return True
 
 async def _create_account(page: Page) -> bool:
-    await try_fill(page, INFO.get("first_name", ""),
-        '[data-automation-id="firstName"]', 'input[name*="firstName" i]')
-    await try_fill(page, INFO.get("last_name", ""),
-        '[data-automation-id="lastName"]', 'input[name*="lastName" i]')
-    await try_fill(page, WD_PASSWORD,
-        '[data-automation-id="password"]',
-        'input[type="password"]:not([name*="erif" i]):not([id*="erif" i])')
-    await try_fill(page, WD_PASSWORD,
-        '[data-automation-id="verifyPassword"]',
-        'input[name*="erify" i]', 'input[id*="erify" i]')
+    # Target only VISIBLE fields — Workday often keeps a hidden Sign-In form in the DOM too
+    await try_fill(page, INFO.get("email", ""),
+        '[data-automation-id="email"]:visible', '[data-automation-id="email"]',
+        'input[type="email"]:visible', overwrite=True)
+
+    # Password + verify — click the exact VISIBLE field and type directly
+    for sel in ['[data-automation-id="password"]:visible',
+                '[data-automation-id="verifyPassword"]:visible']:
+        try:
+            fld = page.locator(sel).first
+            await fld.wait_for(state="visible", timeout=5000)
+            await fld.click(timeout=4000)
+            await fld.fill(WD_PASSWORD)
+            print(f"  [+] Filled {sel}")
+        except Exception as e:
+            print(f"  [!] Could not fill {sel}: {str(e)[:50]}")
     await page.wait_for_timeout(400)
+
+    # Tick the "I agree to terms / create account" checkbox if present
+    try:
+        cb = page.locator(
+            '[data-automation-id="createAccountCheckbox"], '
+            'input[type="checkbox"][aria-required="true"]'
+        ).first
+        if await cb.is_visible(timeout=2000):
+            if (await cb.get_attribute("aria-checked")) != "true" and not await cb.is_checked():
+                await cb.click(timeout=4000)
+    except Exception:
+        pass
 
     await try_click(page,
         '[data-automation-id="createAccountButton"]',
+        '[role="button"][aria-label="Create Account"]',
         'button:has-text("Create Account")',
         'button[type="submit"]',
         timeout=6000,
@@ -331,7 +441,14 @@ async def _create_account(page: Page) -> bool:
     await page.wait_for_timeout(2500)
 
     body = (await page.evaluate("document.body.innerText")).lower()
-    if any(kw in body for kw in ["verify", "verification", "check your email", "confirmation link"]):
+    # Detect a REAL email-verification page — precise phrases only.
+    # NOTE: do NOT match bare "verify" — the create-account form itself has a
+    # "Verify New Password" field, which would false-trigger and hang on input().
+    needs_email_verify = any(kw in body for kw in [
+        "check your email", "confirmation link", "verification link",
+        "we sent you", "we've sent", "verify your email",
+    ])
+    if needs_email_verify:
         if HEADLESS:
             print("  [!] Email verification required — needs manual action")
             return False
@@ -342,13 +459,42 @@ async def _create_account(page: Page) -> bool:
 
 # ── Step detection ─────────────────────────────────────────────────────────────
 
+async def wait_for_content(page: Page, timeout: int = 14000) -> None:
+    """Wait until the step's real content has rendered (Workday shows a spinner
+    between steps; the body is just 'skip to main content' until it loads)."""
+    import time as _time
+    deadline = _time.time() + timeout / 1000
+    while _time.time() < deadline:
+        try:
+            await page.wait_for_load_state("networkidle", timeout=3000)
+        except Exception:
+            pass
+        try:
+            body = (await page.evaluate("document.body.innerText")).strip().lower()
+        except Exception:
+            body = ""
+        # Meaningful once there's content beyond the skip-link / chrome
+        meaningful = len(body.replace("skip to main content", "").strip()) > 40
+        # Or once an actual form control / footer is present
+        try:
+            has_form = await page.locator(
+                '[data-automation-id*="formField"], [data-automation-id="pageFooterNextButton"], '
+                '[data-automation-id="password"], input, button[aria-haspopup="listbox"]'
+            ).count() > 0
+        except Exception:
+            has_form = False
+        if meaningful or has_form:
+            return
+        await page.wait_for_timeout(700)
+
 async def current_step(page: Page) -> str:
     """Return lowercased title of the current form step."""
     for sel in [
         '[data-automation-id="currentStep"] span',
         '[aria-current="step"] span',
+        '[data-automation-id="formContainer"] h2',
+        '[data-automation-id="step"] h2',
         'h2[role="heading"]',
-        'h2', 'h3',
     ]:
         try:
             el = page.locator(sel).first
@@ -360,6 +506,7 @@ async def current_step(page: Page) -> str:
 
 async def click_next(page: Page) -> bool:
     return await try_click(page,
+        '[data-automation-id="pageFooterNextButton"]',
         '[data-automation-id="bottom-navigation-next-button"]',
         '[data-automation-id="saveAndContinueButton"]',
         '[data-automation-id="nextButton"]',
@@ -372,6 +519,39 @@ async def click_next(page: Page) -> bool:
 
 # ── Step fillers ───────────────────────────────────────────────────────────────
 
+async def _select_phone_device_type(page: Page) -> None:
+    """Click the Workday phone-type button dropdown and pick Mobile."""
+    try:
+        btn = page.locator('button[name="phoneType"]').first
+        if not await btn.is_visible(timeout=3000):
+            return
+        await btn.click()
+        await page.wait_for_timeout(600)
+        # Options appear as buttons or divs in a listbox — try both
+        for sel in [
+            '[role="listbox"] button:has-text("Mobile")',
+            '[role="option"]:has-text("Mobile")',
+            'button[aria-label*="Mobile" i]',
+            'li:has-text("Mobile")',
+            'div[role="option"]:has-text("Mobile")',
+        ]:
+            opt = page.locator(sel).first
+            if await opt.count() > 0 and await opt.is_visible(timeout=1500):
+                await opt.click()
+                return
+        # Fallback: any visible element containing exactly "Mobile"
+        opts = await page.locator('[role="listbox"] *').all()
+        for o in opts:
+            try:
+                txt = (await o.inner_text()).strip()
+                if txt == "Mobile":
+                    await o.click()
+                    return
+            except Exception:
+                continue
+    except Exception:
+        pass
+
 async def fill_my_information(page: Page) -> None:
     info = INFO
     await try_fill(page, info.get("first_name", ""),
@@ -383,9 +563,7 @@ async def fill_my_information(page: Page) -> None:
     await try_fill(page, info.get("phone", ""),
         '[data-automation-id="phone-number"]',
         'input[aria-label*="Phone" i]', 'input[type="tel"]')
-    await combobox_select(page, "Mobile",
-        '[data-automation-id="phoneDeviceType"]',
-        'select[aria-label*="Phone Type" i]')
+    await _select_phone_device_type(page)
     await try_fill(page, info.get("address_line1", ""),
         '[data-automation-id="addressSection_addressLine1"]',
         'input[aria-label*="Address Line 1" i]', 'input[aria-label*="Street" i]')
@@ -407,6 +585,9 @@ async def upload_resume(page: Page) -> bool:
     if not RESUME_PATH or not Path(RESUME_PATH).exists():
         print(f"  [!] Resume not found: {RESUME_PATH!r}")
         return False
+    # Only attempt if the upload drop zone is actually on this page
+    if not await page.locator('[data-automation-id="file-upload-drop-zone"]').is_visible(timeout=1500):
+        return False
     try:
         await page.evaluate("""() => {
             document.querySelectorAll('input[type="file"]').forEach(el => {
@@ -423,12 +604,16 @@ async def upload_resume(page: Page) -> bool:
     except Exception as e:
         print(f"  [!] Direct upload error: {e}")
 
-    # Fallback: file chooser
+    # Fallback: file chooser via Select files button
     try:
         async with page.expect_file_chooser(timeout=6000) as fc:
             await try_click(page,
-                'button:has-text("Upload")', 'button:has-text("Select a File")',
-                'button:has-text("Select File")', '[aria-label*="Upload" i]')
+                '[data-automation-id="select-files"]',
+                'button:has-text("Select files")',
+                'button:has-text("Select a File")',
+                'button:has-text("Select File")',
+                'button:has-text("Upload")',
+                '[aria-label*="Upload" i]')
         await fc.value.set_files(RESUME_PATH)
         await page.wait_for_timeout(3500)
         print(f"  [+] Resume uploaded via file chooser")
@@ -468,6 +653,25 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
         return info.get("work_authorized", "Yes")
     if re.search(r'require sponsorship|need.*sponsorship|will you.*sponsor|now or in the future', ll):
         return info.get("needs_sponsorship", "No")
+    if re.search(r'reside.*(location|area)|commutable distance|live.*within.*commut|located within|within commut', ll):
+        return "Yes"
+    if re.search(r'federal government|defense health|\bdha\b|political appointee|served in the military', ll):
+        return "No"
+    if re.search(r'previously worked|ever worked for|worked for .{0,30}\b(before|previously)\b|former (employee|contractor)|previously (employed|been employed)', ll):
+        return "No"
+    if re.search(r'enter n/?a|please enter n/?a|if not a current', ll):
+        return "N/A"
+    # "Do you have … experience …" questions → Yes (must come before the
+    # years-of-experience rule below, which would otherwise return a number).
+    if re.search(r'do you have\b.{0,80}\bexperience\b', ll):
+        return "Yes"
+    # ── EEO / self-identification dropdowns ───────────────────────────────────
+    if re.search(r'what is your sex|gender', ll):
+        return info.get("gender", "Male")
+    if re.search(r'ethnicity|hispanic|latino|\brace\b', ll):
+        return info.get("ethnicity", "Asian")
+    if re.search(r'veteran', ll):
+        return "__DECLINE__"
 
     # ── Contact info ──────────────────────────────────────────────────────────
     if re.search(r'\bfirst name\b', ll):      return info.get("first_name")
@@ -484,7 +688,7 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
 
     # ── Common screening questions ────────────────────────────────────────────
     if re.search(r'how did you hear|how did you find|referral source|source of hire', ll):
-        return info.get("how_did_you_hear", "LinkedIn")
+        return "__HEAR_ABOUT_US__"
     if re.search(r'salary.*expect|expected.*salary|desired.*salary|compensation', ll):
         return info.get("salary_expectation", "")
     if re.search(r'available.*start|start.*date|when.*start|earliest.*start', ll):
@@ -518,6 +722,221 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
 
     return None  # Truly unknown
 
+async def fill_terms_and_conditions(page: Page) -> bool:
+    """Handle T&C pages — detected by body text or checkbox presence.
+    Page 1: dropdown asking to agree → answer Yes.
+    Page 2: acceptTermsAndAgreements checkbox → tick it.
+    """
+    body = (await page.evaluate("document.body.innerText")).lower()
+    tc_checkbox = page.locator('input[name="acceptTermsAndAgreements"]')
+    has_tc_checkbox = await tc_checkbox.count() > 0
+    is_terms_page = "terms and conditions" in body or "i have read and consent" in body or has_tc_checkbox
+    if not is_terms_page:
+        return False
+
+    # Answer each dropdown based on ITS OWN question text:
+    #   terms-confirmation question → Yes, every other question → No
+    btns = await page.locator('button[aria-haspopup="listbox"]').all()
+    for btn in btns:
+        try:
+            if not await btn.is_visible(timeout=500):
+                continue
+            current_val = (await btn.inner_text()).strip().lower()
+            if current_val and current_val != "select one":
+                continue  # Already answered
+            # Read the question text from this dropdown's closest form-field ancestor
+            qtext = ""
+            container = btn.locator(
+                'xpath=ancestor::*[contains(@data-automation-id,"formField")][1]'
+            )
+            if await container.count():
+                qtext = (await container.inner_text()).lower()
+            if not qtext:
+                qtext = (await btn.get_attribute("aria-label") or "").lower()
+
+            is_terms_q = bool(re.search(
+                r"select yes.*confirm|read.{0,40}understand.{0,40}agree|agree.{0,40}terms",
+                qtext,
+            ))
+            want = "Yes" if is_terms_q else "No"
+
+            await btn.click(timeout=4000)
+            await page.wait_for_timeout(400)
+            opt = page.get_by_role("option", name=re.compile(rf"^{want}$", re.I)).first
+            if not await opt.count():
+                opt = page.locator(
+                    f'[role="listbox"] [role="option"]:text-is("{want}"), '
+                    f'[role="listbox"] div:text-is("{want}")'
+                ).first
+            if await opt.is_visible(timeout=1500):
+                await opt.click(timeout=4000)
+            await page.wait_for_timeout(300)
+        except Exception:
+            continue
+
+    await page.wait_for_timeout(500)
+    # Tick the accept checkbox if present
+    if has_tc_checkbox and await tc_checkbox.is_visible(timeout=2000):
+        if (await tc_checkbox.get_attribute("aria-checked")) != "true":
+            await tc_checkbox.click(timeout=4000)
+    return True
+
+async def fill_disability_form(page: Page) -> bool:
+    """Handle self-identified disability page: name, today's date, I do not want to answer."""
+    name_input = page.locator('[id*="selfIdentifiedDisabilityData--name"]').first
+    if not await name_input.count():
+        return False
+    if await name_input.is_visible(timeout=2000):
+        await name_input.fill("Osborne Lopes")
+    # Date: prefer the calendar "Selected Today" button; fall back to typing MM/DD/YYYY
+    filled_date = False
+    try:
+        cal_icon = page.locator('[data-automation-id="dateIcon"]').first
+        if await cal_icon.is_visible(timeout=2000):
+            await cal_icon.click(timeout=4000)
+            await page.wait_for_timeout(500)
+            today_btn = page.locator('[data-automation-id="datePickerSelectedToday"]').first
+            if await today_btn.is_visible(timeout=2000):
+                await today_btn.click(timeout=4000)
+                await page.wait_for_timeout(300)
+                filled_date = True
+    except Exception:
+        pass
+    if not filled_date:
+        from datetime import date as _date
+        today = _date.today()
+        for sel, val in [
+            ('[data-automation-id="dateSectionMonth-input"]', f"{today.month:02d}"),
+            ('[data-automation-id="dateSectionDay-input"]',   f"{today.day:02d}"),
+            ('[data-automation-id="dateSectionYear-input"]',  str(today.year)),
+        ]:
+            inp = page.locator(sel).first
+            if await inp.is_visible(timeout=1000):
+                await inp.click(timeout=4000)
+                await inp.fill(val)
+                await page.wait_for_timeout(150)
+    # Select "No, I do not have a disability" (NOT the first option, which is "Yes")
+    no_label = page.locator('label').filter(
+        has_text=re.compile(r"no.{0,5}i\s*(don'?t|do not).{0,15}have.{0,5}a?\s*disability", re.I)
+    ).first
+    if await no_label.count() and await no_label.is_visible(timeout=2000):
+        await no_label.click(timeout=4000)
+    else:
+        # Fallback: find the input whose sibling/own label says No-disability
+        clicked = await try_click(
+            page,
+            'label:has-text("do not have a disability")',
+            'label:has-text("don\'t have a disability")',
+        )
+        if not clicked:
+            # Last resort: the SECOND disabilityStatus input (Yes / No / decline order)
+            inputs = page.locator('input[id*="disabilityStatus"]')
+            if await inputs.count() >= 2:
+                await inputs.nth(1).click(timeout=4000)
+    return True
+
+async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = None) -> None:
+    """For each unanswered required listbox dropdown, choose the answer from the
+    profile based on its question text (work-auth → Yes, sponsorship → No, …).
+    Falls back to "No" only when the profile has no specific answer."""
+    answers = answers or {}
+    btns = await page.locator('button[aria-haspopup="listbox"]').all()
+    for btn in btns:
+        try:
+            if not await btn.is_visible(timeout=500):
+                continue
+            # Answer any dropdown still on "Select One" (don't require the aria-label
+            # to literally say "required" — many Workday tenants omit that).
+            current_val = (await btn.inner_text()).strip()
+            if current_val and current_val.lower() != "select one":
+                continue  # Already answered
+
+            # Read the question text (form-field ancestor) and consult the profile
+            qtext = ""
+            container = btn.locator(
+                'xpath=ancestor::*[contains(@data-automation-id,"formField")][1]'
+            )
+            if await container.count():
+                qtext = (await container.inner_text()).strip()
+            if not qtext:
+                qtext = await btn.get_attribute("aria-label") or ""
+
+            profile_ans = _answer_from_profile(qtext, answers)
+            # Determine HOW to pick the option:
+            #   "yes"/"no"     → exact match
+            #   "__DECLINE__"  → a "prefer not to answer" option
+            #   "__HEAR_ABOUT_US__" → handled elsewhere, skip
+            #   other value (e.g. "Asian", "Male") → contains-match
+            #   None           → unknown Yes/No question → default No
+            if profile_ans == "__HEAR_ABOUT_US__":
+                continue
+            if profile_ans == "__DECLINE__":
+                mode = "decline"
+            elif profile_ans and profile_ans.lower() in ("yes", "no"):
+                mode, want = "exact", profile_ans
+            elif profile_ans:
+                mode, want = "contains", profile_ans
+            else:
+                mode, want = "exact", "No"
+
+            await btn.click(timeout=4000)
+            await page.wait_for_timeout(400)
+            opts = page.locator('[role="listbox"] [role="option"], [role="listbox"] div')
+            if mode == "decline":
+                opt = opts.filter(has_text=re.compile(
+                    r"not wish|prefer not|decline|do not want|don'?t wish|choose not", re.I
+                )).first
+            elif mode == "contains":
+                # Word-boundary match so "Male" doesn't also match "Female"
+                opt = opts.filter(has_text=re.compile(rf'\b{re.escape(want)}\b', re.I)).first
+            else:  # exact
+                opt = page.locator(
+                    f'[role="listbox"] [role="option"]:text-is("{want}"), '
+                    f'[role="listbox"] div:text-is("{want}")'
+                ).first
+            if await opt.count() and await opt.is_visible(timeout=1500):
+                await opt.click(timeout=4000)
+            elif mode == "exact" and want == "No":
+                # Unknown Yes/No question with no "No" option — leave for review
+                pass
+            await page.wait_for_timeout(300)
+        except Exception:
+            continue
+
+async def fill_checkbox_questions(page: Page, answers: dict | None = None) -> None:
+    """Handle Yes/No checkbox-group questions (each option is a checkbox + label).
+    Ticks the option matching the profile answer; defaults to No."""
+    answers = answers or {}
+    groups = await page.locator('[data-automation-id*="formField"]').all()
+    for grp in groups:
+        try:
+            cbs = grp.locator('input[type="checkbox"][aria-required="true"]')
+            n = await cbs.count()
+            if n == 0:
+                continue
+            # Skip if any option is already checked
+            already = False
+            for i in range(n):
+                try:
+                    if await cbs.nth(i).is_checked():
+                        already = True
+                        break
+                except Exception:
+                    pass
+            if already:
+                continue
+            qtext = (await grp.inner_text()).strip()
+            profile_ans = _answer_from_profile(qtext, answers)
+            want = profile_ans if (profile_ans and profile_ans.lower() in ("yes", "no")) else "No"
+            lbl = grp.locator('label').filter(
+                has_text=re.compile(rf'^\s*{want}\s*$', re.I)
+            ).first
+            if await lbl.count() and await lbl.is_visible(timeout=1500):
+                await lbl.click(timeout=4000)
+                await page.wait_for_timeout(200)
+        except Exception:
+            continue
+
 async def fill_application_questions(page: Page, answers: dict, unknowns: list[str]) -> None:
     await page.wait_for_timeout(800)
 
@@ -526,9 +945,7 @@ async def fill_application_questions(page: Page, answers: dict, unknowns: list[s
         const out = [];
         const SKIP_TYPES = new Set(['file', 'hidden', 'submit', 'button', 'checkbox', 'reset']);
         const inputs = document.querySelectorAll(
-            'input[aria-required="true"], select[aria-required="true"], '
-            'textarea[aria-required="true"], [role="combobox"][aria-required="true"], '
-            '[role="spinbutton"][aria-required="true"]'
+            'input[aria-required="true"], select[aria-required="true"], textarea[aria-required="true"], [role="combobox"][aria-required="true"], [role="spinbutton"][aria-required="true"]'
         );
         inputs.forEach(el => {
             if (SKIP_TYPES.has(el.type)) return;
@@ -555,7 +972,19 @@ async def fill_application_questions(page: Page, answers: dict, unknowns: list[s
                     }
                 }
             }
-            label = label.replace(/\\*/g, '').trim();
+            // Last resort: use the question container's text (Workday supplementary
+            // questions put the prompt in a div, not a <label>).
+            if (!label) {
+                let node = el.parentElement;
+                for (let i = 0; i < 8 && node; i++, node = node.parentElement) {
+                    const aid = node.getAttribute && node.getAttribute('data-automation-id') || '';
+                    if (/formField|questionItem|question/i.test(aid)) {
+                        const t = (node.innerText || '').trim();
+                        if (t) { label = t; break; }
+                    }
+                }
+            }
+            label = label.replace(/\\*/g, '').replace(/\\s+/g, ' ').trim();
             if (!label) return;
 
             out.push({
@@ -619,7 +1048,9 @@ async def fill_application_questions(page: Page, answers: dict, unknowns: list[s
         short_label = re.escape(label[:25])
         sels.append(f'[aria-label*="{short_label}" i]')
 
-        if ftype in ("text", "email", "tel", "number", "textarea", "search", "spinbutton", ""):
+        if answer == "__HEAR_ABOUT_US__":
+            await fill_hear_about_us(page)
+        elif ftype in ("text", "email", "tel", "number", "textarea", "search", "spinbutton", ""):
             await try_fill(page, str(answer), *sels, overwrite=False)
         elif ftype in ("select", "combobox"):
             await combobox_select(page, str(answer), *sels)
@@ -679,13 +1110,17 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
     # Find and click Apply button
     apply_loc = page.locator(
         '[data-automation-id="applyButton"], '
+        '[data-automation-id="adventureButton"], '
         'button[aria-label*="Apply for Job" i], '
         'button:has-text("Apply for Job"), '
         'button:has-text("Apply Now"), '
-        'a:has-text("Apply for Job")'
+        'a:has-text("Apply for Job"), '
+        'a:has-text("Apply")'
     ).first
 
-    if not await apply_loc.count():
+    try:
+        await apply_loc.wait_for(state="visible", timeout=12000)
+    except Exception:
         return "skipped", "no_apply_button"
 
     try:
@@ -695,21 +1130,134 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
 
     await page.wait_for_timeout(2500)
     await page.wait_for_load_state("domcontentloaded")
+    await _shot(page, "after_apply_click")
+
+    # Use last application if offered (pre-fills all fields)
+    try:
+        last_app = page.locator('[data-automation-id="useMyLastApplication"]').first
+        if await last_app.is_visible(timeout=4000):
+            await last_app.click()
+            await page.wait_for_timeout(2500)
+            await page.wait_for_load_state("domcontentloaded")
+            print("  [+] Used last application")
+            await _shot(page, "after_use_last_app")
+    except Exception:
+        pass
 
     # Handle auth
+    await _shot(page, "before_auth")
     auth_ok = await handle_auth(page)
+    await _shot(page, "after_auth")
     if not auth_ok:
         return "needs_review", "email_verification_required"
 
     await page.wait_for_timeout(2000)
     await page.wait_for_load_state("domcontentloaded")
 
+    # Wait for the Workday application wizard to be present
+    try:
+        await page.wait_for_selector(
+            '[data-automation-id="formContainer"], [data-automation-id="currentStep"], '
+            '[data-automation-id="step"], form[data-automation-id]',
+            timeout=15000,
+        )
+    except Exception:
+        pass  # Proceed anyway — some tenants render differently
+
+    await page.wait_for_timeout(1500)
+
     # Walk through form steps
-    for step_num in range(10):
+    auth_attempts = 0
+    verify_email_sent = False
+    verify_waits = 0
+    for step_num in range(20):
+        await wait_for_content(page)
         step = await current_step(page)
-        print(f"  Step {step_num+1}: {step or '(unknown)'}")
 
         body = (await page.evaluate("document.body.innerText")).lower()
+        # Diagnostic: first non-empty line of the page body identifies the step
+        _snippet = next((ln.strip() for ln in body.splitlines() if ln.strip()), "")
+        print(f"  Step {step_num+1}: {step or '(unknown)'}  | {_snippet[:70]}")
+        await _shot(page, f"step_{step_num+1}")
+
+        # Create Account / Sign In step — the form often renders late, so the
+        # pre-loop handle_auth() can miss it. Handle it here where it's rendered.
+        # A visible password field only ever appears on an auth page.
+        has_pw_field = await page.locator(
+            '[data-automation-id="password"]:visible, input[type="password"]:visible'
+        ).count() > 0
+        is_auth_page = has_pw_field or (
+            "create account" in body and "verify new password" in body
+        )
+        if is_auth_page:
+            # Account needs email verification before sign-in
+            if any(kw in body for kw in [
+                "verify your account before you sign in", "request a verification email",
+                "account may need verification",
+            ]):
+                company = job.get("company", "")
+                title = job.get("title", "")
+                tenant = (url.split("//", 1)[-1].split(".", 1)[0]) if url else ""
+                # Try to auto-click the verification link from the inbox (IMAP)
+                link = fetch_verification_link(tenant_hint=tenant)
+                if link:
+                    print(f"  [+] Got verification link from inbox — opening it")
+                    try:
+                        await page.goto(link, wait_until="domcontentloaded", timeout=30000)
+                        await page.wait_for_timeout(2500)
+                    except Exception as e:
+                        print(f"  [!] Failed to open verification link: {e}")
+                    # Account verified — re-enter the application: job → Apply → sign in
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    await page.wait_for_timeout(2000)
+                    await try_click(page,
+                        '[data-automation-id="applyButton"]',
+                        '[data-automation-id="adventureButton"]',
+                        'button:has-text("Apply")', 'a:has-text("Apply")',
+                        timeout=12000)
+                    await page.wait_for_timeout(2500)
+                    try:
+                        last_app = page.locator('[data-automation-id="useMyLastApplication"]').first
+                        if await last_app.is_visible(timeout=4000):
+                            await last_app.click(timeout=4000)
+                            await page.wait_for_timeout(2000)
+                    except Exception:
+                        pass
+                    await wait_for_content(page)
+                    await handle_auth(page)
+                    await page.wait_for_timeout(2500)
+                    verify_waits += 1
+                    if verify_waits > 3:
+                        return "needs_review", "verification_failed"
+                    continue
+                # No IMAP configured / link not found yet — notify user and wait for manual click
+                if not verify_email_sent:
+                    send_verification_email(job.get("company", ""), job.get("title", ""), url)
+                    verify_email_sent = True
+                print("  [!] Account verification required — waiting 30s for manual verification…")
+                await page.wait_for_timeout(30000)
+                await handle_auth(page)
+                await page.wait_for_timeout(2500)
+                verify_waits += 1
+                if verify_waits > 3:
+                    return "needs_review", "verification_timeout"
+                continue
+            # Bail on a credentials/lockout error — never hammer (it locks the account)
+            if any(kw in body for kw in [
+                "wrong email address or password", "account might be locked",
+                "account is locked", "incorrect password",
+            ]):
+                print("  [!] Sign-in rejected — wrong password or locked account")
+                return "needs_review", "auth_failed:wrong_password_or_locked"
+            if auth_attempts < 2:
+                auth_attempts += 1
+                print(f"  → Create Account/Sign In page (attempt {auth_attempts})")
+                await handle_auth(page)
+                await page.wait_for_timeout(2500)
+                await page.wait_for_load_state("domcontentloaded")
+                await _shot(page, f"step_{step_num+1}_after_auth")
+                continue  # account creation / sign-in advances the wizard
+            return "needs_review", "auth_stuck"
 
         # Review/submit step
         if any(kw in body for kw in [
@@ -719,19 +1267,51 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             result = await submit_application(page)
             return result, "; ".join(unknowns)
 
-        if any(k in step for k in ("information", "contact", "personal")):
+        if await fill_terms_and_conditions(page):
+            # Voluntary-Disclosures pages bundle terms + EEO dropdowns/checkboxes,
+            # so still run the other fillers (don't short-circuit).
+            await fill_mandatory_listbox_dropdowns(page, answers)
+            await fill_checkbox_questions(page, answers)
+        elif await fill_disability_form(page):
+            pass  # Disability page handled
+        elif any(k in step for k in ("information", "contact", "personal")):
             await fill_my_information(page)
         elif any(k in step for k in ("experience", "background", "resume", "my experience")):
             await fill_my_experience(page)
         elif any(k in step for k in ("voluntary", "disclos", "eeo", "equal opportunity", "diversity")):
             pass  # Prefer not to disclose — just click Next
         elif any(k in step for k in ("question", "additional", "application question", "screening")):
+            await fill_mandatory_listbox_dropdowns(page, answers)
+            await fill_checkbox_questions(page, answers)
             await fill_application_questions(page, answers, unknowns)
         else:
-            # Unknown step — still try to fill required fields
+            # Unknown step — try all fillers; each is a no-op if fields aren't present
+            await fill_my_information(page)
+            await fill_my_experience(page)
+            await fill_mandatory_listbox_dropdowns(page, answers)
+            await fill_checkbox_questions(page, answers)
             await fill_application_questions(page, answers, unknowns)
 
         await page.wait_for_timeout(600)
+        await _shot(page, f"step_{step_num+1}_filled")
+
+        # Surface any validation errors so we know exactly which field is blocking
+        try:
+            errs = await page.evaluate("""() => {
+                const out = [];
+                document.querySelectorAll(
+                    '[data-automation-id="errorMessage"], [role="alert"], '
+                    '[data-automation-id*="error" i], .css-error, [class*="error" i]'
+                ).forEach(e => {
+                    const t = (e.innerText || '').trim();
+                    if (t && t.length < 200) out.push(t);
+                });
+                return [...new Set(out)];
+            }""")
+            for e in errs[:8]:
+                print(f"     [err] {e}")
+        except Exception:
+            pass
 
         if not await click_next(page):
             # Try submit directly (last step without clear heading)
@@ -810,6 +1390,86 @@ def send_summary_email(results: list[dict]) -> None:
     except Exception as e:
         print(f"[!] Email failed: {e}")
 
+def fetch_verification_link(tenant_hint: str = "") -> str | None:
+    """Read the verification inbox over IMAP, find the newest Workday account-
+    verification email, and return its verification URL (or None)."""
+    if not VERIFY_IMAP_USER or not VERIFY_IMAP_PASS:
+        return None
+    import imaplib, email as _email
+    from email.header import decode_header as _decode_header
+    link = None
+    try:
+        M = imaplib.IMAP4_SSL("imap.gmail.com")
+        M.login(VERIFY_IMAP_USER, VERIFY_IMAP_PASS)
+        M.select("INBOX")
+        typ, data = M.search(None, "ALL")
+        ids = data[0].split()
+        # Newest first, scan the last ~10 messages
+        for num in reversed(ids[-10:]):
+            typ, msgdata = M.fetch(num, "(RFC822)")
+            if not msgdata or not msgdata[0]:
+                continue
+            msg = _email.message_from_bytes(msgdata[0][1])
+            subj = str(_decode_header(msg.get("Subject", ""))[0][0])
+            # Collect the HTML/plain body
+            body = ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() in ("text/html", "text/plain"):
+                        try:
+                            body += part.get_payload(decode=True).decode(errors="replace")
+                        except Exception:
+                            pass
+            else:
+                try:
+                    body = msg.get_payload(decode=True).decode(errors="replace")
+                except Exception:
+                    body = str(msg.get_payload())
+            # Find a Workday verification URL in this email
+            urls = re.findall(r'https?://[^\s"\'<>]+', body)
+            for u in urls:
+                lu = u.lower()
+                if "myworkdayjobs" in lu and any(
+                    k in lu for k in ("verify", "activate", "confirm", "register", "token", "validate")
+                ):
+                    if not tenant_hint or tenant_hint.lower() in lu:
+                        link = u.replace("&amp;", "&")
+                        break
+            if link:
+                break
+        M.logout()
+    except Exception as e:
+        print(f"  [!] IMAP verification read failed: {e}")
+    return link
+
+def send_verification_email(company: str, title: str, job_url: str = "") -> None:
+    """Notify the user that a Workday account needs email verification to continue."""
+    to = EMAIL_TO or "lopes.o@northeastern.edu"
+    if not EMAIL_SENDER or not EMAIL_PASSWORD:
+        print(f"  [!] Verification email not sent (EMAIL creds unset). Verify manually.")
+        return
+    try:
+        recipients = [a.strip() for a in to.split(",") if a.strip()]
+        body = f"""<html><body style="font-family:sans-serif">
+        <h3>Workday account verification needed</h3>
+        <p>The auto-apply bot is applying to <b>{title}</b> at <b>{company}</b> but the
+        Workday account needs email verification before it can sign in.</p>
+        <p>Please open the inbox for <b>{INFO.get('email','')}</b>, click the verification
+        link, and the bot will continue automatically.</p>
+        <p><a href="{job_url}">{job_url}</a></p>
+        </body></html>"""
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"[Workday] Verify account to apply: {title} @ {company}"
+        msg["From"]    = EMAIL_SENDER
+        msg["To"]      = ", ".join(recipients)
+        msg.attach(MIMEText(body, "html"))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+            s.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            s.sendmail(EMAIL_SENDER, recipients, msg.as_string())
+        print(f"  [+] Verification email → {to}")
+    except Exception as e:
+        print(f"  [!] Verification email failed: {e}")
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 async def main() -> None:
@@ -859,6 +1519,8 @@ async def main() -> None:
 
         context: BrowserContext = await browser.new_context(**ctx_kwargs)
         page = await context.new_page()
+        # Cap every action so a stuck click can't hang for the 30s default
+        page.set_default_timeout(8000)
 
         for i, job in enumerate(queue):
             title   = job.get("title", "Unknown")
@@ -892,7 +1554,10 @@ async def main() -> None:
             results.append(row)
             append_csv(row)
 
-            await page.wait_for_timeout(1200)
+            try:
+                await page.wait_for_timeout(1200)
+            except Exception:
+                pass
 
         # Persist session
         state = await context.storage_state()

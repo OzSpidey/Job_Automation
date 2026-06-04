@@ -155,24 +155,18 @@ NOISE_TITLE_RE = re.compile(
 )
 
 _CLASSIFY_PATTERNS = [
-    (re.compile(r"\bdata\s+engineer\b",          re.I), "Data Engineer"),
-    (re.compile(r"\bdata\s+scientist\b",          re.I), "Data Scientist"),
-    (re.compile(r"\bai\s+engineer\b",             re.I), "AI Engineer"),
-    (re.compile(r"\bsoftware\s+engineer\b",       re.I), "Software Engineer"),
-    (re.compile(r"\bsoftware\s+developer\b",      re.I), "Software Developer"),
-    (re.compile(r"\b(business\s+intelligence|bi\s+\w+)\b", re.I), "Business Intelligence"),
+    (re.compile(r"\bdata\s+engineer\b",                                re.I), "Data Engineer"),
+    (re.compile(r"\b(business\s+intelligence|bi\s+\w+)\b",             re.I), "Business Intelligence"),
     (re.compile(r"\b(data\b.{0,30}\banalyst|analyst\b.{0,30}\bdata\b)", re.I), "Data Analyst"),
-    (re.compile(r"\betl\b",                       re.I), "ETL Engineer"),
-    (re.compile(r"\binsights\b",                  re.I), "Insights"),
-    (re.compile(r"\b(analytics|analyst)\b",       re.I), "Analyst / Analytics"),
-    (re.compile(r"\bdata\b",                      re.I), "Data (Other)"),
 ]
 
-def _classify(title: str) -> str:
+_TARGET_ROLES = {"Data Analyst", "Data Engineer", "Business Intelligence"}
+
+def _classify(title: str) -> str | None:
     for pat, label in _CLASSIFY_PATTERNS:
         if pat.search(title):
             return label
-    return "Other"
+    return None
 
 # Titles with these signals are preferred entry-level roles
 ENTRY_LEVEL_RE = re.compile(
@@ -318,7 +312,11 @@ def append_csv(row: dict) -> None:
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = ["title", "company", "location", "posted", "experience", "link", "found_on"]
 
-    for path in [OUTPUT_CSV, _role_csv_path(row.get("role", "other"))]:
+    paths = [OUTPUT_CSV]
+    if row.get("role") in _TARGET_ROLES:
+        paths.append(_role_csv_path(row["role"]))
+
+    for path in paths:
         write_header = not path.exists() or path.stat().st_size == 0
         with open(path, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
