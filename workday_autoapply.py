@@ -738,22 +738,24 @@ async def _select_phone_device_type(page: Page) -> None:
     form field labeled 'Phone Device Type').
     """
     async def _pick_mobile_from_open_listbox() -> bool:
-        for sel in [
-            '[role="listbox"] button:has-text("Mobile")',
-            '[role="option"]:has-text("Mobile")',
-            'button[aria-label*="Mobile" i]',
-            'li:has-text("Mobile")',
-            'div[role="option"]:has-text("Mobile")',
-        ]:
-            opt = page.locator(sel).first
-            if await opt.count() > 0 and await opt.is_visible(timeout=1500):
-                await opt.click()
-                return True
+        # Prefer Mobile → Cell Phone → Cell → Cellular (tenants vary)
+        for term in ["Mobile", "Cell Phone", "Cell", "Cellular"]:
+            for sel in [
+                f'[role="listbox"] button:has-text("{term}")',
+                f'[role="option"]:has-text("{term}")',
+                f'li:has-text("{term}")',
+                f'div[role="option"]:has-text("{term}")',
+            ]:
+                opt = page.locator(sel).first
+                if await opt.count() > 0 and await opt.is_visible(timeout=800):
+                    await opt.click()
+                    return True
+        # Generic fallback: iterate listbox items
         opts = await page.locator('[role="listbox"] *').all()
         for o in opts:
             try:
                 txt = (await o.inner_text()).strip()
-                if txt == "Mobile":
+                if re.match(r'^(mobile|cell phone|cell|cellular)$', txt, re.I):
                     await o.click()
                     return True
             except Exception:
@@ -1148,9 +1150,11 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
     # Cardinal Health: "Please indicate below your proficiency with the English language"
     if re.search(r'indicate.*proficiency|proficiency.{0,40}english|english.{0,40}proficiency|primary language.{0,80}proficiency|proficiency.{0,40}primary language', ll):
         return "Fluent"
-    # Phone device type → Mobile (USAA, Citi, and others use a listbox for this)
+    # Phone device type → prefer Mobile (most tenants); _select_phone_device_type
+    # and fill_mandatory_listbox_dropdowns both try Mobile/Cell/Cell Phone variants.
     if re.search(r'\bphone device type\b|\bdevice type\b', ll):
-        return "Mobile"
+        return "Mobile"   # fill_mandatory_listbox_dropdowns uses contains-mode,
+                          # which matches "Mobile" and also tries nearby options
     # "I confirm that my response/information above is true and accurate" → Yes
     if re.search(r'i confirm.{0,60}(response|information|answer|statement).{0,30}(true|accurate)|confirm.{0,30}above.{0,30}(true|accurate)', ll):
         return "Yes"
@@ -1210,13 +1214,35 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
         return "__YEARS_2PLUS__"
 
     # ── Citizenship / clearance / notice ──────────────────────────────────────
+    # "Are you a U.S. Person?" (CACI/defense firms) — work-authorized → Yes
+    if re.search(r'u\.?s\.? person\b', ll):
+        return "Yes"
     if re.search(r'u\.?s\.? citizen|are you a citizen', ll):
-        # Options include "Yes", "No", "US Permanent Resident" — pick resident
-        return "US Permanent Resident"
+        # Options include "Yes", "No", "US Permanent Resident" — pick Yes (work-auth)
+        return "Yes"
+    # Security clearance: "Do you currently possess / have active clearance?" → No
+    # Options: "No, I do not possess an active security clearance." / "I do not possess..."
+    if re.search(r'do you (currently )?possess.{0,30}(security clearance|clearance)|currently have.{0,20}clearance|hold.{0,20}clearance', ll):
+        return "I do not possess"    # prefix-matched by contains mode
+    # "If you currently possess… which agency…" → I do not possess
+    if re.search(r'which agency.{0,60}clearance|sponsored.{0,40}clearance', ll):
+        return "I do not possess"    # prefix-matched
+    # Generic "security clearance" fallback → never cleared
     if re.search(r'security clearance', ll):
-        return "I have never been cleared"
+        return "I do not possess"
     if re.search(r'notice period|notice to.*employer|two.week notice|2.week notice', ll):
         return "2 weeks"
+    # Government/military service survey (CACI style):
+    #   Options like "I have never been employed by the U.S. Government." / numbered lists.
+    # Catch the CACI survey question that asks about current/former US Gov employment.
+    # The question mentions both "survey" AND government/federal obligations — use two
+    # separate re.search calls to avoid the .{0,80} gap being too short.
+    if re.search(r'below survey', ll) and re.search(r'u\.?s\.? govern|federal government|employment history', ll):
+        return "I have never been employed"   # prefix — matches the full option text
+    # Cardinal Health / most tenants: "current or former member of the military"
+    # Options: "1 - I did not serve...", "2 - I served...", "Not Specified"
+    if re.search(r'(current|former).{0,20}member.{0,20}military|member.{0,20}(of the )?military|military.{0,20}(service|member)', ll):
+        return "I did not serve"   # prefix — matches "1 - I did not serve..."
 
     # ── Language proficiency ──────────────────────────────────────────────────
     # Workday "Languages" section: Language dropdown → English, Overall → Fluent
@@ -1439,7 +1465,14 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
             #   "__HEAR_ABOUT_US__" → handled elsewhere, skip
             #   other value (e.g. "Asian", "Male") → contains-match
             #   None           → unknown Yes/No question → default No
-            if profile_ans == "__HEAR_ABOUT_US__":
+
+            # Phone Device Type: Mobile is the preference but tenants name it
+            # differently (Cell Phone / Cell / Cellular). Use "phonetype" mode.
+            if profile_ans and profile_ans.lower() == "mobile" and re.search(
+                r'\bphone device type\b|\bdevice type\b', qtext.lower()
+            ):
+                mode = "phonetype"
+            elif profile_ans == "__HEAR_ABOUT_US__":
                 mode = "hearabout"  # listbox variant — pick a source below
             elif profile_ans == "__MASTERS__":
                 mode = "masters"
@@ -1483,7 +1516,26 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
                 except Exception as _e:
                     pass
             opt = None
-            if mode == "decline":
+            if mode == "phonetype":
+                # Try Mobile first, then Cell Phone, Cell, Cellular in priority order
+                for term in ["Mobile", "Cell Phone", "Cell", "Cellular", "Telephone"]:
+                    cand = opts.filter(has_text=re.compile(
+                        rf'^\s*{re.escape(term)}\s*$', re.I
+                    )).first
+                    if await cand.count() and await cand.is_visible(timeout=600):
+                        opt = cand
+                        break
+                if opt is None:
+                    # Last resort: pick the first non-"Select One" option
+                    for o in await opts.all():
+                        try:
+                            t = (await o.inner_text()).strip()
+                        except Exception:
+                            t = ""
+                        if t and t.lower() not in ("select one", "fax", "pager"):
+                            opt = o
+                            break
+            elif mode == "decline":
                 opt = opts.filter(has_text=re.compile(
                     r"not wish|prefer not|decline|do not want|don'?t wish|choose not", re.I
                 )).first
@@ -2066,7 +2118,10 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
     await page.wait_for_load_state("domcontentloaded")
     await _shot(page, "after_apply_click")
 
-    # Use last application if offered (pre-fills all fields)
+    # Use last application if offered (pre-fills all fields).
+    # When "Use last application" is available the tenant already has an account
+    # for this email — prefer sign-in over account-creation in subsequent auth.
+    used_last_app = False
     try:
         last_app = page.locator('[data-automation-id="useMyLastApplication"]').first
         if await last_app.is_visible(timeout=4000):
@@ -2074,13 +2129,15 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             await page.wait_for_timeout(2500)
             await page.wait_for_load_state("domcontentloaded")
             print("  [+] Used last application")
+            used_last_app = True
             await _shot(page, "after_use_last_app")
     except Exception:
         pass
 
-    # Handle auth
+    # Handle auth — if we already used a previous application the account exists,
+    # so prefer sign-in (not create-account) to avoid creating a duplicate.
     await _shot(page, "before_auth")
-    auth_ok = await handle_auth(page)
+    auth_ok = await handle_auth(page, prefer_signin=used_last_app)
     await _shot(page, "after_auth")
     if not auth_ok:
         return "needs_review", "email_verification_required"
@@ -2140,6 +2197,35 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                 or await page.locator('[data-automation-id="inlineAssessmentButton"]').count() > 0):
             print("  [!] Assessment required — stopping (apply manually)")
             return "needs_review", "assessment required — complete manually"
+
+        # Job-posting guard: if the Apply button is still visible (or we've
+        # navigated back to the job description), click it again to enter the form.
+        # This happens on some tenants (e.g. Cardinal Health) when "Use Last
+        # Application" completes but leaves the browser on the posting page.
+        try:
+            apply_still = page.locator(
+                '[data-automation-id="applyButton"], '
+                '[data-automation-id="adventureButton"], '
+                'button:has-text("Apply for Job"), '
+                'a:has-text("Apply for Job")'
+            ).first
+            if await apply_still.is_visible(timeout=1500):
+                print("  [→] Still on job posting — clicking Apply again")
+                await apply_still.click(timeout=8000)
+                await page.wait_for_timeout(2500)
+                await page.wait_for_load_state("domcontentloaded")
+                # Accept "use last application" again if offered
+                try:
+                    la = page.locator('[data-automation-id="useMyLastApplication"]').first
+                    if await la.is_visible(timeout=3000):
+                        await la.click(timeout=4000)
+                        await page.wait_for_timeout(2000)
+                        print("  [+] Used last application (re-entry)")
+                except Exception:
+                    pass
+                continue
+        except Exception:
+            pass
 
         # Create Account / Sign In step — the form often renders late, so the
         # pre-loop handle_auth() can miss it. Handle it here where it's rendered.
@@ -2208,6 +2294,38 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                 "wrong email address or password", "account might be locked",
                 "account is locked", "incorrect password",
             ]):
+                # Before bailing, try IMAP verification — the account may have JUST been
+                # created this session and needs email activation before the password works.
+                if verify_waits < 2:
+                    tenant = (url.split("//", 1)[-1].split(".", 1)[0]) if url else ""
+                    link = await asyncio.to_thread(fetch_verification_link, tenant)
+                    if link:
+                        print(f"  [+] Wrong-password → trying verification link from inbox")
+                        try:
+                            await page.goto(link, wait_until="domcontentloaded", timeout=30000)
+                            await page.wait_for_timeout(2500)
+                        except Exception as ve:
+                            print(f"  [!] Verify link error: {ve}")
+                        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                        await page.wait_for_timeout(2000)
+                        await try_click(page,
+                            '[data-automation-id="applyButton"]',
+                            '[data-automation-id="adventureButton"]',
+                            'button:has-text("Apply")', 'a:has-text("Apply")',
+                            timeout=12000)
+                        await page.wait_for_timeout(2500)
+                        try:
+                            last_app = page.locator('[data-automation-id="useMyLastApplication"]').first
+                            if await last_app.is_visible(timeout=4000):
+                                await last_app.click(timeout=4000)
+                                await page.wait_for_timeout(2000)
+                        except Exception:
+                            pass
+                        await wait_for_content(page)
+                        await handle_auth(page, prefer_signin=True)
+                        await page.wait_for_timeout(2500)
+                        verify_waits += 1
+                        continue
                 print("  [!] Sign-in rejected — wrong password or locked account")
                 return "needs_review", "auth_failed:wrong_password_or_locked"
             tenant = (url.split("//", 1)[-1].split(".", 1)[0]) if url else ""
@@ -2356,34 +2474,34 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                     print(f"  [!] No progress on '{step or '(unknown)'}' — blocked by: {blocking}")
                     return "needs_review", f"stuck_field:{blocking}"
                 print(f"  [!] No progress on '{step or '(unknown)'}' — Next not advancing")
-                if DEBUG_SHOTS:
-                    try:
-                        reqf = await page.evaluate("""() => {
-                            const out = [];
-                            document.querySelectorAll(
-                                'input,select,textarea,[role="combobox"],button[aria-haspopup],[data-automation-id*="selectinput" i],[data-automation-id="multiselectInputContainer"]'
-                            ).forEach(el => {
-                                if (['file','hidden','submit','reset'].includes(el.type)) return;
-                                if (el.offsetParent === null) return;
-                                const req = el.getAttribute('aria-required')==='true' || el.required;
-                                const inv = el.getAttribute('aria-invalid')==='true';
-                                const hasPopup = el.getAttribute('aria-haspopup');
-                                if (!req && !inv && !hasPopup) return;
-                                let lbl = el.getAttribute('aria-label')||'';
-                                const lb = el.getAttribute('aria-labelledby');
-                                if (!lbl && lb) lbl = lb.split(' ').map(i=>{const e=document.getElementById(i);return e?e.innerText.trim():'';}).join(' ');
-                                let n=el.parentElement;
-                                for(let i=0;i<8&&n&&!lbl;i++,n=n.parentElement){const t=(n.innerText||'').trim();if(t&&t.length<120&&/[?:*]/.test(t))lbl=t;}
-                                const val=(el.value||el.innerText||'').trim().slice(0,18);
-                                out.push((el.tagName+'/'+(el.type||el.getAttribute('role')||hasPopup||'')+' req='+(!!req)+' inv='+inv+' val='+JSON.stringify(val)+' :: '+(lbl||'?')).slice(0,140));
-                            });
-                            return [...new Set(out)];
-                        }""")
-                        for r in reqf[:14]:
-                            print(f"     [req-field] {r}")
-                    except Exception:
-                        pass
-                    print(f"     [body] {body_fp[:300]}")
+                # Always dump required/invalid fields so we can diagnose on CI
+                try:
+                    reqf = await page.evaluate("""() => {
+                        const out = [];
+                        document.querySelectorAll(
+                            'input,select,textarea,[role="combobox"],button[aria-haspopup],[data-automation-id*="selectinput" i],[data-automation-id="multiselectInputContainer"]'
+                        ).forEach(el => {
+                            if (['file','hidden','submit','reset'].includes(el.type)) return;
+                            if (el.offsetParent === null) return;
+                            const req = el.getAttribute('aria-required')==='true' || el.required;
+                            const inv = el.getAttribute('aria-invalid')==='true';
+                            const hasPopup = el.getAttribute('aria-haspopup');
+                            if (!req && !inv && !hasPopup) return;
+                            let lbl = el.getAttribute('aria-label')||'';
+                            const lb = el.getAttribute('aria-labelledby');
+                            if (!lbl && lb) lbl = lb.split(' ').map(i=>{const e=document.getElementById(i);return e?e.innerText.trim():'';}).join(' ');
+                            let n=el.parentElement;
+                            for(let i=0;i<8&&n&&!lbl;i++,n=n.parentElement){const t=(n.innerText||'').trim();if(t&&t.length<120&&/[?:*]/.test(t))lbl=t;}
+                            const val=(el.value||el.innerText||'').trim().slice(0,18);
+                            out.push((el.tagName+'/'+(el.type||el.getAttribute('role')||hasPopup||'')+' req='+(!!req)+' inv='+inv+' val='+JSON.stringify(val)+' :: '+(lbl||'?')).slice(0,140));
+                        });
+                        return [...new Set(out)];
+                    }""")
+                    for r in reqf[:20]:
+                        print(f"     [req-field] {r}")
+                except Exception:
+                    pass
+                print(f"     [body-fp] {body_fp[:400]}")
                 return "needs_review", f"stuck_no_advance:{step or 'unknown'}"
         else:
             stuck_sig = sig
