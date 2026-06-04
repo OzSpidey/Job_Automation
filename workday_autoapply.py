@@ -649,7 +649,7 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
     info = INFO
 
     # ── Work authorization ────────────────────────────────────────────────────
-    if re.search(r'legally authorized|authorized to work in the u\.?s', ll):
+    if re.search(r'legally authorized|authorized to work|legally eligible|eligible to work|residence or work permit|work permit', ll):
         return info.get("work_authorized", "Yes")
     if re.search(r'require sponsorship|need.*sponsorship|will you.*sponsor|now or in the future', ll):
         return info.get("needs_sponsorship", "No")
@@ -672,6 +672,12 @@ def _answer_from_profile(label: str, answers: dict) -> str | None:
         return info.get("ethnicity", "Asian")
     if re.search(r'veteran', ll):
         return "__DECLINE__"
+    if re.search(r'highest level of education|level of education|education or training|highest.*(degree|education)', ll):
+        return info.get("education_level", "Master")
+    if re.search(r'status(es)? applies to you|which.*status|immigration status|residency status', ll):
+        return info.get("work_status", "Permanent Resident")
+    if re.search(r'how many years|years of .{0,40}experience|years.*experience.*do you have', ll):
+        return "__YEARS_2PLUS__"
 
     # ── Contact info ──────────────────────────────────────────────────────────
     if re.search(r'\bfirst name\b', ll):      return info.get("first_name")
@@ -870,7 +876,9 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
             #   None           → unknown Yes/No question → default No
             if profile_ans == "__HEAR_ABOUT_US__":
                 continue
-            if profile_ans == "__DECLINE__":
+            if profile_ans == "__YEARS_2PLUS__":
+                mode = "years2plus"
+            elif profile_ans == "__DECLINE__":
                 mode = "decline"
             elif profile_ans and profile_ans.lower() in ("yes", "no"):
                 mode, want = "exact", profile_ans
@@ -882,10 +890,27 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
             await btn.click(timeout=4000)
             await page.wait_for_timeout(400)
             opts = page.locator('[role="listbox"] [role="option"], [role="listbox"] div')
+            opt = None
             if mode == "decline":
                 opt = opts.filter(has_text=re.compile(
                     r"not wish|prefer not|decline|do not want|don'?t wish|choose not", re.I
                 )).first
+            elif mode == "years2plus":
+                # Pick an option whose range starts at 2+ ("2-3", "2+", "2 to 5", "2 or more")
+                all_opts = await opts.all()
+                texts = []
+                for o in all_opts:
+                    try:
+                        texts.append((o, (await o.inner_text()).strip()))
+                    except Exception:
+                        pass
+                for pat in [r'^\s*2\s*[-+]', r'^\s*2\s*(to|or)\b', r'^\s*2\b', r'\b2\s*[-+]', r'\b2\b']:
+                    for o, t in texts:
+                        if t and re.search(pat, t, re.I):
+                            opt = o
+                            break
+                    if opt is not None:
+                        break
             elif mode == "contains":
                 # Word-boundary match so "Male" doesn't also match "Female"
                 opt = opts.filter(has_text=re.compile(rf'\b{re.escape(want)}\b', re.I)).first
@@ -894,11 +919,8 @@ async def fill_mandatory_listbox_dropdowns(page: Page, answers: dict | None = No
                     f'[role="listbox"] [role="option"]:text-is("{want}"), '
                     f'[role="listbox"] div:text-is("{want}")'
                 ).first
-            if await opt.count() and await opt.is_visible(timeout=1500):
+            if opt is not None and await opt.count() and await opt.is_visible(timeout=1500):
                 await opt.click(timeout=4000)
-            elif mode == "exact" and want == "No":
-                # Unknown Yes/No question with no "No" option — leave for review
-                pass
             await page.wait_for_timeout(300)
         except Exception:
             continue
@@ -930,6 +952,81 @@ async def fill_checkbox_questions(page: Page, answers: dict | None = None) -> No
             want = profile_ans if (profile_ans and profile_ans.lower() in ("yes", "no")) else "No"
             lbl = grp.locator('label').filter(
                 has_text=re.compile(rf'^\s*{want}\s*$', re.I)
+            ).first
+            if await lbl.count() and await lbl.is_visible(timeout=1500):
+                await lbl.click(timeout=4000)
+                await page.wait_for_timeout(200)
+        except Exception:
+            continue
+
+async def fill_date_questions(page: Page) -> None:
+    """Fill empty required date fields (e.g. 'available to start') with today's
+    date via the calendar 'Selected Today' button."""
+    wrappers = await page.locator('[data-automation-id="dateInputWrapper"]').all()
+    for w in wrappers:
+        try:
+            disp = w.locator('[data-automation-id="dateSectionMonth-display"]').first
+            if await disp.count():
+                txt = (await disp.inner_text()).strip().upper()
+                if txt and txt != "MM":
+                    continue  # already filled
+            cal = w.locator('[data-automation-id="dateIcon"]').first
+            if await cal.count() and await cal.is_visible(timeout=1000):
+                await cal.click(timeout=4000)
+                await page.wait_for_timeout(500)
+                today_btn = page.locator('[data-automation-id="datePickerSelectedToday"]').first
+                if await today_btn.is_visible(timeout=2000):
+                    await today_btn.click(timeout=4000)
+                    await page.wait_for_timeout(300)
+        except Exception:
+            continue
+
+async def fill_radio_questions(page: Page, answers: dict | None = None) -> None:
+    """Handle Yes/No radio-button questions whose container is aria-required but
+    not necessarily role=radiogroup (e.g. Dow's 'previously worked' question).
+    Reads the question from aria-labelledby and answers from the profile (default No)."""
+    answers = answers or {}
+    groups = await page.locator(
+        '[role="radiogroup"][aria-required="true"], '
+        '[aria-required="true"]:has(input[type="radio"])'
+    ).all()
+    for grp in groups:
+        try:
+            radios = grp.locator('input[type="radio"]')
+            n = await radios.count()
+            if n == 0:
+                continue
+            # Skip if an option is already selected
+            answered = False
+            for i in range(n):
+                try:
+                    if await radios.nth(i).is_checked():
+                        answered = True
+                        break
+                except Exception:
+                    pass
+            if answered:
+                continue
+            # Question text: prefer aria-labelledby, fall back to form-field ancestor
+            qtext = ""
+            labelledby = await grp.get_attribute("aria-labelledby")
+            if labelledby:
+                for lid in labelledby.split():
+                    el = page.locator(f'#{lid}')
+                    if await el.count():
+                        try:
+                            qtext += " " + (await el.inner_text())
+                        except Exception:
+                            pass
+            if not qtext.strip():
+                container = grp.locator('xpath=ancestor::*[contains(@data-automation-id,"formField")][1]')
+                if await container.count():
+                    qtext = await container.inner_text()
+            ans = _answer_from_profile(qtext, answers) or "No"
+            if ans.lower() not in ("yes", "no"):
+                ans = "No"
+            lbl = grp.locator('label').filter(
+                has_text=re.compile(rf'^\s*{ans}\s*$', re.I)
             ).first
             if await lbl.count() and await lbl.is_visible(timeout=1500):
                 await lbl.click(timeout=4000)
@@ -1050,7 +1147,12 @@ async def fill_application_questions(page: Page, answers: dict, unknowns: list[s
 
         if answer == "__HEAR_ABOUT_US__":
             await fill_hear_about_us(page)
-        elif ftype in ("text", "email", "tel", "number", "textarea", "search", "spinbutton", ""):
+            continue
+        if answer == "__YEARS_2PLUS__":
+            answer = INFO.get("years_experience", "2")  # text field → numeric years
+        if answer in ("__DECLINE__",):
+            continue  # decline handled only for dropdowns
+        if ftype in ("text", "email", "tel", "number", "textarea", "search", "spinbutton", ""):
             await try_fill(page, str(answer), *sels, overwrite=False)
         elif ftype in ("select", "combobox"):
             await combobox_select(page, str(answer), *sels)
@@ -1180,6 +1282,14 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
         print(f"  Step {step_num+1}: {step or '(unknown)'}  | {_snippet[:70]}")
         await _shot(page, f"step_{step_num+1}")
 
+        # Submission succeeded — recognize Workday's confirmation page
+        if any(kw in body for kw in [
+            "successfully submitted", "application submitted",
+            "thank you for applying", "we have received your application",
+        ]):
+            print("  [+] Application submitted")
+            return "applied", "; ".join(unknowns)
+
         # Create Account / Sign In step — the form often renders late, so the
         # pre-loop handle_auth() can miss it. Handle it here where it's rendered.
         # A visible password field only ever appears on an auth page.
@@ -1276,6 +1386,7 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             pass  # Disability page handled
         elif any(k in step for k in ("information", "contact", "personal")):
             await fill_my_information(page)
+            await fill_radio_questions(page, answers)
         elif any(k in step for k in ("experience", "background", "resume", "my experience")):
             await fill_my_experience(page)
         elif any(k in step for k in ("voluntary", "disclos", "eeo", "equal opportunity", "diversity")):
@@ -1283,6 +1394,8 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
         elif any(k in step for k in ("question", "additional", "application question", "screening")):
             await fill_mandatory_listbox_dropdowns(page, answers)
             await fill_checkbox_questions(page, answers)
+            await fill_radio_questions(page, answers)
+            await fill_date_questions(page)
             await fill_application_questions(page, answers, unknowns)
         else:
             # Unknown step — try all fillers; each is a no-op if fields aren't present
@@ -1290,6 +1403,8 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
             await fill_my_experience(page)
             await fill_mandatory_listbox_dropdowns(page, answers)
             await fill_checkbox_questions(page, answers)
+            await fill_radio_questions(page, answers)
+            await fill_date_questions(page)
             await fill_application_questions(page, answers, unknowns)
 
         await page.wait_for_timeout(600)
