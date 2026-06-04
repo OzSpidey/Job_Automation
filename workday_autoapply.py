@@ -709,10 +709,65 @@ async def fill_my_information(page: Page) -> None:
     await try_fill(page, info.get("last_name", ""),
         '[data-automation-id="legalNameSection_lastName"]',
         'input[aria-label*="Last Name" i]')
+    # Country/Region Phone Code — a required prompt/typeahead on some tenants
+    # (e.g. HP). Set it to the US calling code BEFORE the phone-number fill so a
+    # broad "Phone" selector can't dump the phone number into this field.
+    try:
+        code_btn = page.locator(
+            'button[aria-label*="Phone Code" i], '
+            '[data-automation-id="countryPhoneCode"]'
+        ).first
+        if await code_btn.count() and await code_btn.is_visible(timeout=1000):
+            cur = (await code_btn.inner_text()).strip()
+            if not cur or cur.lower() in ("select one", ""):
+                await combobox_select(page, "United States of America (+1)",
+                    'button[aria-label*="Phone Code" i]') or \
+                await combobox_select(page, "United States",
+                    'button[aria-label*="Phone Code" i]')
+    except Exception:
+        pass
+    # Repair a "Country/Region Phone Code" text field that a prior run (or the
+    # saved profile) populated with the raw phone number. Resolve the label via
+    # aria-label / aria-labelledby / nearby text, and if it holds a long digit
+    # string set the US calling code instead. Returns the field id to fill.
+    try:
+        code_id = await page.evaluate("""(phone) => {
+            const els = document.querySelectorAll('input[type="text"], input:not([type])');
+            for (const el of els) {
+                if (el.offsetParent === null) continue;
+                let lbl = el.getAttribute('aria-label') || '';
+                const lb = el.getAttribute('aria-labelledby');
+                if (!lbl && lb) lbl = lb.split(' ').map(i=>{const e=document.getElementById(i);return e?e.innerText.trim():'';}).join(' ');
+                if (!lbl && el.id) { const l=document.querySelector('label[for="'+el.id+'"]'); if (l) lbl=l.innerText.trim(); }
+                if (!lbl) { let n=el.parentElement; for(let i=0;i<6&&n&&!lbl;i++,n=n.parentElement){const t=(n.innerText||'').trim(); if(t&&t.length<80)lbl=t;} }
+                if (!/phone\\s*code/i.test(lbl)) continue;
+                return el.id || '';
+            }
+            return '';
+        }""", info.get("phone", ""))
+        if code_id:
+            ci = page.locator(f'#{code_id}').first
+            cur = ""
+            try:
+                cur = await ci.input_value()
+            except Exception:
+                pass
+            digits = re.sub(r'\D', '', cur)
+            if not cur or len(digits) >= 7:  # empty or a phone-number-like value
+                await ci.click(timeout=3000)
+                await ci.press("Control+a")
+                await ci.press("Delete")
+                await page.keyboard.type("+1")
+                await ci.press("Tab")
+    except Exception:
+        pass
+    # Phone NUMBER — target the number field specifically, never the code field.
     await try_fill(page, info.get("phone", ""),
         '[data-automation-id="phone-number"]',
-        'input[aria-label*="Phone" i]', 'input[type="tel"]',
-        'input[name*="phone" i]')
+        'input[aria-label="Phone Number"]',
+        'input[aria-label*="Phone Number" i]',
+        'input[type="tel"]:not([aria-label*="Code" i])',
+        'input[name="phoneNumber"]')
     await _select_phone_device_type(page)
     await try_fill(page, info.get("address_line1", ""),
         '[data-automation-id="addressSection_addressLine1"]',
@@ -892,6 +947,16 @@ async def fill_work_experience(page: Page) -> None:
         'input[id*="jobTitle" i]', 'input[aria-label*="Job Title" i]')
     await try_fill(page, company,
         'input[id*="companyName" i]', 'input[aria-label*="Company" i]')
+    # Location (required on some tenants, e.g. HP, Amentum) — use the applicant's
+    # city/state; the field is a plain text input in the work-experience block.
+    loc_val = exp.get("location") or (
+        f'{info.get("city", "Boston")}, {info.get("state", "Massachusetts")}'
+    )
+    await try_fill(page, loc_val,
+        'input[id*="location" i][id*="workExperience" i]',
+        'input[id*="-location" i]',
+        '[data-automation-id="location"]',
+        'input[aria-label*="Location" i]')
     await _fill_exp_date(page, "startDate", start)
     await _fill_exp_date(page, "endDate", end)
 
@@ -2085,6 +2150,32 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                     return "needs_review", f"stuck_field:{blocking}"
                 print(f"  [!] No progress on '{step or '(unknown)'}' — Next not advancing")
                 if DEBUG_SHOTS:
+                    try:
+                        reqf = await page.evaluate("""() => {
+                            const out = [];
+                            document.querySelectorAll(
+                                'input,select,textarea,[role="combobox"],button[aria-haspopup],[data-automation-id*="selectinput" i],[data-automation-id="multiselectInputContainer"]'
+                            ).forEach(el => {
+                                if (['file','hidden','submit','reset'].includes(el.type)) return;
+                                if (el.offsetParent === null) return;
+                                const req = el.getAttribute('aria-required')==='true' || el.required;
+                                const inv = el.getAttribute('aria-invalid')==='true';
+                                const hasPopup = el.getAttribute('aria-haspopup');
+                                if (!req && !inv && !hasPopup) return;
+                                let lbl = el.getAttribute('aria-label')||'';
+                                const lb = el.getAttribute('aria-labelledby');
+                                if (!lbl && lb) lbl = lb.split(' ').map(i=>{const e=document.getElementById(i);return e?e.innerText.trim():'';}).join(' ');
+                                let n=el.parentElement;
+                                for(let i=0;i<8&&n&&!lbl;i++,n=n.parentElement){const t=(n.innerText||'').trim();if(t&&t.length<120&&/[?:*]/.test(t))lbl=t;}
+                                const val=(el.value||el.innerText||'').trim().slice(0,18);
+                                out.push((el.tagName+'/'+(el.type||el.getAttribute('role')||hasPopup||'')+' req='+(!!req)+' inv='+inv+' val='+JSON.stringify(val)+' :: '+(lbl||'?')).slice(0,140));
+                            });
+                            return [...new Set(out)];
+                        }""")
+                        for r in reqf[:14]:
+                            print(f"     [req-field] {r}")
+                    except Exception:
+                        pass
                     print(f"     [body] {body_fp[:300]}")
                 return "needs_review", f"stuck_no_advance:{step or 'unknown'}"
         else:
