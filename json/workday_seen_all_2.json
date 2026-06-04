@@ -41,6 +41,7 @@
   "globalhr_/job/US-AZ-TUCSON-9016--9000-S-Rita-Rd--BLDG-9016/Level-II-FP-A-Analyst---Air-Dominance_01847327",
   "globalhr_/job/US-AZ-TUCSON-M09--3350-E-Hemisphere-Loop--BLDG-M09/Analyst--Accounts-Receivable--Hybrid-_01849431",
   "globalhr_/job/US-AZ-TUCSON-M13--3601-E-Britannia-Dr--BRITANNIA-M13/Stinger-Missile-Proposal-Support-Analyst_01842412-1",
+  "globalhr_/job/US-CA-EL-SEGUNDO-E02--2002-E-El-Segundo-Blvd--BLDG-E02/Financial-Analyst---FLDP-2026-Graduates-Only_01832356",
   "globalhr_/job/US-CA-FULLERTON-675--1801-Hughes-Dr--BLDG-675/Financial-Analyst--P2---Program-Cost-Controls--ONSITE-_01849168",
   "globalhr_/job/US-CA-GOLETA-B01--6825-Cortona-Dr--BLDG-B01/Level-II-Analyst--Estimating-and-Pricing_01845844",
   "globalhr_/job/US-CO-BUCKLEY-SFB-CUST--18500-E-6th-Ave--BUCKLEY-SFB-External-Site/Intelligence-Analyst_01846084",
@@ -355,6 +356,7 @@
   "jll_/job/Malvern-PA/Business-Intelligence--BI--Analyst---On-Account_REQ497288-1",
   "jll_/job/Mountain-View-CA/RPM-Data-Coordinator_REQ512299",
   "jll_/job/New-York-NY/Analyst--Production-Support_REQ510718",
+  "jll_/job/New-York-NY/Transformation-Analyst_REQ496080",
   "jll_/job/Poughkeepsie-NY/Project-Coordinator---Data-Centers_REQ503470",
   "jll_/job/San-Francisco-CA/Analyst--Capital-Markets---Office-Investment-Advisory_REQ508800",
   "jll_/job/San-Francisco-CA/Multi-Housing-Analyst--Capital-Markets---Investment-Sales-Advisory_REQ508797-1",
@@ -1796,6 +1798,7 @@
   "uchicago_/job/Chicago-IL/Imaging-Research-Analyst-II_JR33817",
   "uchicago_/job/Chicago-IL/Laboratory-Research-Analyst_JR33742",
   "uchicago_/job/Chicago-IL/Research-Analyst--Neurological-Surgery_JR33854",
+  "uchicago_/job/Chicago-IL/Supplier-Relationship-Analyst_JR33912",
   "uchicago_/job/Illinois-Chicago/Public-Health-Research-Analyst_JR33866",
   "ufpi_/job/Elkhart-IN/Purchasing-Analyst_R20030",
   "ufpi_/job/Grand-Rapids-MI/Treasury-Analyst_R20554",
@@ -2163,6 +2166,7 @@
   "zoom_/job/Remote-AUS/Applied-AI-Engineer_R19221-1",
   "zoom_/job/San-Jose-CA/Business-Systems-Analyst_R19209",
   "zoom_/job/San-Jose-CA/Data-Scientist_R19158-1",
+  "zoom_/job/Seattle-WA/AI-Engineer---Agent-Automation_R17809-1",
   "zoom_/job/Seattle-WA/AI-Software-Engineer_R15882-1",
   "zoom_/job/Seattle-WA/Software-Development-Engineer---Zoom-AI-API-Suite_R17822-1"
 ]
