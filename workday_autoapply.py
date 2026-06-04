@@ -1115,14 +1115,40 @@ async def fill_education(page: Page) -> None:
             except Exception:
                 pass
             if not cur:
-                await school_in.fill(school)
-                await page.wait_for_timeout(900)
-                # Typeahead: click a matching suggestion if one appears
-                sugg = page.locator(
-                    '[role="option"], [data-automation-id="promptOption"], li[role="option"]'
-                ).filter(has_text=re.compile("northeastern", re.I)).first
-                if await sugg.count() and await sugg.is_visible(timeout=1500):
-                    await sugg.click(timeout=4000)
+                # Type the school name and wait for typeahead suggestions.
+                # Try progressively shorter prefixes if an exact match doesn't appear.
+                filled_school = False
+                for prefix in [school, "Northeastern", "Northeaster", "Northeas"]:
+                    await school_in.triple_click(timeout=3000)
+                    await school_in.fill(prefix)
+                    await page.wait_for_timeout(1000)
+                    sugg_all = await page.locator(
+                        '[role="option"], [data-automation-id="promptOption"], '
+                        'li[role="option"], div[role="option"]'
+                    ).all()
+                    # First try exact school name match
+                    for sugg_item in sugg_all:
+                        try:
+                            stxt = (await sugg_item.inner_text()).strip()
+                            if school.lower() in stxt.lower() and await sugg_item.is_visible(timeout=800):
+                                await sugg_item.click(timeout=4000)
+                                filled_school = True
+                                break
+                        except Exception:
+                            continue
+                    if filled_school:
+                        break
+                    # If no match found, clear and try shorter prefix
+                    if not sugg_all:
+                        continue
+                if not filled_school:
+                    # Last resort: just type the school name and tab out (plain text field)
+                    try:
+                        await school_in.triple_click(timeout=3000)
+                        await school_in.fill(school)
+                        await school_in.press("Tab")
+                    except Exception:
+                        pass
         else:
             # Listbox/combobox variant
             await combobox_select(page, school,
