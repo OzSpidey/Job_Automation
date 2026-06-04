@@ -2051,6 +2051,8 @@ async def apply_to_job(page: Page, job: dict, answers: dict) -> tuple[str, str]:
                     print(f"  [!] No progress on '{step or '(unknown)'}' — blocked by: {blocking}")
                     return "needs_review", f"stuck_field:{blocking}"
                 print(f"  [!] No progress on '{step or '(unknown)'}' — Next not advancing")
+                if DEBUG_SHOTS:
+                    print(f"     [body] {body_fp[:300]}")
                 return "needs_review", f"stuck_no_advance:{step or 'unknown'}"
         else:
             stuck_sig = sig
