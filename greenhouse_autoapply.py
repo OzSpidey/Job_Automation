@@ -110,16 +110,21 @@ def save_seen(seen: dict) -> None:
     SEEN_LOG.write_text(json.dumps(seen, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def send_summary_email(new_jobs: list[dict]) -> None:
-    """Email only genuinely new roles."""
+def send_summary_email(jobs: list[dict], new_count: int) -> None:
+    """Email all 24h roles with NEW badges; only called when new_count > 0."""
     if not EMAIL_PASSWORD:
         print("[!] EMAIL_PASSWORD not set — skipping email notification.")
         return
 
     def _row(j):
+        new_badge = (
+            "&nbsp;<span style='background:#22c55e;color:#fff;font-size:10px;"
+            "font-weight:bold;padding:2px 5px;border-radius:3px'>NEW</span>"
+            if j.get("is_new") else ""
+        )
         return (
             f"<tr>"
-            f"<td style='padding:6px;border:1px solid #ddd'>{j.get('title','')}</td>"
+            f"<td style='padding:6px;border:1px solid #ddd'>{j.get('title','')}{new_badge}</td>"
             f"<td style='padding:6px;border:1px solid #ddd'>{j.get('company','')}</td>"
             f"<td style='padding:6px;border:1px solid #ddd'>{j.get('location','')}</td>"
             f"<td style='padding:6px;border:1px solid #ddd'>{j.get('posted','')}</td>"
@@ -127,12 +132,18 @@ def send_summary_email(new_jobs: list[dict]) -> None:
             f"</tr>"
         )
 
-    rows = "".join(_row(j) for j in new_jobs)
-    subject = f"[Greenhouse] {len(new_jobs)} new role(s) — {datetime.now().strftime('%b %d, %Y %H:%M')}"
+    # Sort: new jobs first, then by posted_ts descending (stable two-pass)
+    sorted_jobs = sorted(jobs, key=lambda j: j.get("posted_ts") or "", reverse=True)
+    sorted_jobs = sorted(sorted_jobs, key=lambda j: 0 if j.get("is_new") else 1)
+
+    rows = "".join(_row(j) for j in sorted_jobs)
+    subject = f"Greenhouse: {new_count} new job(s) — {len(jobs)} total (last 24h)"
     body_html = f"""
     <html><body style="font-family:sans-serif;color:#333;font-size:13px">
-    <h2>Greenhouse — New Roles</h2>
-    <p><b>{len(new_jobs)} new role(s)</b> found.</p>
+    <h2>Greenhouse &mdash; {len(jobs)} job(s) posted in the last 24 hours</h2>
+    <p><b>{new_count} new role(s)</b> found this run. All listings from the last 24h shown &mdash;
+    <span style='background:#22c55e;color:#fff;font-size:10px;font-weight:bold;padding:2px 5px;border-radius:3px'>NEW</span>
+    = new this run.</p>
     <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#e0e0e0">
         <th>Title</th><th>Company</th><th>Location</th><th>Posted</th><th>Link</th>
@@ -437,14 +448,14 @@ async def main() -> None:
 
         await fetch_job_details(jobs)
 
-        # Keep only jobs posted within the last 2 days (or no date available)
-        cutoff = datetime.now(timezone.utc) - timedelta(days=2)
+        # Keep only jobs posted within the last 24 hours (or no date available)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
         jobs = [
             j for j in jobs
             if not j.get("posted_ts")
             or datetime.fromisoformat(j["posted_ts"]) >= cutoff
         ]
-        print(f"[+] After 2-day filter: {len(jobs)} job(s)")
+        print(f"[+] After 24h filter: {len(jobs)} job(s)")
 
         # Filter out skip list, senior/lead/manager/architect, and unenriched "View job" rows
         jobs = [
@@ -459,12 +470,13 @@ async def main() -> None:
 
         seen = load_seen()
 
-        # Identify new jobs and update seen dict
+        # Mark is_new on all jobs and collect new ones
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         new_jobs = []
         for j in jobs:
             jid = j.get("job_id") or j["apply_url"]
-            if jid not in seen:
+            j["is_new"] = jid not in seen
+            if j["is_new"]:
                 seen[jid] = today
                 j["found_on"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                 new_jobs.append(j)
@@ -492,7 +504,7 @@ async def main() -> None:
         elif not EMAIL_TO:
             print("[warn] EMAIL_TO not configured — skipping email.")
         else:
-            send_summary_email(new_jobs)
+            send_summary_email(jobs, len(new_jobs))
 
         await browser.close()
 

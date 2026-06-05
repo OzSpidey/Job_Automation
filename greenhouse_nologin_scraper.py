@@ -325,16 +325,14 @@ def _format_ago(iso: str) -> str:
 
 # -- Email ---------------------------------------------------------------------
 
-def _send_email(jobs: list[dict]) -> None:
+def _send_email(jobs: list[dict], new_count: int) -> None:
     if not EMAIL_PASSWORD:
         print("[!] GMAIL_APP_PASSWORD not set -- skipping email.")
         return
 
-    by_role: dict[str, list[dict]] = {}
-    for j in jobs:
-        by_role.setdefault(j["role"], []).append(j)
-
+    # Sort: new jobs first, then by posted date descending (stable two-pass)
     sorted_jobs = sorted(jobs, key=lambda j: j.get("posted") or "", reverse=True)
+    sorted_jobs = sorted(sorted_jobs, key=lambda j: 0 if j.get("is_new") else 1)
     rows = ""
     for j in sorted_jobs:
         new_badge = (
@@ -361,8 +359,10 @@ def _send_email(jobs: list[dict]) -> None:
         )
 
     body = f"""
-    <h2>Greenhouse No-Login Scraper -- {len(jobs)} new job(s) (posted &le;3 days)</h2>
-    <p>Scraped {len(COMPANIES)} company boards. Showing only new postings from the last 3 days.</p>
+    <h2>Greenhouse &mdash; {len(jobs)} job(s) posted in the last 24 hours</h2>
+    <p><b>{new_count} new role(s)</b> found this run. All listings from the last 24h shown &mdash;
+    <span style='background:#22c55e;color:#fff;font-size:10px;font-weight:bold;padding:2px 5px;border-radius:3px'>NEW</span>
+    = new this run.</p>
     <table border="1" cellpadding="6" cellspacing="0"
            style="border-collapse:collapse;font-family:sans-serif;font-size:13px">
       <tr style="background:#e0e0e0">
@@ -373,7 +373,7 @@ def _send_email(jobs: list[dict]) -> None:
     """
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"Greenhouse No-Login: {len(jobs)} new job(s) (<=3 days old)"
+    msg["Subject"] = f"Greenhouse: {new_count} new job(s) — {len(jobs)} total (last 24h)"
     msg["From"]    = EMAIL_SENDER
     msg["To"]      = EMAIL_TO
     msg.attach(MIMEText(body, "html"))
@@ -404,23 +404,20 @@ def main() -> None:
     seen_ts = {k: v for k, v in seen_ts.items() if v >= week_ago}
     seen: set[str] = set(seen_ts)
 
-    last_run_ids: set[str] = set()
-    if LAST_RUN_FILE.exists():
-        last_run_ids = set(json.loads(LAST_RUN_FILE.read_text(encoding="utf-8")))
-
     print(f"[i] {len(seen)} previously seen IDs | scraping {len(COMPANIES)} boards...")
 
     all_jobs = asyncio.run(_scrape_all())
     for job in all_jobs:
-        job["is_new"] = job["job_id"] not in last_run_ids
+        job["is_new"] = job["job_id"] not in seen
     print(f"[i] Total matching: {len(all_jobs)}")
 
     new_jobs = [j for j in all_jobs if j["job_id"] not in seen]
     print(f"[i] New this run:   {len(new_jobs)}")
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
-    recent_jobs = [j for j in new_jobs if not j.get("posted") or j["posted"] >= cutoff]
-    print(f"[i] Posted <=3 days: {len(recent_jobs)}")
+    cutoff_24h_str = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    all_24h_jobs = [j for j in all_jobs if not j.get("posted") or j["posted"] >= cutoff_24h_str]
+    new_24h_jobs  = [j for j in all_24h_jobs if j.get("is_new")]
+    print(f"[i] Posted <=24h:  {len(all_24h_jobs)} total, {len(new_24h_jobs)} new")
 
     if new_jobs:
         CSV_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -436,16 +433,13 @@ def main() -> None:
                 writer.writerow({**j, "found_at": now})
         print(f"[+] Appended to {CSV_FILE}")
 
-    # Only mark a job seen once it has actually surfaced in the email.
-    # Jobs that pass role/location but fail the recency window stay out of seen
-    # so they get another chance next run (instead of being silently swallowed).
+    # Only mark a job seen once it surfaces in the email (24h window).
+    # Jobs outside the window stay out of seen so they get another chance next run.
     now_iso = datetime.now(timezone.utc).isoformat()
-    for j in recent_jobs:
+    for j in new_24h_jobs:
         seen_ts.setdefault(j["job_id"], now_iso)
     SEEN_FILE.parent.mkdir(parents=True, exist_ok=True)
     SEEN_FILE.write_text(json.dumps(seen_ts, sort_keys=True), encoding="utf-8")
-
-    LAST_RUN_FILE.write_text(json.dumps(sorted({j["job_id"] for j in all_jobs})), encoding="utf-8")
 
     # Append DA/DE/BI jobs posted <24h to master CSV
     cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
@@ -472,10 +466,10 @@ def main() -> None:
         })
     _append_master_csv(master_rows)
 
-    if recent_jobs:
-        _send_email(recent_jobs)
+    if new_24h_jobs:
+        _send_email(all_24h_jobs, len(new_24h_jobs))
     else:
-        print("[i] No recent new jobs -- skipping email.")
+        print("[i] No new 24h jobs -- skipping email.")
 
 
 if __name__ == "__main__":
