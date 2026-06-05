@@ -373,7 +373,7 @@ def _send_email(jobs: list[dict], new_count: int) -> None:
     """
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"Greenhouse: {new_count} new job(s) — {len(jobs)} total (last 24h)"
+    msg["Subject"] = f"Greenhouse Boards: {new_count} new job(s) — {len(jobs)} total (last 24h)"
     msg["From"]    = EMAIL_SENDER
     msg["To"]      = EMAIL_TO
     msg.attach(MIMEText(body, "html"))

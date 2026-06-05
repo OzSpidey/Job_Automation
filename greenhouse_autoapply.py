@@ -137,7 +137,7 @@ def send_summary_email(jobs: list[dict], new_count: int) -> None:
     sorted_jobs = sorted(sorted_jobs, key=lambda j: 0 if j.get("is_new") else 1)
 
     rows = "".join(_row(j) for j in sorted_jobs)
-    subject = f"Greenhouse: {new_count} new job(s) — {len(jobs)} total (last 24h)"
+    subject = f"Greenhouse Search: {new_count} new job(s) — {len(jobs)} total (last 24h)"
     body_html = f"""
     <html><body style="font-family:sans-serif;color:#333;font-size:13px">
     <h2>Greenhouse &mdash; {len(jobs)} job(s) posted in the last 24 hours</h2>
