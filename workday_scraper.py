@@ -91,6 +91,9 @@ _ROLES = {
     },
 }
 
+# Broad terms used for large employers when blank search buries relevant roles
+_ADAPTIVE_SEARCH_TERMS = ["Data", "Analytics", "Business Intelligence", "Insights", "AI Engineer"]
+
 # ── Parse role argument ────────────────────────────────────────────────────────
 _parser = argparse.ArgumentParser(add_help=False)
 _parser.add_argument("--role", choices=["de", "da", "bi", "analyst", "ds", "aie"], default=None)
@@ -127,6 +130,7 @@ if _args.batch:
 MAX_AGE_DAYS  = 1    # skip jobs older than this (Workday shows "Posted X Days Ago")
 REQUEST_DELAY = 1.0  # seconds between company requests
 RESULTS_LIMIT = 20   # jobs to fetch per company (Workday API hard-caps limit at 20)
+LARGE_EMPLOYER_THRESHOLD = 100  # total jobs above this → use targeted search terms
 
 OUTPUT_CSV     = Path(__file__).parent / "csv" / _csv_file
 SEEN_LOG       = Path(__file__).parent / "json" / _seen_file
@@ -666,7 +670,7 @@ def send_summary_email(all_jobs: list[dict], new_count: int) -> None:
     </table>"""
 
     subject = (
-        f"[Workday] {new_count} new {_role_label} role(s) — "
+        f"[Workday-ADAPTIVE-TEST] {new_count} new {_role_label} role(s) — "
         f"{datetime.now(_EST).strftime('%b %d, %Y %H:%M')}"
     )
     body_html = f"""
@@ -698,10 +702,22 @@ def process_company(company, seen_ids, all_current_jobs, lock, csv_lock, counter
     if company["name"] in IGNORED_COMPANIES:
         return
     print(f"[→] {company['name']}")
+
+    # For all-roles batch mode (blank search), probe total first.
+    # Large employers (hospitals, retailers) bury data roles past position 20
+    # in their default sort — switch to targeted terms for those.
+    effective_terms = SEARCH_TERMS
+    if SEARCH_TERMS == [""]:
+        t, i, c = company["tenant"], company["instance"], company["career"]
+        status, _, total = _post(build_api_url(t, i, c), "", 0)
+        if status == 200 and total > LARGE_EMPLOYER_THRESHOLD:
+            effective_terms = _ADAPTIVE_SEARCH_TERMS
+            print(f"    [adaptive] {total} total jobs — using targeted terms")
+
     all_postings = []
     seen_req_ids: set = set()
     try:
-        for term in SEARCH_TERMS:
+        for term in effective_terms:
             for job in fetch_jobs(company, term):
                 rid = job.get("jobReqId") or job.get("externalPath", "")
                 if rid not in seen_req_ids:
