@@ -287,6 +287,8 @@ def send_summary_email(all_jobs: list, new_count: int, company_count: int = 0) -
 
     def _row(j):
         badges = ""
+        if j.get("is_new"):
+            badges += "&nbsp;<span style='background:#e65100;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span>"
         if j.get("entry_level"):
             badges += "&nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span>"
         bg = "#f1f8e9" if j.get("posted") == today else ""
@@ -326,11 +328,14 @@ def send_summary_email(all_jobs: list, new_count: int, company_count: int = 0) -
       {role_rows}
     </table>"""
 
-    subject   = f"[iCIMS] {new_count} new role(s) — {datetime.now(_EASTERN).strftime('%b %d, %Y %H:%M %Z')}"
+    total_count = len(all_jobs)
+    subject   = f"[iCIMS] {total_count} role(s) ({new_count} new) — {datetime.now(_EASTERN).strftime('%b %d, %Y %H:%M %Z')}"
     body_html = f"""
-    <h2>iCIMS — New Roles</h2>
-    <p><b>{new_count} new role(s)</b> found across {company_count} companies. Green rows = posted today.
-    &nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span> = entry-level.</p>
+    <h2>iCIMS — Roles (Last {MAX_AGE_DAYS}d)</h2>
+    <p><b>{total_count} role(s)</b> found across {company_count} companies — <b>{new_count} new</b> this run.
+    Green rows = posted today.
+    &nbsp;<span style='background:#1565c0;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>ENTRY</span> = entry-level.
+    &nbsp;<span style='background:#e65100;color:#fff;padding:1px 6px;border-radius:3px;font-size:11px'>NEW</span> = not seen before.</p>
     {sections}
     """
     try:
@@ -375,13 +380,11 @@ def main() -> None:
     print(f"\n{'='*65}")
     print(f"[+] Done — {new_count} new job(s) found across {len(companies)} companies")
 
-    if new_count:
-        with lock:
-            jobs_to_send = [j for j in all_current_jobs if j.get("is_new")]
-        jobs_to_send.sort(key=lambda j: j.get("posted", ""), reverse=True)
-        send_summary_email(jobs_to_send, new_count, len(companies))
+    if all_current_jobs:
+        all_current_jobs.sort(key=lambda j: j.get("posted", ""), reverse=True)
+        send_summary_email(all_current_jobs, new_count, len(companies))
     else:
-        print("[i] No new jobs — skipping email.")
+        print("[i] No jobs found — skipping email.")
 
 if __name__ == "__main__":
     main()
