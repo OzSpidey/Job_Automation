@@ -2,7 +2,7 @@ name: Daily Commit
 
 on:
   schedule:
-    - cron: '0 14 * * 0-5'   # 10 AM ET Sun–Fri, skip Saturday
+    - cron: '0 14 * * *'   # triggers daily at 10 AM ET; script handles probabilistic skipping
   workflow_dispatch:
 
 permissions:
@@ -16,10 +16,31 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Roll skip probability
+        id: roll
+        run: |
+          DAY=$(date -u +%u)   # 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat 7=Sun
+          RAND=$((RANDOM % 100))
+          if   [ "$DAY" -eq "6" ]; then THRESHOLD=80   # Sat: 80% skip
+          elif [ "$DAY" -eq "7" ]; then THRESHOLD=60   # Sun: 60% skip
+          else                          THRESHOLD=10   # Mon–Fri: 10% skip
+          fi
+          if [ $RAND -lt $THRESHOLD ]; then
+            echo "skip=true"  >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Random delay
+        if: steps.roll.outputs.skip == 'false'
+        run: sleep $((RANDOM % 5400))   # spread commit time up to 90 min after trigger
+
       - name: Update daily ping
+        if: steps.roll.outputs.skip == 'false'
         run: echo "$(date -u +%Y-%m-%d)" > _daily_ping.txt
 
       - name: Commit
+        if: steps.roll.outputs.skip == 'false'
         run: |
           git config user.name "Osborne"
           git config user.email "lopes.o@northeastern.edu"
