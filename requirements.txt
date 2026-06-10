@@ -1,8 +1,0 @@
-playwright
-httpx
-python-dotenv
-selenium
-webdriver-manager
-duckduckgo_search
-requests
-beautifulsoup4

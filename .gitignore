@@ -50,3 +50,6 @@ ashby_companies.json
 # Claude internal
 .claude/
 
+# Local backup of files moved to private repo
+Retired_After_Public_Repo_Moved_to_Private/
+
