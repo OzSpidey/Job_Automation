@@ -11,8 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout private repo
         uses: actions/checkout@v4
+        with:
+          repository: OzSpidey/Job_Automation_Private
+          token: ${{ secrets.PRIVATE_REPO_PAT }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
