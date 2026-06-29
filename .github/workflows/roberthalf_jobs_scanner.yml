@@ -1,6 +1,8 @@
 name: Robert Half Jobs Scanner
 
 on:
+  schedule:
+    - cron: '0 13,20 * * 1-5'   # 9am & 4pm ET (Mon–Fri); UTC, no DST adjust
   workflow_dispatch:
 
 permissions:

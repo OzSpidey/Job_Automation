@@ -1,6 +1,8 @@
 name: Randstad Jobs Scanner
 
 on:
+  schedule:
+    - cron: '15 13,20 * * 1-5'   # 9am & 4pm ET (Mon–Fri, staggered 15m after Robert Half); UTC, no DST adjust
   workflow_dispatch:
 
 permissions:
