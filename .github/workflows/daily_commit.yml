@@ -38,17 +38,43 @@ jobs:
         if: steps.roll.outputs.skip == 'false'
         run: sleep $((RANDOM % 5400))   # spread commit time up to 90 min after trigger
 
-      - name: Update daily ping
-        if: steps.roll.outputs.skip == 'false'
-        run: echo "$(date -u +%Y-%m-%d)" > _daily_ping.txt
-
-      - name: Commit
+      - name: Make 1-5 commits
         if: steps.roll.outputs.skip == 'false'
         run: |
           git config user.name "Osborne"
           git config user.email "lopes.o@northeastern.edu"
-          git add _daily_ping.txt
-          git diff --staged --quiet || git commit -m "chore: daily ping $(date -u +%Y-%m-%d)"
+
+          # Weighted random count: 1-2 on most active days, 5 only occasionally.
+          # A flat 1-5 (mean 3) every active day is itself a detectable pattern;
+          # this bag biases toward fewer. Edit it to retune the distribution.
+          BAG=(1 1 1 1 2 2 2 3 3 4 5)
+          N=${BAG[$((RANDOM % ${#BAG[@]}))]}
+          echo "Committing $N time(s) today"
+
+          # Varied messages so the log doesn't read as one daily bot line.
+          MSGS=(
+            "chore: housekeeping"
+            "chore: routine update"
+            "docs: update notes"
+            "chore: daily sync"
+            "chore: tidy up"
+            "docs: minor update"
+          )
+
+          # Backdate each commit to a random point in the past ~3h (sorted oldest
+          # -> newest) so they don't all share one timestamp. Pure date math, no
+          # sleeps, so this adds no runner minutes. Offsets stay within the same
+          # UTC day (job runs ~14:00-15:30 UTC), so squares land on the right day.
+          NOW=$(date -u +%s)
+          OFFSETS=$(for i in $(seq 1 "$N"); do echo $((RANDOM % 10800)); done | sort -rn)
+          for OFF in $OFFSETS; do
+            STAMP=$(date -u -d "@$((NOW - OFF))" +"%Y-%m-%dT%H:%M:%S")
+            MSG=${MSGS[$((RANDOM % ${#MSGS[@]}))]}
+            echo "${STAMP}Z" >> _daily_ping.txt
+            git add _daily_ping.txt
+            GIT_AUTHOR_DATE="$STAMP" GIT_COMMITTER_DATE="$STAMP" git commit -m "$MSG"
+          done
+
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push && break
             sleep $((i * 3))
