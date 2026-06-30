@@ -54,7 +54,10 @@ GEO_ID         = "103644278"  # United States
 TIME_WINDOW    = os.getenv("TIME_WINDOW", "r7200")  # overridable; default = 2 hrs
 FETCH_DETAILS  = True         # fetch job description to check experience requirements
 DETAIL_MAX_AGE_MIN = 30       # skip detail fetch for jobs older than this (rely on card-level easy_apply)
-REPOST_ID_GAP  = 3_000_000   # job IDs this far below the reference max are flagged as reposts
+REPOST_ID_GAP  = 10_000_000  # IDs this far below reference max are flagged as reposts.
+                             # 3M flagged ~54% of jobs (fresh IDs legitimately span tens of
+                             # millions); 10M flags only the ~26% older tail. See seen-data
+                             # analysis 2026-06-29 (Sprinter Health false positive).
 
 SKIP_COMPANY_KEYWORDS = {"rotaract"}
 
