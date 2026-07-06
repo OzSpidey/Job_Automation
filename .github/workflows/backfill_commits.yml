@@ -1,0 +1,75 @@
+name: Backfill Commits (one-shot)
+
+# One-shot manual backfill of contribution-graph days we missed while the daily
+# safety net was committing to the PRIVATE repo (invisible on the public graph).
+# Fills every missed WEEKDAY, and coin-flips (50/50) each missed WEEKEND day.
+# Safe to delete this workflow after it has run once.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this (public) repo
+        uses: actions/checkout@v4
+
+      - name: Backfill missed days
+        run: |
+          git config user.name "Osborne"
+          git config user.email "lopes.o@northeastern.edu"
+
+          # Weighted count bag (biased toward fewer), matching daily_commit.yml.
+          BAG=(1 1 1 1 2 2 2 3 3 4 5)
+          MSGS=(
+            "chore: housekeeping"
+            "chore: routine update"
+            "docs: update notes"
+            "chore: daily sync"
+            "chore: tidy up"
+            "docs: minor update"
+          )
+
+          # Missed days on the public graph (last ~3 weeks).
+          WEEKDAYS="2026-06-15 2026-06-16 2026-06-17 2026-06-18 2026-06-19 2026-06-22 2026-06-23 2026-06-24 2026-06-25 2026-06-26 2026-07-01 2026-07-02 2026-07-03 2026-07-06"
+          WEEKENDS="2026-06-20 2026-06-27 2026-06-28 2026-07-04 2026-07-05"
+
+          # Build the final day list: all weekdays + coin-flipped weekends, sorted.
+          DAYS=""
+          for D in $WEEKDAYS; do DAYS="$DAYS $D"; done
+          for D in $WEEKENDS; do
+            if [ $((RANDOM % 2)) -eq 0 ]; then
+              DAYS="$DAYS $D"
+              echo "Weekend $D -> INCLUDE (coin flip)"
+            else
+              echo "Weekend $D -> skip (coin flip)"
+            fi
+          done
+          DAYS=$(echo $DAYS | tr ' ' '\n' | grep . | sort | tr '\n' ' ')
+
+          mkdir -p logs
+          for DAY in $DAYS; do
+            N=${BAG[$((RANDOM % ${#BAG[@]}))]}
+            echo "Backfilling $DAY with $N commit(s)"
+            # Spread commits across the afternoon (14:00-20:59 UTC), ascending.
+            TIMES=$(for i in $(seq 1 "$N"); do printf "%02d:%02d:%02d\n" $((14 + RANDOM % 7)) $((RANDOM % 60)) $((RANDOM % 60)); done | sort)
+            for T in $TIMES; do
+              STAMP="${DAY}T${T}"
+              MSG=${MSGS[$((RANDOM % ${#MSGS[@]}))]}
+              echo "${STAMP}Z" >> logs/heartbeat.log
+              git add logs/heartbeat.log
+              GIT_AUTHOR_DATE="$STAMP" GIT_COMMITTER_DATE="$STAMP" git commit -m "$MSG"
+            done
+          done
+
+          echo "Total commits created:"
+          git log --oneline origin/main..HEAD | wc -l
+
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && break
+            sleep $((i * 3))
+          done

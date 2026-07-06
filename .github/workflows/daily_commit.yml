@@ -13,11 +13,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout private repo
+      - name: Checkout this (public) repo
         uses: actions/checkout@v4
-        with:
-          repository: OzSpidey/Job_Automation_Private
-          token: ${{ secrets.PRIVATE_REPO_PAT }}
+        # Commits land on THIS public repo's default branch so they show on the
+        # public contribution graph (what the profile snake reads). The built-in
+        # GITHUB_TOKEN can push here and does NOT re-trigger other workflows.
 
       - name: Roll skip probability
         id: roll
@@ -65,13 +65,14 @@ jobs:
           # -> newest) so they don't all share one timestamp. Pure date math, no
           # sleeps, so this adds no runner minutes. Offsets stay within the same
           # UTC day (job runs ~14:00-15:30 UTC), so squares land on the right day.
+          mkdir -p logs
           NOW=$(date -u +%s)
           OFFSETS=$(for i in $(seq 1 "$N"); do echo $((RANDOM % 10800)); done | sort -rn)
           for OFF in $OFFSETS; do
             STAMP=$(date -u -d "@$((NOW - OFF))" +"%Y-%m-%dT%H:%M:%S")
             MSG=${MSGS[$((RANDOM % ${#MSGS[@]}))]}
-            echo "${STAMP}Z" >> _daily_ping.txt
-            git add _daily_ping.txt
+            echo "${STAMP}Z" >> logs/heartbeat.log
+            git add logs/heartbeat.log
             GIT_AUTHOR_DATE="$STAMP" GIT_COMMITTER_DATE="$STAMP" git commit -m "$MSG"
           done
 
