@@ -60,8 +60,8 @@ jobs:
             for T in $TIMES; do
               STAMP="${DAY}T${T}"
               MSG=${MSGS[$((RANDOM % ${#MSGS[@]}))]}
-              echo "${STAMP}Z" >> logs/heartbeat.log
-              git add logs/heartbeat.log
+              echo "${STAMP}Z" >> logs/heartbeat.txt
+              git add logs/heartbeat.txt
               GIT_AUTHOR_DATE="$STAMP" GIT_COMMITTER_DATE="$STAMP" git commit -m "$MSG"
             done
           done

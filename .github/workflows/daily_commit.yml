@@ -71,8 +71,8 @@ jobs:
           for OFF in $OFFSETS; do
             STAMP=$(date -u -d "@$((NOW - OFF))" +"%Y-%m-%dT%H:%M:%S")
             MSG=${MSGS[$((RANDOM % ${#MSGS[@]}))]}
-            echo "${STAMP}Z" >> logs/heartbeat.log
-            git add logs/heartbeat.log
+            echo "${STAMP}Z" >> logs/heartbeat.txt
+            git add logs/heartbeat.txt
             GIT_AUTHOR_DATE="$STAMP" GIT_COMMITTER_DATE="$STAMP" git commit -m "$MSG"
           done
 
