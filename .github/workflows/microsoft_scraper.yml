@@ -28,6 +28,10 @@ jobs:
 
       - name: Run Microsoft Jobs Scraper
         env:
+          # India roles -> MS_EMAILS_INDIA ; US/other roles -> MS_EMAILS_US
+          MS_EMAILS_INDIA:    ${{ secrets.MS_EMAILS_INDIA }}
+          MS_EMAILS_US:       ${{ secrets.MS_EMAILS_US }}
+          # Currently unused by the script; kept wired for future use.
           MS_TARGET_EMAILS:   ${{ secrets.MS_TARGET_EMAILS }}
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
