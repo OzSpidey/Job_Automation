@@ -1,0 +1,99 @@
+name: Robert Half Auto-Apply
+
+# No schedule yet — recon must confirm the apply flow before this is armed.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'recon = read-only page dump (never clicks) | apply = submit'
+        type: choice
+        default: recon
+        options: [recon, apply]
+
+permissions:
+  contents: write
+
+jobs:
+  autoapply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: OzSpidey/Job_Automation_Private
+          token: ${{ secrets.PRIVATE_REPO_PAT }}
+          ref: main            # always read the latest queue, not the trigger SHA
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v2-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright browser
+        run: playwright install chromium
+
+      - name: Install Playwright system deps
+        run: playwright install-deps chromium
+
+      # Robert Half is Adobe/Akamai-fronted; headless Chrome gets bot-walled.
+      # Same headful-under-Xvfb recipe that made Naukri work.
+      - name: Install Xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Download DE resume
+        run: |
+          git clone https://github.com/OzSpidey/job-assets.git /tmp/job-assets
+          cp /tmp/job-assets/resume_de.pdf /tmp/resume_de.pdf
+
+      - name: Run Robert Half Auto-Apply
+        env:
+          RH_MODE:              ${{ inputs.mode }}
+          RH_ENABLE_SUBMIT:     ${{ vars.RH_ENABLE_SUBMIT }}
+          RH_SESSION_B64:       ${{ secrets.RH_SESSION_B64 }}
+          APPLY_LIMIT:          '10'
+          HEADLESS:             'false'
+          DISPLAY:              ':99'
+          APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
+          DE_RESUME_PATH:       /tmp/resume_de.pdf
+          EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:             ${{ secrets.EMAIL_TO }}
+        run: |
+          Xvfb :99 -screen 0 1440x900x24 &
+          sleep 3
+          python roberthalf_autoapply.py --mode "${RH_MODE}"
+
+      - name: Upload recon screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roberthalf-recon-shots
+          path: shots/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Persist applied state
+        if: inputs.mode == 'apply'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add json/roberthalf_applied.json csv/roberthalf_applied.csv 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update robert half applied jobs [skip ci]"
+          git checkout -- . 2>/dev/null || true
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $i failed, retrying in $((i * 3))s..."
+            sleep $((i * 3))
+          done
