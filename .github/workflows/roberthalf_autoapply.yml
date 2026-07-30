@@ -52,10 +52,12 @@ jobs:
       - name: Install Xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
+      # Recon never uploads anything, so don't let asset availability block it.
       - name: Download DE resume
+        if: inputs.mode == 'apply'
         run: |
           git clone https://github.com/OzSpidey/job-assets.git /tmp/job-assets
-          cp /tmp/job-assets/resume_de.pdf /tmp/resume_de.pdf
+          cp /tmp/job-assets/Osborne_DE.pdf /tmp/resume_de.pdf
 
       - name: Run Robert Half Auto-Apply
         env:
