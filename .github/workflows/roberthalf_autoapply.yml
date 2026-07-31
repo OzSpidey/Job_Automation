@@ -5,10 +5,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'recon = read-only dump | walk = click Apply once, never submit | apply = submit'
+        description: 'recon = read-only dump | walk = click Apply once, never submit | apply = submit | email-test = re-send summary only'
         type: choice
         default: recon
-        options: [recon, walk, apply]
+        options: [recon, walk, apply, email-test]
       walk_logged_in:
         description: 'Allow walk to run WITH the saved session (a logged-in Apply click may submit instantly)'
         type: boolean
