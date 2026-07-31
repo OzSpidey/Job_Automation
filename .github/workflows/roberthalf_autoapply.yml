@@ -13,6 +13,10 @@ on:
         description: 'Allow walk to run WITH the saved session (a logged-in Apply click may submit instantly)'
         type: boolean
         default: false
+      apply_limit:
+        description: 'Max applications to SUBMIT in this run'
+        type: string
+        default: '1'
 
 permissions:
   contents: write
@@ -71,7 +75,7 @@ jobs:
           RH_ENABLE_SUBMIT:     ${{ vars.RH_ENABLE_SUBMIT }}
           RH_SESSION_B64:       ${{ secrets.RH_SESSION_B64 }}
           RH_WALK_LOGGED_IN:    ${{ inputs.walk_logged_in && '1' || '' }}
-          APPLY_LIMIT:          '10'
+          APPLY_LIMIT:          ${{ inputs.apply_limit }}
           HEADLESS:             'false'
           DISPLAY:              ':99'
           APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
