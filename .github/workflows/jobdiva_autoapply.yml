@@ -1,6 +1,10 @@
 name: JobDiva Auto-Apply
 
 on:
+  # 12:30pm ET (Mon–Fri) — 30 min after the Robert Half scanner's noon run.
+  # UTC-pinned like the rest of the suite, so it becomes 11:30am ET under EST.
+  schedule:
+    - cron: '30 16 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -48,6 +52,7 @@ jobs:
       - name: Run JobDiva Auto-Apply
         env:
           HEADLESS:             "true"
+          JD_APPLY_LIMIT:       '10'
           APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
           DE_RESUME_PATH:       /tmp/resume_de.pdf
           EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
