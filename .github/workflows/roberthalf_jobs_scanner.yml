@@ -33,6 +33,9 @@ jobs:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+          # Alerts off — roberthalf_autoapply.py emails the applied list instead.
+          # This scanner still MUST run: it is the applier's only queue source.
+          RH_SCANNER_EMAIL:   '0'
         run: python roberthalf_jobs_scanner.py
 
       - name: Persist state

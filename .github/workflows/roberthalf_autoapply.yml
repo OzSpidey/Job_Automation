@@ -1,7 +1,11 @@
 name: Robert Half Auto-Apply
 
-# No schedule yet — recon must confirm the apply flow before this is armed.
 on:
+  # 20 min after the Robert Half scanner (30 13,18,23) so the queue is fresh,
+  # and 5 min after Randstad (45 ...) to avoid two jobs pushing state at once.
+  # = 9:50am, 2:50pm, 7:50pm ET (one hour earlier once EST starts in November).
+  schedule:
+    - cron: '50 13,18,23 * * 1-5'
   workflow_dispatch:
     inputs:
       mode:
@@ -65,11 +69,13 @@ jobs:
 
       - name: Run Robert Half Auto-Apply
         env:
-          RH_MODE:              ${{ inputs.mode }}
+          # Fallbacks are required: a scheduled run supplies NO inputs, so a bare
+          # `inputs.mode` would be empty and the script would reject it.
+          RH_MODE:              ${{ inputs.mode || 'apply' }}
           RH_ENABLE_SUBMIT:     ${{ vars.RH_ENABLE_SUBMIT }}
           RH_SESSION_B64:       ${{ secrets.RH_SESSION_B64 }}
           RH_WALK_LOGGED_IN:    ${{ inputs.walk_logged_in && '1' || '' }}
-          APPLY_LIMIT:          ${{ inputs.apply_limit }}
+          APPLY_LIMIT:          ${{ inputs.apply_limit || '10' }}
           HEADLESS:             'false'
           DISPLAY:              ':99'
           APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
@@ -85,13 +91,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: roberthalf-${{ inputs.mode }}-shots
+          name: roberthalf-${{ inputs.mode || 'apply' }}-shots
           path: shots/
           if-no-files-found: ignore
           retention-days: 7
 
       - name: Persist applied state
-        if: inputs.mode == 'apply'
+        if: (inputs.mode || 'apply') == 'apply'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
