@@ -60,14 +60,8 @@ jobs:
       - name: Install Xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
-      # BI resume per user. It's already saved on the Robert Half profile, so
-      # this is only a fallback for a guest form that demands an upload.
-      # Recon never uploads, so don't let asset availability block it.
-      - name: Download BI resume
-        if: inputs.mode == 'apply'
-        run: |
-          git clone https://github.com/OzSpidey/job-assets.git /tmp/job-assets
-          cp /tmp/job-assets/Osborne_BI.pdf /tmp/resume_bi.pdf
+# No resume step: the Robert Half profile already has the resume attached and
+# the logged-in Quick apply path pulls it from there, so nothing is uploaded.
 
       - name: Run Robert Half Auto-Apply
         env:
@@ -79,7 +73,6 @@ jobs:
           HEADLESS:             'false'
           DISPLAY:              ':99'
           APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
-          RESUME_PATH:          /tmp/resume_bi.pdf
           EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:             ${{ secrets.EMAIL_TO }}
