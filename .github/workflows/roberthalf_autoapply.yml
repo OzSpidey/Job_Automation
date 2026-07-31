@@ -14,9 +14,9 @@ on:
         type: boolean
         default: false
       apply_limit:
-        description: 'Max applications to SUBMIT in this run'
+        description: 'Max Apply CLICKS this run (runaway guard; RH has no application limit)'
         type: string
-        default: '1'
+        default: '10'
 
 permissions:
   contents: write
@@ -102,7 +102,12 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/roberthalf_applied.json csv/roberthalf_applied.csv 2>/dev/null || true
+          # Staged SEPARATELY on purpose: `git add a b` stages NOTHING if either
+          # path is missing, and csv/roberthalf_applied.csv only exists once
+          # something has actually been applied. That silently lost a whole run
+          # of state, which would have caused re-applications.
+          git add json/roberthalf_applied.json || true
+          git add csv/roberthalf_applied.csv   || true
           git diff --staged --quiet || git commit -m "chore: update robert half applied jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
