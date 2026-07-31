@@ -1,11 +1,16 @@
 name: Robert Half Auto-Apply
 
 on:
-  # 20 min after the Robert Half scanner (30 13,18,23) so the queue is fresh,
-  # and 5 min after Randstad (45 ...) to avoid two jobs pushing state at once.
-  # = 9:50am, 2:50pm, 7:50pm ET (one hour earlier once EST starts in November).
-  schedule:
-    - cron: '50 13,18,23 * * 1-5'
+  # CHAINED, not time-based. This used to run on its own cron 20 min after the
+  # scanner, but GitHub's free runners are regularly queued for longer than
+  # that, so the scanner could still be running when the applier fired and the
+  # applier would read a stale queue. Now it starts when the scanner actually
+  # finishes — the scanner commits csv/new_jobs.csv in its last step, and
+  # workflow_run fires after that, so `ref: main` below always sees a fresh
+  # queue. The scanner's cron (30 13,18,23 * * 1-5) is now the only timer.
+  workflow_run:
+    workflows: ["Robert Half Jobs Scanner"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       mode:
@@ -27,6 +32,12 @@ permissions:
 
 jobs:
   autoapply:
+    # workflow_run fires on ANY completion, so skip failed/cancelled scanner
+    # runs — a failed scanner wrote no new queue rows, so there is nothing to
+    # apply to. Manual dispatches always proceed.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
