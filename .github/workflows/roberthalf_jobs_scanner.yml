@@ -2,9 +2,14 @@ name: Robert Half Jobs Scanner
 
 on:
   schedule:
-    # 9:30am, 2:30pm & 7:30pm ET (Mon–Fri). UTC, no DST adjust —
-    # shifts to 8:30am/1:30pm/6:30pm ET once EST starts in November.
-    - cron: '30 13,18,23 * * 1-5'
+    # 12pm & 3pm ET (Mon–Fri).
+    - cron: '0 16,19 * * 1-5'
+    # 9pm ET. 21:00 ET = 01:00 UTC the NEXT day, so this must run Tue–Sat in UTC
+    # to land on Mon–Fri evenings in ET. Using 1-5 here would drop Friday night
+    # (01:00 UTC Sat = day 6) and add an unwanted Sunday-night run.
+    - cron: '0 1 * * 2-6'
+    # UTC-pinned, no DST adjust: shifts to 11am/2pm/8pm ET once EST starts in
+    # November. The day-shift above stays correct in both EDT and EST.
   workflow_dispatch:
 
 permissions:
