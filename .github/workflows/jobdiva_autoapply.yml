@@ -43,7 +43,7 @@ jobs:
       - name: Download DE resume
         run: |
           git clone https://github.com/OzSpidey/job-assets.git /tmp/job-assets
-          cp /tmp/job-assets/resume_de.pdf /tmp/resume_de.pdf
+          cp /tmp/job-assets/Osborne_DE.pdf /tmp/resume_de.pdf
 
       - name: Run JobDiva Auto-Apply
         env:
