@@ -9,6 +9,10 @@ on:
         type: choice
         default: recon
         options: [recon, walk, apply]
+      walk_logged_in:
+        description: 'Allow walk to run WITH the saved session (a logged-in Apply click may submit instantly)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -66,6 +70,7 @@ jobs:
           RH_MODE:              ${{ inputs.mode }}
           RH_ENABLE_SUBMIT:     ${{ vars.RH_ENABLE_SUBMIT }}
           RH_SESSION_B64:       ${{ secrets.RH_SESSION_B64 }}
+          RH_WALK_LOGGED_IN:    ${{ inputs.walk_logged_in && '1' || '' }}
           APPLY_LIMIT:          '10'
           HEADLESS:             'false'
           DISPLAY:              ':99'
