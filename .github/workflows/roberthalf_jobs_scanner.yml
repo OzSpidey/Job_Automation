@@ -2,13 +2,15 @@ name: Robert Half Jobs Scanner
 
 on:
   schedule:
-    # 12pm & 3pm ET (Mon–Fri).
-    - cron: '0 16,19 * * 1-5'
+    # 11am & 2pm ET (Mon–Fri). Moved back an hour from 12pm/3pm on 2026-08-04:
+    # GitHub's shared cron queue starts these runs 1.5-2h late, so the 3pm slot
+    # was emailing at 4:40pm. Scheduling early gives the drift some headroom.
+    - cron: '0 15,18 * * 1-5'
     # 9pm ET. 21:00 ET = 01:00 UTC the NEXT day, so this must run Tue–Sat in UTC
     # to land on Mon–Fri evenings in ET. Using 1-5 here would drop Friday night
     # (01:00 UTC Sat = day 6) and add an unwanted Sunday-night run.
     - cron: '0 1 * * 2-6'
-    # UTC-pinned, no DST adjust: shifts to 11am/2pm/8pm ET once EST starts in
+    # UTC-pinned, no DST adjust: shifts to 10am/1pm/8pm ET once EST starts in
     # November. The day-shift above stays correct in both EDT and EST.
   workflow_dispatch:
 

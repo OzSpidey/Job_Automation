@@ -7,7 +7,8 @@ on:
   # applier would read a stale queue. Now it starts when the scanner actually
   # finishes — the scanner commits csv/new_jobs.csv in its last step, and
   # workflow_run fires after that, so `ref: main` below always sees a fresh
-  # queue. The scanner's cron (30 13,18,23 * * 1-5) is now the only timer.
+  # queue. The scanner's cron (11am/2pm/9pm ET) is now the only timer — see
+  # roberthalf_jobs_scanner.yml for the exact expressions.
   workflow_run:
     workflows: ["Robert Half Jobs Scanner"]
     types: [completed]
