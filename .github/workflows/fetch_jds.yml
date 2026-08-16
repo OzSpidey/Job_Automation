@@ -1,0 +1,43 @@
+name: Fetch Job Descriptions
+
+on:
+  workflow_dispatch:        # manual only — this makes ~500 outbound requests
+    inputs:
+      limit:
+        description: "How many of the newest postings to enrich"
+        type: string
+        default: "500"
+      days:
+        description: "Recency window in days"
+        type: string
+        default: "30"
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    name: Fetch JDs
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: OzSpidey/Job_Automation_Private
+          token: ${{ secrets.PRIVATE_REPO_PAT }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - name: Fetch descriptions
+        env:
+          JD_LIMIT:   ${{ github.event.inputs.limit }}
+          JD_DAYS:    ${{ github.event.inputs.days }}
+          JD_WORKERS: "6"
+        run: python fetch_jds.py
+      - name: Upload enriched CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: postings-with-jd
+          path: csv/archive/postings_with_jd.csv
+          retention-days: 14
