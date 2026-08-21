@@ -27,14 +27,14 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4 python-dotenv
 
-      - name: Run LinkedIn no-login scraper (6-hour window, all roles)
+      - name: Run LinkedIn no-login scraper (6-hour window, non-AI roles)
         env:
           EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:           ${{ secrets.EMAIL_TO }}
           TIME_WINDOW:        r21600
           SCRAPER_LABEL:      Catch-Up
-          ROLE_SET:           full
+          ROLE_SET:           non-ai
           MAX_PAGES_LARGE:    5
           MAX_PAGES_SMALL:    3
         run: python linkedin_nologin_scraper.py
