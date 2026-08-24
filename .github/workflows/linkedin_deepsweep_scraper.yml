@@ -27,22 +27,21 @@ on:
         description: 'Pipe-separated roles, independent of the main scraper.'
         required: false
         default: 'AI Engineer|Data Analyst|AI'
-      cross_check:
-        description: 'Suppress roles the main scraper already alerted (1=yes, 0=no)'
-        required: false
-        default: '1'
-      persist_state:
-        description: 'Commit the seen-jobs file back. MUST be true on a schedule or every run re-emails the same roles.'
-        required: false
-        default: 'true'
+    # No cross_check or persist_state inputs any more. All three LinkedIn
+    # workflows share one state file, so dedup is unconditional and state is
+    # always written — a "don't record" option is exactly how duplicates got
+    # sent in the first place.
 
 permissions:
   contents: write
 
-# A sweep takes 5-10 min. If the cron fires again before the previous run
-# finished, two jobs would race on json/linkedin_deepsweep_seen.json and one
-# push would clobber the other. Queue instead of overlapping; never cancel
-# mid-run, since a killed run still sent its email but never recorded it.
+# Stops a sweep overlapping ITSELF if the cron fires again mid-run (a sweep
+# takes 5-10 min). Deliberately NOT shared with the other two LinkedIn
+# workflows: contention on the shared state file is handled by the union merge
+# in the persist step, and putting the 5-min run in this group would park it
+# behind a 10-minute sweep and delay every alert.
+# cancel-in-progress stays false — a killed run has already sent its email but
+# not yet recorded it, which is the one state we must never create.
 concurrency:
   group: linkedin-deepsweep
   cancel-in-progress: false
@@ -76,22 +75,54 @@ jobs:
           TIME_WINDOW:           ${{ inputs.time_window }}
           MAX_START:             ${{ inputs.max_start }}
           DEEPSWEEP_ROLES:       ${{ inputs.roles }}
-          CROSS_CHECK_MAIN_SEEN: ${{ inputs.cross_check }}
           SCRAPER_LABEL:         Deep Sweep
         run: python linkedin_deepsweep_scraper.py
 
-      # always() so a partial sweep still records what it emailed. Without it a
-      # timeout would send mail and then forget, re-alerting the same roles.
-      - name: Persist seen jobs state
-        if: always() && inputs.persist_state == 'true'
+      # All three LinkedIn workflows share ONE state file, so simultaneous
+      # writes are normal, not an error (the main run fires every 5 min while a
+      # deep sweep takes 5-10). `git pull --rebase` would conflict on the JSON,
+      # fail every retry, and drop this run's ids — which re-alerts the roles we
+      # just emailed. So: union-merge onto a fresh origin/main, and if we lose
+      # the push race, re-merge against the new remote and try again.
+      #
+      # Every git call is explicitly guarded. These blocks run under `bash -e`,
+      # where an unguarded failure aborts the step instead of retrying, turning
+      # ordinary contention into lost state.
+      - name: Persist shared seen state
+        if: always()
         run: |
+          SEEN=json/linkedin_nologin_seen.json
+          if [ ! -f "$SEEN" ]; then
+            echo "No seen file this run (scraper may have failed early) — nothing to persist."
+            exit 0
+          fi
+          cp "$SEEN" /tmp/ours.json
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/linkedin_deepsweep_seen.json 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "chore: update linkedin deep sweep seen jobs [skip ci]"
-          git checkout -- . 2>/dev/null || true
-          for i in 1 2 3 4 5; do
-            git pull --rebase origin main && git push && break
-            echo "Push attempt $i failed, retrying in $((i * 3))s..."
-            sleep $((i * 3))
+          for i in 1 2 3 4 5 6; do
+            if ! git fetch -q origin main; then
+              echo "fetch failed (attempt $i), retrying..."; sleep $((i * 3)); continue
+            fi
+            if ! git checkout -q -B main origin/main; then
+              echo "checkout failed (attempt $i), retrying..."; sleep $((i * 3)); continue
+            fi
+            # merge_seen refuses to write if the committed copy is corrupt, so a
+            # non-zero exit here is real data risk, not contention. Stop.
+            if ! python merge_seen.py "$SEEN" /tmp/ours.json; then
+              echo "::error::merge refused; shared state NOT written"
+              exit 1
+            fi
+            git add "$SEEN"
+            if git diff --staged --quiet; then
+              echo "No new job ids to record."
+              exit 0
+            fi
+            git commit -q -m "chore: update linkedin shared seen jobs [skip ci]"
+            if git push -q origin main; then
+              echo "Recorded. (merge counts printed above)"
+              exit 0
+            fi
+            echo "Lost push race on attempt $i, re-merging against new remote..."
+            sleep $((i * 2))
           done
+          echo "::warning::Could not persist after 6 attempts; some roles may be re-alerted next run."

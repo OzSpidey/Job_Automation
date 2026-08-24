@@ -39,15 +39,51 @@ jobs:
           MAX_PAGES_SMALL:    3
         run: python linkedin_nologin_scraper.py
 
-      - name: Persist seen jobs state
+      # All three LinkedIn workflows share ONE state file, so simultaneous
+      # writes are normal, not an error (the main run fires every 5 min while a
+      # deep sweep takes 5-10). `git pull --rebase` would conflict on the JSON,
+      # fail every retry, and drop this run's ids — which re-alerts the roles we
+      # just emailed. So: union-merge onto a fresh origin/main, and if we lose
+      # the push race, re-merge against the new remote and try again.
+      #
+      # Every git call is explicitly guarded. These blocks run under `bash -e`,
+      # where an unguarded failure aborts the step instead of retrying, turning
+      # ordinary contention into lost state.
+      - name: Persist shared seen state
+        if: always()
         run: |
+          SEEN=json/linkedin_nologin_seen.json
+          if [ ! -f "$SEEN" ]; then
+            echo "No seen file this run (scraper may have failed early) — nothing to persist."
+            exit 0
+          fi
+          cp "$SEEN" /tmp/ours.json
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/linkedin_nologin_seen.json 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "chore: update linkedin nologin seen jobs [skip ci]"
-          git checkout -- . 2>/dev/null || true
-          for i in 1 2 3 4 5; do
-            git pull --rebase origin main && git push && break
-            echo "Push attempt $i failed, retrying in $((i * 3))s..."
-            sleep $((i * 3))
+          for i in 1 2 3 4 5 6; do
+            if ! git fetch -q origin main; then
+              echo "fetch failed (attempt $i), retrying..."; sleep $((i * 3)); continue
+            fi
+            if ! git checkout -q -B main origin/main; then
+              echo "checkout failed (attempt $i), retrying..."; sleep $((i * 3)); continue
+            fi
+            # merge_seen refuses to write if the committed copy is corrupt, so a
+            # non-zero exit here is real data risk, not contention. Stop.
+            if ! python merge_seen.py "$SEEN" /tmp/ours.json; then
+              echo "::error::merge refused; shared state NOT written"
+              exit 1
+            fi
+            git add "$SEEN"
+            if git diff --staged --quiet; then
+              echo "No new job ids to record."
+              exit 0
+            fi
+            git commit -q -m "chore: update linkedin shared seen jobs [skip ci]"
+            if git push -q origin main; then
+              echo "Recorded. (merge counts printed above)"
+              exit 0
+            fi
+            echo "Lost push race on attempt $i, re-merging against new remote..."
+            sleep $((i * 2))
           done
+          echo "::warning::Could not persist after 6 attempts; some roles may be re-alerted next run."
