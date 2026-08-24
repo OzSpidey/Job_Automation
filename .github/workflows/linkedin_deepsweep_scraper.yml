@@ -1,34 +1,51 @@
 name: LinkedIn Deep Sweep (second net)
 
-# Manual only — no cron. Sweeps the guest endpoint far deeper than
-# linkedin_nologin_scraper.py (which stops at start=90). The endpoint is
-# relevance-ordered and ignores sortBy, so fresh roles hide at depth.
+# Triggered from the external cron site via the workflow_dispatch API, same as
+# the other scrapers here. No GitHub `schedule:` block on purpose — GitHub's own
+# cron runs 1.5-3 hrs late on free runners, the external trigger fires on time.
+#
+# Every input has a production-ready default, so the cron site can POST a bare
+# {"ref":"main"} with no inputs payload at all.
+#
+# Sweeps the guest endpoint deeper than linkedin_nologin_scraper.py (which stops
+# at start=90). Measured: at equal keyword+window, depth 90 finds 0 new and
+# depth 200 finds 48 (run 32757494692 vs 32757622773). Keyword breadth matters
+# even more than depth — LinkedIn matching is title-literal, so a broad "AI"
+# term catches roles "AI Engineer" never ranks at any depth.
 on:
   workflow_dispatch:
     inputs:
       time_window:
-        description: 'f_TPR window (r7200=2h, r10800=3h, r86400=24h)'
+        description: 'f_TPR window (r7200=2h, r10800=3h, r86400=24h). Keep wider than the cron interval.'
         required: false
         default: 'r10800'
       max_start:
-        description: 'Sweep depth. 200=21 req/role (~195 distinct jobs/role). ~500 is where LinkedIn dries up.'
+        description: 'Sweep depth. 200=21 req/role. ~500 is where LinkedIn dries up.'
         required: false
         default: '200'
       roles:
-        description: 'Pipe-separated roles, independent of the main scraper. Blank = the six defaults.'
+        description: 'Pipe-separated roles, independent of the main scraper.'
         required: false
-        default: ''
+        default: 'AI Engineer|Data Analyst|AI'
       cross_check:
         description: 'Suppress roles the main scraper already alerted (1=yes, 0=no)'
         required: false
         default: '1'
       persist_state:
-        description: 'Commit the seen-jobs file back (false keeps test runs repeatable)'
+        description: 'Commit the seen-jobs file back. MUST be true on a schedule or every run re-emails the same roles.'
         required: false
-        default: 'false'
+        default: 'true'
 
 permissions:
   contents: write
+
+# A sweep takes 5-10 min. If the cron fires again before the previous run
+# finished, two jobs would race on json/linkedin_deepsweep_seen.json and one
+# push would clobber the other. Queue instead of overlapping; never cancel
+# mid-run, since a killed run still sent its email but never recorded it.
+concurrency:
+  group: linkedin-deepsweep
+  cancel-in-progress: false
 
 jobs:
   scrape:
@@ -63,8 +80,10 @@ jobs:
           SCRAPER_LABEL:         Deep Sweep
         run: python linkedin_deepsweep_scraper.py
 
+      # always() so a partial sweep still records what it emailed. Without it a
+      # timeout would send mail and then forget, re-alerting the same roles.
       - name: Persist seen jobs state
-        if: inputs.persist_state == 'true'
+        if: always() && inputs.persist_state == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
