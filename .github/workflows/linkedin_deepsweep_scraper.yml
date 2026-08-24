@@ -1,14 +1,19 @@
-name: LinkedIn Search-Page Scraper (second net)
+name: LinkedIn Deep Sweep (second net)
 
-# Manual only — no cron. Reads the public /jobs/search/ renderer (~60 cards per
-# role in one request) as a cross-check on the fragment-endpoint scraper.
+# Manual only — no cron. Sweeps the guest endpoint far deeper than
+# linkedin_nologin_scraper.py (which stops at start=90). The endpoint is
+# relevance-ordered and ignores sortBy, so fresh roles hide at depth.
 on:
   workflow_dispatch:
     inputs:
       time_window:
-        description: 'LinkedIn f_TPR window (r7200=2h, r10800=3h, r86400=24h)'
+        description: 'f_TPR window (r7200=2h, r10800=3h, r86400=24h)'
         required: false
         default: 'r10800'
+      max_start:
+        description: 'Sweep depth. 150=16 req/role (96/run). 500=51 req/role (306/run), the observed ceiling.'
+        required: false
+        default: '150'
       cross_check:
         description: 'Suppress roles the main scraper already alerted (1=yes, 0=no)'
         required: false
@@ -24,7 +29,7 @@ permissions:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
 
     steps:
       - name: Checkout private repo
@@ -42,23 +47,24 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4 python-dotenv
 
-      - name: Run LinkedIn search-page scraper
+      - name: Run LinkedIn deep sweep
         env:
           EMAIL_SENDER:          ${{ secrets.EMAIL_SENDER }}
           GMAIL_APP_PASSWORD:    ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO:              ${{ secrets.EMAIL_TO }}
           TIME_WINDOW:           ${{ inputs.time_window }}
+          MAX_START:             ${{ inputs.max_start }}
           CROSS_CHECK_MAIN_SEEN: ${{ inputs.cross_check }}
-          SCRAPER_LABEL:         Search Page
-        run: python linkedin_searchpage_scraper.py
+          SCRAPER_LABEL:         Deep Sweep
+        run: python linkedin_deepsweep_scraper.py
 
       - name: Persist seen jobs state
         if: inputs.persist_state == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add json/linkedin_searchpage_seen.json 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "chore: update linkedin search-page seen jobs [skip ci]"
+          git add json/linkedin_deepsweep_seen.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update linkedin deep sweep seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase origin main && git push && break
