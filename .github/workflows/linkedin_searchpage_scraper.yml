@@ -1,0 +1,67 @@
+name: LinkedIn Search-Page Scraper (second net)
+
+# Manual only — no cron. Reads the public /jobs/search/ renderer (~60 cards per
+# role in one request) as a cross-check on the fragment-endpoint scraper.
+on:
+  workflow_dispatch:
+    inputs:
+      time_window:
+        description: 'LinkedIn f_TPR window (r7200=2h, r10800=3h, r86400=24h)'
+        required: false
+        default: 'r10800'
+      cross_check:
+        description: 'Suppress roles the main scraper already alerted (1=yes, 0=no)'
+        required: false
+        default: '1'
+      persist_state:
+        description: 'Commit the seen-jobs file back (false keeps test runs repeatable)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: OzSpidey/Job_Automation_Private
+          token: ${{ secrets.PRIVATE_REPO_PAT }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 python-dotenv
+
+      - name: Run LinkedIn search-page scraper
+        env:
+          EMAIL_SENDER:          ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD:    ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:              ${{ secrets.EMAIL_TO }}
+          TIME_WINDOW:           ${{ inputs.time_window }}
+          CROSS_CHECK_MAIN_SEEN: ${{ inputs.cross_check }}
+          SCRAPER_LABEL:         Search Page
+        run: python linkedin_searchpage_scraper.py
+
+      - name: Persist seen jobs state
+        if: inputs.persist_state == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add json/linkedin_searchpage_seen.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update linkedin search-page seen jobs [skip ci]"
+          git checkout -- . 2>/dev/null || true
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $i failed, retrying in $((i * 3))s..."
+            sleep $((i * 3))
+          done
