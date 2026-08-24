@@ -1,129 +1,99 @@
 name: _probe LinkedIn guest surfaces (throwaway)
 
-# Disposable diagnostic: which LinkedIn guest surfaces serve job cards to a
-# GitHub Actions (Azure datacenter) IP? Delete after use.
+# Disposable diagnostic. Round 2: the /jobs/* HTML surface is a hard 999 from
+# Actions, so probe what the WORKING /jobs-guest/ endpoint can actually give us.
+#   1. how deep does `start` paginate before it dries up?
+#   2. does sortBy=DD (newest-first) work there? today the scraper is relevance-sorted
 on:
   workflow_dispatch:
 
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Install deps
-        run: pip install requests
+        run: pip install requests beautifulsoup4
 
-      - name: Probe surfaces
+      - name: Probe fragment endpoint depth + sorting
         run: |
           python - <<'PY'
-          import re, time, random, requests
+          import re, time, requests
+          from bs4 import BeautifulSoup
 
-          UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-
-          BARE = {
-              "User-Agent": UA,
+          URL = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+          H = {
+              "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                             "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
               "Accept-Language": "en-US,en;q=0.9",
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-              "Referer": "https://www.linkedin.com/jobs/",
+              "Referer": "https://www.linkedin.com/jobs/search/",
           }
+          BASE = {"keywords": "AI Engineer", "geoId": "103644278", "f_JT": "F"}
 
-          # full Chrome-ish header set
-          RICH = dict(BARE)
-          RICH.update({
-              "Accept-Encoding": "gzip, deflate, br",
-              "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-              "sec-ch-ua-mobile": "?0",
-              "sec-ch-ua-platform": '"Windows"',
-              "Sec-Fetch-Dest": "document",
-              "Sec-Fetch-Mode": "navigate",
-              "Sec-Fetch-Site": "same-origin",
-              "Sec-Fetch-User": "?1",
-              "Upgrade-Insecure-Requests": "1",
-              "Cache-Control": "max-age=0",
-              "Connection": "keep-alive",
-          })
-
-          Q = {"keywords": "AI Engineer", "geoId": "103644278",
-               "f_TPR": "r86400", "f_JT": "F", "sortBy": "DD"}
-
-          def report(name, resp):
-              if resp is None:
-                  print(f"  {name:<44} REQUEST FAILED")
-                  return
-              body = resp.text
-              views = len(re.findall(r"/jobs/view/", body))
-              cards = len(re.findall(r"base-search-card", body))
-              wall  = bool(re.search(r"authwall|sign in to|join now|/login", body, re.I))
-              verdict = "CARDS" if views > 0 else ("WALL" if wall else "EMPTY")
-              print(f"  {name:<44} {resp.status_code} len={len(body):>7} "
-                    f"views={views:>3} cards={cards:>3} wall={str(wall):<5} -> {verdict}")
-              if views:
-                  print(f"       final_url={resp.url[:110]}")
-
-          def try_get(name, url, headers, params=None, sess=None):
-              g = sess.get if sess else requests.get
+          def fetch(params):
               try:
-                  r = g(url, headers=headers, params=params, timeout=25)
+                  r = requests.get(URL, headers=H, params=params, timeout=25)
               except Exception as e:
-                  print(f"  {name:<44} EXC {e}")
-                  return None
-              report(name, r)
-              return r
+                  print(f"    EXC {e}")
+                  return None, []
+              if r.status_code != 200:
+                  print(f"    status={r.status_code} len={len(r.text)}")
+                  return r, []
+              soup = BeautifulSoup(r.text, "html.parser")
+              out = []
+              for c in soup.find_all("div", class_=re.compile(r"base-search-card")):
+                  urn = c.get("data-entity-urn", "")
+                  m = re.search(r"jobPosting:(\d+)", urn)
+                  jid = m.group(1) if m else None
+                  if not jid:
+                      a = c.find("a", href=re.compile(r"/jobs/view/"))
+                      m2 = re.search(r"/jobs/view/(?:[^/?]*-)?(\d+)", a.get("href","")) if a else None
+                      jid = m2.group(1) if m2 else None
+                  t = c.find("time")
+                  out.append((jid, (t.get_text(strip=True) if t else ""),
+                              (t.get("datetime") if t else "")))
+              return r, out
 
-          print("=" * 100)
-          print("A. CONTROL — fragment endpoint that already works")
-          print("=" * 100)
-          try_get("seeMoreJobPostings (bare)",
-                  "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search",
-                  BARE, {**Q, "start": 0})
-          time.sleep(4)
-
-          print()
-          print("=" * 100)
-          print("B. /jobs/search/ — header + cookie-session variants")
-          print("=" * 100)
-          try_get("/jobs/search/ bare stateless (what failed)",
-                  "https://www.linkedin.com/jobs/search/", BARE, Q)
-          time.sleep(4)
-
-          try_get("/jobs/search/ rich headers, stateless",
-                  "https://www.linkedin.com/jobs/search/", RICH, Q)
-          time.sleep(4)
-
-          # warm a session on a public page first so we hold guest cookies
-          s = requests.Session()
-          warm = try_get("  [warmup] GET /jobs/", "https://www.linkedin.com/jobs/", RICH, None, s)
-          print(f"       cookies now: {sorted(s.cookies.keys())}")
-          time.sleep(4)
-          try_get("/jobs/search/ warmed session + rich",
-                  "https://www.linkedin.com/jobs/search/", RICH, Q, s)
-          time.sleep(4)
-
-          try_get("/jobs/search (no trailing slash)",
-                  "https://www.linkedin.com/jobs/search", RICH, Q, s)
-          time.sleep(4)
-
-          print()
-          print("=" * 100)
-          print("C. SEO landing pages — built to be crawled")
-          print("=" * 100)
-          for path in [
-              "https://www.linkedin.com/jobs/ai-engineer-jobs",
-              "https://www.linkedin.com/jobs/ai-engineer-jobs-united-states",
-              "https://www.linkedin.com/jobs/data-engineer-jobs",
-              "https://www.linkedin.com/jobs/ai-engineer-jobs-in-united-states",
-          ]:
-              try_get(path.replace("https://www.linkedin.com", ""), path, RICH, None, s)
+          print("=" * 96)
+          print("1. DEPTH — how far does `start` go?  (f_TPR=r86400, no sortBy)")
+          print("=" * 96)
+          seen_all, last_ids = set(), None
+          for start in [0, 50, 100, 200, 300, 500, 700, 1000]:
+              r, jobs = fetch({**BASE, "f_TPR": "r86400", "start": start})
+              ids = [j[0] for j in jobs]
+              dupe = "SAME-AS-PREV" if ids and ids == last_ids else ""
+              new = len([i for i in ids if i not in seen_all])
+              seen_all.update(i for i in ids if i)
+              print(f"  start={start:<5} status={r.status_code if r else '---':<4} "
+                    f"got={len(ids):<3} new={new:<3} cumulative={len(seen_all):<4} {dupe}")
+              last_ids = ids
+              if not ids:
+                  print("    -> dried up, stopping")
+                  break
               time.sleep(4)
 
           print()
-          print("=" * 100)
-          print("D. SEO landing page + query filters")
-          print("=" * 100)
-          try_get("/jobs/ai-engineer-jobs?f_TPR=r86400",
-                  "https://www.linkedin.com/jobs/ai-engineer-jobs",
-                  RICH, {"f_TPR": "r86400", "sortBy": "DD", "position": 1, "pageNum": 0}, s)
+          print("=" * 96)
+          print("2. SORTING — does sortBy=DD work on the guest fragment endpoint?")
+          print("=" * 96)
+          for label, extra in [("relevance (current behaviour)", {}),
+                               ("sortBy=DD (newest first)", {"sortBy": "DD"})]:
+              r, jobs = fetch({**BASE, "f_TPR": "r86400", "start": 0, **extra})
+              print(f"  {label}  -> {len(jobs)} cards")
+              for jid, txt, dt in jobs[:10]:
+                  print(f"       {jid}  {txt:<18} {dt}")
+              print()
+              time.sleep(4)
+
+          print("=" * 96)
+          print("3. Does sortBy=DD change WHICH jobs come back deeper in?")
+          print("=" * 96)
+          for start in [0, 100, 300]:
+              r, jobs = fetch({**BASE, "f_TPR": "r86400", "sortBy": "DD", "start": start})
+              print(f"  sortBy=DD start={start:<5} got={len(jobs):<3} "
+                    f"first={jobs[0][1] if jobs else '-':<16} last={jobs[-1][1] if jobs else '-'}")
+              time.sleep(4)
           print()
           print("[done]")
           PY
