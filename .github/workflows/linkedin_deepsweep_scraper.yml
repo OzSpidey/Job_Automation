@@ -103,7 +103,10 @@ jobs:
             if ! git fetch -q origin main; then
               echo "fetch failed (attempt $i), retrying..."; sleep $((i * 3)); continue
             fi
-            if ! git checkout -q -B main origin/main; then
+            # -f is required: the scraper just rewrote the seen file, so the
+            # tree is dirty and a plain checkout refuses. Safe to discard,
+            # our copy is already at /tmp/ours.json.
+            if ! git checkout -q -f -B main origin/main; then
               echo "checkout failed (attempt $i), retrying..."; sleep $((i * 3)); continue
             fi
             # merge_seen refuses to write if the committed copy is corrupt, so a
