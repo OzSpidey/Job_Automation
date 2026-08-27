@@ -1,0 +1,137 @@
+name: Randstad Auto-Apply
+
+on:
+  # CHAINED, not time-based — same reasoning as roberthalf_autoapply.yml. A cron
+  # set N minutes after the scanner is a guess, and GitHub's free runners are
+  # regularly queued for longer than any N, so the applier could fire while the
+  # scanner was still running and read a stale queue. workflow_run starts this
+  # once the scanner has actually finished committing csv/new_jobs.csv, and the
+  # `ref: main` checkout below then sees the fresh queue. The scanner's cron
+  # (9:45am/2:45pm/7:45pm ET, Mon-Fri) stays the only timer.
+  workflow_run:
+    workflows: ["Randstad Jobs Scanner"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'recon = read-only dump of job page + apply page | walk = click apply once, never submit | apply = submit | email-test = re-send summary only'
+        type: choice
+        default: recon
+        options: [recon, walk, apply, email-test]
+      walk_logged_in:
+        description: 'Allow walk to run WITH the saved session'
+        type: boolean
+        default: false
+      apply_limit:
+        description: 'Max apply CLICKS this run (runaway guard)'
+        type: string
+        default: '10'
+
+permissions:
+  contents: write
+
+jobs:
+  autoapply:
+    # workflow_run fires on ANY completion, so skip failed/cancelled scanner
+    # runs — a failed scanner wrote no new queue rows. Manual dispatches always
+    # proceed.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: OzSpidey/Job_Automation_Private
+          token: ${{ secrets.PRIVATE_REPO_PAT }}
+          ref: main            # always read the latest queue, not the trigger SHA
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v2-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright browser
+        run: playwright install chromium
+
+      - name: Install Playwright system deps
+        run: playwright install-deps chromium
+
+      # Randstad's CDN has bot protection (it 403'd the sitemap after a burst of
+      # requests in June), so run Chrome headful under Xvfb like the Robert Half
+      # and Naukri bots rather than risking a headless fingerprint.
+      - name: Install Xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      # Unlike Robert Half — where the profile supplies the resume on the
+      # one-click path and nothing is uploaded — Randstad's application may ask
+      # for a file. Fetched here; the script uploads it ONLY if the form
+      # actually renders a file input.
+      - name: Fetch resume
+        run: |
+          git clone --depth 1 https://github.com/OzSpidey/job-assets.git /tmp/job-assets
+          cp /tmp/job-assets/Osborne_BI.pdf /tmp/resume.pdf
+
+      - name: Run Randstad Auto-Apply
+        env:
+          # Fallbacks are required: a chained/scheduled run supplies NO inputs,
+          # so a bare `inputs.mode` would be empty and the script would reject it.
+          RS_MODE:              ${{ inputs.mode || 'apply' }}
+          RS_ENABLE_SUBMIT:     ${{ vars.RS_ENABLE_SUBMIT }}
+          RS_SESSION_B64:       ${{ secrets.RS_SESSION_B64 }}
+          RS_WALK_LOGGED_IN:    ${{ inputs.walk_logged_in && '1' || '' }}
+          APPLY_LIMIT:          ${{ inputs.apply_limit || '10' }}
+          RESUME_PATH:          /tmp/resume.pdf
+          HEADLESS:             'false'
+          DISPLAY:              ':99'
+          APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
+          EMAIL_SENDER:         ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD:   ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:             ${{ secrets.EMAIL_TO }}
+        run: |
+          Xvfb :99 -screen 0 1440x900x24 &
+          sleep 3
+          python randstad_autoapply.py --mode "${RS_MODE}"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: randstad-${{ inputs.mode || 'apply' }}-shots
+          path: shots/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Persist applied state
+        # `always()` so state still lands when the script exits 1 on an expired
+        # session — the jobs it settled before aborting must not be re-tried.
+        if: always() && (inputs.mode || 'apply') == 'apply'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Staged SEPARATELY on purpose: `git add a b` stages NOTHING if either
+          # path is missing, and csv/randstad_applied.csv only exists once
+          # something has actually been applied. On the Robert Half bot that
+          # silently lost a whole run of state, which caused re-applications.
+          git add json/randstad_applied.json || true
+          git add csv/randstad_applied.csv   || true
+          git diff --staged --quiet || git commit -m "chore: update randstad applied jobs [skip ci]"
+          git checkout -- . 2>/dev/null || true
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main && git push && break
+            echo "Push attempt $i failed, retrying in $((i * 3))s..."
+            sleep $((i * 3))
+          done
