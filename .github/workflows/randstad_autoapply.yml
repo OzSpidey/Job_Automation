@@ -14,10 +14,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'recon = read-only dump of job page + apply page | walk = click apply once, never submit | apply = submit | email-test = re-send summary only'
+        description: 'recon = read-only dump | walk = click apply once | dry = fill form + captcha, stop before submit | apply = submit | email-test = re-send summary only'
         type: choice
         default: recon
-        options: [recon, walk, apply, email-test]
+        options: [recon, walk, dry, apply, email-test]
       walk_logged_in:
         description: 'Allow walk to run WITH the saved session'
         type: boolean
