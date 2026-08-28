@@ -26,6 +26,14 @@ on:
         description: 'Max apply CLICKS this run (runaway guard)'
         type: string
         default: '10'
+      apply_roles:
+        description: 'Roles to apply to, comma-separated, or "all". Blank = Data Analyst,Business Analyst'
+        type: string
+        default: ''
+      queue_age_days:
+        description: 'Only apply to roles found in the last N days. Blank = 4. Raise for a one-off backlog sweep'
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -94,6 +102,11 @@ jobs:
           RS_SESSION_B64:       ${{ secrets.RS_SESSION_B64 }}
           RS_WALK_LOGGED_IN:    ${{ inputs.walk_logged_in && '1' || '' }}
           APPLY_LIMIT:          ${{ inputs.apply_limit || '10' }}
+          # Left EMPTY on chained runs on purpose — the script owns these
+          # defaults (Data Analyst + Business Analyst, 4-day window) so they
+          # can't drift between here and there.
+          RS_APPLY_ROLES:       ${{ inputs.apply_roles }}
+          RS_QUEUE_MAX_AGE_DAYS: ${{ inputs.queue_age_days }}
           RESUME_PATH:          /tmp/resume.pdf
           HEADLESS:             'false'
           DISPLAY:              ':99'
