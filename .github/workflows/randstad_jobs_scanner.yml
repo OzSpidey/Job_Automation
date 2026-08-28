@@ -1,11 +1,14 @@
 name: Randstad Jobs Scanner
 
 on:
-  schedule:
-    # 9:45am, 2:45pm & 7:45pm ET (Mon–Fri) — 15m after Robert Half so the two
-    # runs don't collide pushing csv/new_jobs.csv. UTC, no DST adjust —
-    # shifts to 8:45am/1:45pm/6:45pm ET once EST starts in November.
-    - cron: '45 13,18,23 * * 1-5'
+  # NO native cron. Triggered externally instead (cron website -> GitHub
+  # workflow_dispatch webhook), set up 2026-08-28, which is why the schedule
+  # block is gone rather than commented out — two timers would double-scan.
+  # The old expression was '45 13,18,23 * * 1-5' = 9:45am/2:45pm/7:45pm ET.
+  #
+  # Randstad Auto-Apply still chains off this workflow's completion, and that
+  # works the same for an externally dispatched run as for a scheduled one —
+  # verified 2026-08-28 (scanner run 33131412913 -> applier run 33131426058).
   workflow_dispatch:
 
 permissions:
