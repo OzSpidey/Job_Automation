@@ -27,7 +27,7 @@ on:
         type: string
         default: '10'
       apply_roles:
-        description: 'Roles to apply to, comma-separated, or "all". Blank = Data Analyst,Business Analyst'
+        description: 'Roles to apply to, comma-separated, or "all". Blank = all five scanned roles'
         type: string
         default: ''
       queue_age_days:
