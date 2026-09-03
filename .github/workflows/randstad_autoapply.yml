@@ -88,10 +88,16 @@ jobs:
       # one-click path and nothing is uploaded — Randstad's application may ask
       # for a file. Fetched here; the script uploads it ONLY if the form
       # actually renders a file input.
+      # 2026-09-02: job-assets is PRIVATE, so the clone needs the PAT. It holds
+      # real resumes (name, phone, email) and was public until now.
+      # 2026-09-02: resume switched Osborne_BI.pdf -> Osborne_SN_BA.pdf.
       - name: Fetch resume
         run: |
-          git clone --depth 1 https://github.com/OzSpidey/job-assets.git /tmp/job-assets
-          cp /tmp/job-assets/Osborne_BI.pdf /tmp/resume.pdf
+          git clone --depth 1 \
+            https://x-access-token:${{ secrets.PRIVATE_REPO_PAT }}@github.com/OzSpidey/job-assets.git \
+            /tmp/job-assets
+          cp /tmp/job-assets/Osborne_SN_BA.pdf /tmp/resume.pdf
+          test -s /tmp/resume.pdf || { echo "::error::resume missing or empty"; exit 1; }
 
       - name: Run Randstad Auto-Apply
         env:
@@ -103,8 +109,12 @@ jobs:
           RS_WALK_LOGGED_IN:    ${{ inputs.walk_logged_in && '1' || '' }}
           APPLY_LIMIT:          ${{ inputs.apply_limit || '10' }}
           # Left EMPTY on chained runs on purpose — the script owns these
-          # defaults (Data Analyst + Business Analyst, 4-day window) so they
-          # can't drift between here and there.
+          # defaults so they can't drift between here and there. As of
+          # 2026-08-28 that default is ALL FIVE scanned roles (Data Analyst,
+          # Business Analyst, Data Engineer, Business Intelligence, Analytics
+          # Engineer) and a 4-day window. This comment previously said
+          # "Data Analyst + Business Analyst", which was the brief narrowing
+          # that got reverted — see RS_APPLY_ROLES in randstad_autoapply.py.
           RS_APPLY_ROLES:       ${{ inputs.apply_roles }}
           RS_QUEUE_MAX_AGE_DAYS: ${{ inputs.queue_age_days }}
           RESUME_PATH:          /tmp/resume.pdf
