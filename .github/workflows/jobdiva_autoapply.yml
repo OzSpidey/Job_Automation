@@ -44,10 +44,16 @@ jobs:
       - name: Install Playwright system deps
         run: playwright install-deps chromium
 
+      # 2026-09-02: job-assets is PRIVATE, so the clone needs the PAT. It holds
+      # real resumes (name, phone, email) and was public until now. Resume
+      # choice here is unchanged — JobDiva still uses the DE resume.
       - name: Download DE resume
         run: |
-          git clone https://github.com/OzSpidey/job-assets.git /tmp/job-assets
+          git clone --depth 1 \
+            https://x-access-token:${{ secrets.PRIVATE_REPO_PAT }}@github.com/OzSpidey/job-assets.git \
+            /tmp/job-assets
           cp /tmp/job-assets/Osborne_DE.pdf /tmp/resume_de.pdf
+          test -s /tmp/resume_de.pdf || { echo "::error::resume missing or empty"; exit 1; }
 
       - name: Run JobDiva Auto-Apply
         env:
