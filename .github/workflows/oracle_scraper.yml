@@ -7,8 +7,14 @@ permissions:
   contents: write
 
 jobs:
+  # Runs with NO --role, which is the else-branch in oracle_scraper.py: search
+  # term "" (browse every posting) filtered by _AI_TITLE_RE. Despite the old
+  # "All Roles" name this has been AI-only since 2026-08-19, so it is renamed
+  # here to match reality. Keep the no --role invocation and the _all_ file
+  # names — switching it to "--role aie" would point at oracle_seen_aie_b*.json
+  # and re-alert everything in the 2601/1478-id _all_ state.
   scrape-all:
-    name: All Roles (Batch ${{ matrix.batch }})
+    name: AI (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -36,6 +42,57 @@ jobs:
           git add csv/oracle_jobs_all_b${{ matrix.batch }}.csv  2>/dev/null || true
           git add json/oracle_companies.json 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update oracle all-roles b${{ matrix.batch }} seen jobs [skip ci]"
+          git checkout -- . 2>/dev/null || true
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && break
+            sleep $((RANDOM % 10 + 5))
+          done
+
+  # 2026-09-02: the "analyst" profile started as a second, independent stream.
+  # Its allow_re is \b(data|analytics|analyst)\b, so it catches Business
+  # Analyst — the reason it was turned on — but also Financial / Credit / HR /
+  # Budget / Policy Analyst and anything else with "data" as a whole token.
+  # Expect it to be noisier than the AI stream. SKIP_TITLE_RE still strips
+  # senior / lead / manager / principal / staff / director / consultant / III /
+  # IV, so "Senior Business Analyst" and "Business Analyst III" are dropped and
+  # plain "Business Analyst" is kept.
+  #
+  # Separate job, not a matrix dimension on scrape-all: --role analyst writes
+  # oracle_seen_analyst_b*.json and oracle_jobs_analyst_b*.csv, so the AI
+  # stream's state is untouched either way.
+  #
+  # NOTE the analyst seen files were last written 2026-06-21, so the first run
+  # has ~2 months of drift. MAX_AGE_DAYS=1 bounds it to jobs posted in the last
+  # day, but that first email will still be large across 403 tenants.
+  scrape-analyst:
+    name: Analyst (Batch ${{ matrix.batch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: OzSpidey/Job_Automation_Private
+          token: ${{ secrets.PRIVATE_REPO_PAT }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests python-dotenv
+      - name: Run scraper
+        env:
+          EMAIL_SENDER:       ${{ secrets.EMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO:           ${{ secrets.EMAIL_TO }}
+        run: python oracle_scraper.py --role analyst --batch ${{ matrix.batch }}
+      - name: Save seen-IDs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add json/oracle_seen_analyst_b${{ matrix.batch }}.json 2>/dev/null || true
+          git add csv/oracle_jobs_analyst_b${{ matrix.batch }}.csv  2>/dev/null || true
+          git add json/oracle_companies.json 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "chore: update oracle analyst b${{ matrix.batch }} seen jobs [skip ci]"
           git checkout -- . 2>/dev/null || true
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && break
