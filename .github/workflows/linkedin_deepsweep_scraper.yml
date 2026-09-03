@@ -20,21 +20,32 @@ on:
         required: false
         default: 'r10800'
       max_start:
-        description: 'Sweep depth. 200=21 req/role. ~500 is where LinkedIn dries up.'
+        # 140, not 150: the script walks range(0, MAX_START+1, PAGE_STEP), so
+        # 140 yields exactly 15 pages (start 0,10..140) while 150 yields 16.
+        description: 'Sweep depth. 140=15 req/role. ~500 is where LinkedIn dries up.'
         required: false
-        default: '200'
+        default: '140'
       roles:
-        # 2026-09-02: Business Intelligence + Business Analyst added. Both are
-        # LOW-VOLUME keywords, and geoId is only a soft filter — past the last
-        # geo-matched result LinkedIn pads the remaining pages with worldwide
-        # roles. At max_start=200 that means most of the depth on these two
-        # returns foreign postings. us_verdict() in the script drops them, so
-        # nothing junk reaches the inbox, but the requests are still spent.
-        # Watch the "SKIP non-US" volume in the run log before adding more
-        # narrow keywords.
+        # 2026-09-02: Business Intelligence, Business Analyst and Analytics
+        # Engineer added; depth cut 200 -> 140 to pay for them.
+        #   was      3 roles x 21p =  63 req/run
+        #   +BI,BA   5 roles x 21p = 105
+        #   now      6 roles x 15p =  90
+        #
+        # All three additions are LOW-VOLUME keywords, and geoId is only a soft
+        # filter — past the last geo-matched result LinkedIn pads the remaining
+        # pages with worldwide roles. So expect the back half of the sweep on
+        # these three to return foreign postings. us_verdict() in the script
+        # drops them, so nothing junk reaches the inbox, but the requests are
+        # still spent. Watch the "SKIP non-US" volume and the per-role
+        # "cards seen -> new kept" summary before adding more narrow keywords.
+        #
+        # Analytics Engineer also runs in the catch-up at 3p. That overlap is
+        # fine: all three workflows share the seen file, so first run to reach
+        # a job wins and the other skips it.
         description: 'Pipe-separated roles, independent of the main scraper.'
         required: false
-        default: 'AI Engineer|Data Analyst|AI|Business Intelligence|Business Analyst'
+        default: 'AI Engineer|Data Analyst|AI|Business Intelligence|Business Analyst|Analytics Engineer'
     # No cross_check or persist_state inputs any more. All three LinkedIn
     # workflows share one state file, so dedup is unconditional and state is
     # always written — a "don't record" option is exactly how duplicates got
