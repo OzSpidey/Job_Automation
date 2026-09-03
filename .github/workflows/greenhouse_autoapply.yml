@@ -63,6 +63,20 @@ jobs:
           GH_EMAIL:             ${{ secrets.GH_EMAIL }}
         run: python greenhouse_autoapply.py
 
+      # 2026-09-02: the scraper has parsed 0 listings on all 9 queries since
+      # ~08-26 while still exiting green. It now dumps page HTML + a screenshot
+      # to debug/greenhouse/ on any zero-parse query; this makes that
+      # retrievable. Only uploads when the directory exists, so a healthy run
+      # produces no artifact.
+      - name: Upload zero-parse capture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: greenhouse-debug
+          path: debug/greenhouse/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Update session secret
         if: always()
         env:
