@@ -91,12 +91,16 @@ jobs:
       # 2026-09-02: job-assets is PRIVATE, so the clone needs the PAT. It holds
       # real resumes (name, phone, email) and was public until now.
       # 2026-09-02: resume switched Osborne_BI.pdf -> Osborne_SN_BA.pdf.
+      # 2026-09-10: switched again to Osborne_BA_JhexSN_Senior.pdf, which keeps
+      # the source filename from Main_Resume\Modified_Resume so it is obvious
+      # which local file is deployed. The two older files are still in
+      # job-assets but nothing references them.
       - name: Fetch resume
         run: |
           git clone --depth 1 \
             https://x-access-token:${{ secrets.PRIVATE_REPO_PAT }}@github.com/OzSpidey/job-assets.git \
             /tmp/job-assets
-          cp /tmp/job-assets/Osborne_SN_BA.pdf /tmp/resume.pdf
+          cp /tmp/job-assets/Osborne_BA_JhexSN_Senior.pdf /tmp/resume.pdf
           test -s /tmp/resume.pdf || { echo "::error::resume missing or empty"; exit 1; }
 
       - name: Run Randstad Auto-Apply
