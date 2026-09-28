@@ -99,15 +99,17 @@ jobs:
       # Osborne_BI_JhexSN_Senior.pdf for every other role (BI, Data Analyst,
       # Data Engineer, Analytics Engineer); the script picks per job. Both land
       # as resume.pdf in separate dirs so recruiters still see the same name.
+      # Same day: AI Engineer added as a role, gets Osborne_AI_JhexSN.pdf.
       - name: Fetch resumes
         run: |
           git clone --depth 1 \
             https://x-access-token:${{ secrets.PRIVATE_REPO_PAT }}@github.com/OzSpidey/job-assets.git \
             /tmp/job-assets
-          mkdir -p /tmp/resume_ba /tmp/resume_bi
+          mkdir -p /tmp/resume_ba /tmp/resume_bi /tmp/resume_ai
           cp /tmp/job-assets/Osborne_BA_JhexSN_Senior.pdf /tmp/resume_ba/resume.pdf
           cp /tmp/job-assets/Osborne_BI_JhexSN_Senior.pdf /tmp/resume_bi/resume.pdf
-          for f in /tmp/resume_ba/resume.pdf /tmp/resume_bi/resume.pdf; do
+          cp /tmp/job-assets/Osborne_AI_JhexSN.pdf        /tmp/resume_ai/resume.pdf
+          for f in /tmp/resume_ba/resume.pdf /tmp/resume_bi/resume.pdf /tmp/resume_ai/resume.pdf; do
             test -s "$f" || { echo "::error::$f missing or empty"; exit 1; }
           done
 
@@ -122,15 +124,16 @@ jobs:
           APPLY_LIMIT:          ${{ inputs.apply_limit || '10' }}
           # Left EMPTY on chained runs on purpose — the script owns these
           # defaults so they can't drift between here and there. As of
-          # 2026-08-28 that default is ALL FIVE scanned roles (Data Analyst,
+          # 2026-09-28 that default is ALL SIX scanned roles (Data Analyst,
           # Business Analyst, Data Engineer, Business Intelligence, Analytics
-          # Engineer) and a 4-day window. This comment previously said
+          # Engineer, AI Engineer) and a 4-day window. This comment previously said
           # "Data Analyst + Business Analyst", which was the brief narrowing
           # that got reverted — see RS_APPLY_ROLES in randstad_autoapply.py.
           RS_APPLY_ROLES:       ${{ inputs.apply_roles }}
           RS_QUEUE_MAX_AGE_DAYS: ${{ inputs.queue_age_days }}
           RESUME_PATH_BA:       /tmp/resume_ba/resume.pdf
           RESUME_PATH_BI:       /tmp/resume_bi/resume.pdf
+          RESUME_PATH_AI:       /tmp/resume_ai/resume.pdf
           HEADLESS:             'false'
           DISPLAY:              ':99'
           APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
