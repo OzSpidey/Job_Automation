@@ -21,6 +21,10 @@ on:
         description: 'Roles to apply to, comma-separated, or "all". Blank = all six scanned roles'
         type: string
         default: ''
+      recon_ids:
+        description: 'recon only: Dice job ids (or 8-char prefixes) to inspect instead of the queue'
+        type: string
+        default: ''
       queue_age_days:
         description: 'Only apply to roles found in the last N days. Blank = 1'
         type: string
@@ -106,6 +110,7 @@ jobs:
           APPLY_LIMIT:             ${{ inputs.apply_limit || '40' }}
           DICE_APPLY_ROLES:        ${{ inputs.apply_roles }}
           DICE_QUEUE_MAX_AGE_DAYS: ${{ inputs.queue_age_days }}
+          DICE_RECON_IDS:          ${{ inputs.recon_ids }}
           RESUME_PATH_DE:          /tmp/dice_resumes/Osborne_Lopes_DE.pdf
           RESUME_PATH_BI:          /tmp/dice_resumes/Osborne_Lopes_BI.pdf
           RESUME_PATH_BA:          /tmp/dice_resumes/Osborne_Lopes_BA.pdf
