@@ -22,7 +22,7 @@ on:
         type: string
         default: ''
       queue_age_days:
-        description: 'Only apply to roles found in the last N days. Blank = 3'
+        description: 'Only apply to roles found in the last N days. Blank = 1'
         type: string
         default: ''
 
