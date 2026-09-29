@@ -69,21 +69,25 @@ jobs:
       - name: Install Xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
-      # Same three resumes and routing as Randstad: BA for Business Analyst,
-      # AI for AI Engineer, BI for everything else. The script swaps it into
-      # the Dice wizard only when the resume step exposes an upload.
+      # Four resumes routed by role (2026-09-29): DE for Data Engineer, BA for
+      # Business Analyst, AI for AI Engineer, BI for everything else. Unlike
+      # Randstad these get DISTINCT names, because Dice's resume picker lists
+      # saved resumes by filename and the script finds the role's one by name.
+      # job-assets keeps the source filenames (traceable to the local file).
       - name: Fetch resumes
         run: |
           git clone --depth 1 \
             https://x-access-token:${{ secrets.PRIVATE_REPO_PAT }}@github.com/OzSpidey/job-assets.git \
             /tmp/job-assets
-          mkdir -p /tmp/resume_ba /tmp/resume_bi /tmp/resume_ai
-          cp /tmp/job-assets/Osborne_BA_JhexSN_Senior.pdf /tmp/resume_ba/resume.pdf
-          cp /tmp/job-assets/Osborne_BI_JhexSN_Senior.pdf /tmp/resume_bi/resume.pdf
-          cp /tmp/job-assets/Osborne_AI_JhexSN.pdf        /tmp/resume_ai/resume.pdf
-          for f in /tmp/resume_ba/resume.pdf /tmp/resume_bi/resume.pdf /tmp/resume_ai/resume.pdf; do
+          mkdir -p /tmp/dice_resumes
+          cp /tmp/job-assets/DE_Pyramid_29Sept.pdf        /tmp/dice_resumes/Osborne_Lopes_DE.pdf
+          cp /tmp/job-assets/Osborne_BI_JhexSN_Senior.pdf /tmp/dice_resumes/Osborne_Lopes_BI.pdf
+          cp /tmp/job-assets/Osborne_BA_JhexSN_Senior.pdf /tmp/dice_resumes/Osborne_Lopes_BA.pdf
+          cp /tmp/job-assets/Osborne_AI_Jhex.pdf          /tmp/dice_resumes/Osborne_Lopes_AI.pdf
+          for f in /tmp/dice_resumes/*.pdf; do
             test -s "$f" || { echo "::error::$f missing or empty"; exit 1; }
           done
+          ls -la /tmp/dice_resumes
 
       - name: Run Dice Auto-Apply
         env:
@@ -94,9 +98,10 @@ jobs:
           APPLY_LIMIT:             ${{ inputs.apply_limit || '10' }}
           DICE_APPLY_ROLES:        ${{ inputs.apply_roles }}
           DICE_QUEUE_MAX_AGE_DAYS: ${{ inputs.queue_age_days }}
-          RESUME_PATH_BA:          /tmp/resume_ba/resume.pdf
-          RESUME_PATH_BI:          /tmp/resume_bi/resume.pdf
-          RESUME_PATH_AI:          /tmp/resume_ai/resume.pdf
+          RESUME_PATH_DE:          /tmp/dice_resumes/Osborne_Lopes_DE.pdf
+          RESUME_PATH_BI:          /tmp/dice_resumes/Osborne_Lopes_BI.pdf
+          RESUME_PATH_BA:          /tmp/dice_resumes/Osborne_Lopes_BA.pdf
+          RESUME_PATH_AI:          /tmp/dice_resumes/Osborne_Lopes_AI.pdf
           HEADLESS:                'false'
           DISPLAY:                 ':99'
           EMAIL_SENDER:            ${{ secrets.EMAIL_SENDER }}
