@@ -95,7 +95,7 @@ jobs:
           cp /tmp/job-assets/DE_Pyramid_29Sept.pdf        /tmp/dice_resumes/Osborne_Lopes_DE.pdf
           cp /tmp/job-assets/Osborne_BI_JhexSN_Senior.pdf /tmp/dice_resumes/Osborne_Lopes_BI.pdf
           cp /tmp/job-assets/Osborne_BA_JhexSN_Senior.pdf /tmp/dice_resumes/Osborne_Lopes_BA.pdf
-          cp /tmp/job-assets/Osborne_AI_Jhex.pdf          /tmp/dice_resumes/Osborne_Lopes_AI.pdf
+          cp /tmp/job-assets/Osborne_AI_Dice.pdf          /tmp/dice_resumes/Osborne_Lopes_AI.pdf
           for f in /tmp/dice_resumes/*.pdf; do
             test -s "$f" || { echo "::error::$f missing or empty"; exit 1; }
           done
