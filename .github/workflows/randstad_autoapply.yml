@@ -100,16 +100,19 @@ jobs:
       # Data Engineer, Analytics Engineer); the script picks per job. Both land
       # as resume.pdf in separate dirs so recruiters still see the same name.
       # Same day: AI Engineer added as a role, gets Osborne_AI_JhexSN.pdf.
+      # 2026-09-30: routed like Dice. DE_Pyramid_29Sept.pdf for Data Engineer,
+      # Osborne_AI_Dice.pdf for AI Engineer and any title mentioning AI.
       - name: Fetch resumes
         run: |
           git clone --depth 1 \
             https://x-access-token:${{ secrets.PRIVATE_REPO_PAT }}@github.com/OzSpidey/job-assets.git \
             /tmp/job-assets
-          mkdir -p /tmp/resume_ba /tmp/resume_bi /tmp/resume_ai
+          mkdir -p /tmp/resume_ba /tmp/resume_bi /tmp/resume_ai /tmp/resume_de
           cp /tmp/job-assets/Osborne_BA_JhexSN_Senior.pdf /tmp/resume_ba/resume.pdf
           cp /tmp/job-assets/Osborne_BI_JhexSN_Senior.pdf /tmp/resume_bi/resume.pdf
-          cp /tmp/job-assets/Osborne_AI_JhexSN.pdf        /tmp/resume_ai/resume.pdf
-          for f in /tmp/resume_ba/resume.pdf /tmp/resume_bi/resume.pdf /tmp/resume_ai/resume.pdf; do
+          cp /tmp/job-assets/Osborne_AI_Dice.pdf          /tmp/resume_ai/resume.pdf
+          cp /tmp/job-assets/DE_Pyramid_29Sept.pdf        /tmp/resume_de/resume.pdf
+          for f in /tmp/resume_ba/resume.pdf /tmp/resume_bi/resume.pdf /tmp/resume_ai/resume.pdf /tmp/resume_de/resume.pdf; do
             test -s "$f" || { echo "::error::$f missing or empty"; exit 1; }
           done
 
@@ -134,6 +137,7 @@ jobs:
           RESUME_PATH_BA:       /tmp/resume_ba/resume.pdf
           RESUME_PATH_BI:       /tmp/resume_bi/resume.pdf
           RESUME_PATH_AI:       /tmp/resume_ai/resume.pdf
+          RESUME_PATH_DE:       /tmp/resume_de/resume.pdf
           HEADLESS:             'false'
           DISPLAY:              ':99'
           APPLICANT_INFO_JSON:  ${{ secrets.APPLICANT_INFO_JSON }}
