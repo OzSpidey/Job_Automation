@@ -81,7 +81,7 @@ jobs:
       - name: Install Xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
-      # Four resumes routed by role (2026-09-29): DE for Data Engineer, BA for
+      # Four resumes routed by role (2026-09-29; BA/BI swapped to *_Dice.pdf 2026-10-05): DE for Data Engineer, BA for
       # Business Analyst, AI for AI Engineer, BI for everything else. Unlike
       # Randstad these get DISTINCT names, because Dice's resume picker lists
       # saved resumes by filename and the script finds the role's one by name.
@@ -93,8 +93,8 @@ jobs:
             /tmp/job-assets
           mkdir -p /tmp/dice_resumes
           cp /tmp/job-assets/DE_Pyramid_29Sept.pdf        /tmp/dice_resumes/Osborne_Lopes_DE.pdf
-          cp /tmp/job-assets/Osborne_BI_JhexSN_Senior.pdf /tmp/dice_resumes/Osborne_Lopes_BI.pdf
-          cp /tmp/job-assets/Osborne_BA_JhexSN_Senior.pdf /tmp/dice_resumes/Osborne_Lopes_BA.pdf
+          cp /tmp/job-assets/Osborne_BI_Dice.pdf /tmp/dice_resumes/Osborne_Lopes_BI.pdf
+          cp /tmp/job-assets/Osborne_BA_Dice.pdf /tmp/dice_resumes/Osborne_Lopes_BA.pdf
           cp /tmp/job-assets/Osborne_AI_Dice.pdf          /tmp/dice_resumes/Osborne_Lopes_AI.pdf
           for f in /tmp/dice_resumes/*.pdf; do
             test -s "$f" || { echo "::error::$f missing or empty"; exit 1; }
