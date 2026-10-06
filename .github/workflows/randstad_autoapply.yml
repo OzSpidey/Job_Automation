@@ -102,14 +102,15 @@ jobs:
       # Same day: AI Engineer added as a role, gets Osborne_AI_JhexSN.pdf.
       # 2026-09-30: routed like Dice. DE_Pyramid_29Sept.pdf for Data Engineer,
       # Osborne_AI_Dice.pdf for AI Engineer and any title mentioning AI.
+      # 2026-10-05: BA and BI switched to Osborne_BA_Dice.pdf / Osborne_BI_Dice.pdf (same as Dice).
       - name: Fetch resumes
         run: |
           git clone --depth 1 \
             https://x-access-token:${{ secrets.PRIVATE_REPO_PAT }}@github.com/OzSpidey/job-assets.git \
             /tmp/job-assets
           mkdir -p /tmp/resume_ba /tmp/resume_bi /tmp/resume_ai /tmp/resume_de
-          cp /tmp/job-assets/Osborne_BA_JhexSN_Senior.pdf /tmp/resume_ba/resume.pdf
-          cp /tmp/job-assets/Osborne_BI_JhexSN_Senior.pdf /tmp/resume_bi/resume.pdf
+          cp /tmp/job-assets/Osborne_BA_Dice.pdf /tmp/resume_ba/resume.pdf
+          cp /tmp/job-assets/Osborne_BI_Dice.pdf /tmp/resume_bi/resume.pdf
           cp /tmp/job-assets/Osborne_AI_Dice.pdf          /tmp/resume_ai/resume.pdf
           cp /tmp/job-assets/DE_Pyramid_29Sept.pdf        /tmp/resume_de/resume.pdf
           for f in /tmp/resume_ba/resume.pdf /tmp/resume_bi/resume.pdf /tmp/resume_ai/resume.pdf /tmp/resume_de/resume.pdf; do
