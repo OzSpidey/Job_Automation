@@ -28,6 +28,10 @@ on:
         description: 'Max Apply CLICKS this run (runaway guard; RH has no application limit)'
         type: string
         default: '10'
+      walk_job_id:
+        description: 'walk mode only: map the apply wizard on this RH job id (works even if the queue is empty)'
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -88,6 +92,7 @@ jobs:
           RH_ENABLE_SUBMIT:     ${{ vars.RH_ENABLE_SUBMIT }}
           RH_SESSION_B64:       ${{ secrets.RH_SESSION_B64 }}
           RH_WALK_LOGGED_IN:    ${{ inputs.walk_logged_in && '1' || '' }}
+          RH_WALK_JOB_ID:       ${{ inputs.walk_job_id }}
           APPLY_LIMIT:          ${{ inputs.apply_limit || '10' }}
           HEADLESS:             'false'
           DISPLAY:              ':99'
