@@ -108,6 +108,8 @@ jobs:
           RH_SESSION_B64:       ${{ secrets.RH_SESSION_B64 }}
           RH_WALK_LOGGED_IN:    ${{ inputs.walk_logged_in && '1' || '' }}
           RH_WALK_JOB_ID:       ${{ inputs.walk_job_id }}
+          RH_EMAIL:             ${{ secrets.RH_EMAIL }}
+          RH_PASSWORD:          ${{ secrets.RH_PASSWORD }}
           RH_WALK_WIZARD:       ${{ inputs.walk_wizard && '1' || '' }}
           RESUME_PATH_BA:       /tmp/rh_resume_ba/resume.pdf
           RESUME_PATH_BI:       /tmp/rh_resume_bi/resume.pdf
