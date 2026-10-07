@@ -28,6 +28,10 @@ on:
         description: 'Max Apply CLICKS this run (runaway guard; RH has no application limit)'
         type: string
         default: '10'
+      walk_wizard:
+        description: 'walk mode only: open the apply wizard directly, upload the role resume, advance, stop before submit'
+        type: boolean
+        default: false
       walk_job_id:
         description: 'walk mode only: map the apply wizard on this RH job id (works even if the queue is empty)'
         type: string
@@ -81,8 +85,19 @@ jobs:
       - name: Install Xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
-# No resume step: the Robert Half profile already has the resume attached and
-# the logged-in Quick apply path pulls it from there, so nothing is uploaded.
+      # Quick apply now opens the /apply/app wizard (Upload resume), so a resume
+      # per role is needed again. Same files + routing as Dice.
+      - name: Fetch resumes
+        run: |
+          git clone --depth 1             https://x-access-token:${{ secrets.PRIVATE_REPO_PAT }}@github.com/OzSpidey/job-assets.git             /tmp/job-assets
+          mkdir -p /tmp/rh_resume_ba /tmp/rh_resume_bi /tmp/rh_resume_ai /tmp/rh_resume_de
+          cp /tmp/job-assets/Osborne_BA_Dice.pdf /tmp/rh_resume_ba/resume.pdf
+          cp /tmp/job-assets/Osborne_BI_Dice.pdf /tmp/rh_resume_bi/resume.pdf
+          cp /tmp/job-assets/Osborne_AI_Dice.pdf /tmp/rh_resume_ai/resume.pdf
+          cp /tmp/job-assets/Osborne_DE_Dice.pdf /tmp/rh_resume_de/resume.pdf
+          for f in /tmp/rh_resume_*/resume.pdf; do
+            test -s "$f" || { echo "::error::$f missing or empty"; exit 1; }
+          done
 
       - name: Run Robert Half Auto-Apply
         env:
@@ -93,6 +108,11 @@ jobs:
           RH_SESSION_B64:       ${{ secrets.RH_SESSION_B64 }}
           RH_WALK_LOGGED_IN:    ${{ inputs.walk_logged_in && '1' || '' }}
           RH_WALK_JOB_ID:       ${{ inputs.walk_job_id }}
+          RH_WALK_WIZARD:       ${{ inputs.walk_wizard && '1' || '' }}
+          RESUME_PATH_BA:       /tmp/rh_resume_ba/resume.pdf
+          RESUME_PATH_BI:       /tmp/rh_resume_bi/resume.pdf
+          RESUME_PATH_AI:       /tmp/rh_resume_ai/resume.pdf
+          RESUME_PATH_DE:       /tmp/rh_resume_de/resume.pdf
           APPLY_LIMIT:          ${{ inputs.apply_limit || '10' }}
           HEADLESS:             'false'
           DISPLAY:              ':99'
