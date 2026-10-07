@@ -92,7 +92,7 @@ jobs:
             https://x-access-token:${{ secrets.PRIVATE_REPO_PAT }}@github.com/OzSpidey/job-assets.git \
             /tmp/job-assets
           mkdir -p /tmp/dice_resumes
-          cp /tmp/job-assets/DE_Pyramid_29Sept.pdf        /tmp/dice_resumes/Osborne_Lopes_DE.pdf
+          cp /tmp/job-assets/Osborne_DE_Dice.pdf /tmp/dice_resumes/Osborne_Lopes_DE.pdf
           cp /tmp/job-assets/Osborne_BI_Dice.pdf /tmp/dice_resumes/Osborne_Lopes_BI.pdf
           cp /tmp/job-assets/Osborne_BA_Dice.pdf /tmp/dice_resumes/Osborne_Lopes_BA.pdf
           cp /tmp/job-assets/Osborne_AI_Dice.pdf          /tmp/dice_resumes/Osborne_Lopes_AI.pdf
